@@ -1,0 +1,18 @@
+{
+  "useCommand": true,
+  "defaultCommand": "help",
+  "commands": {
+    "login":{
+      "options": {
+        "username": {
+
+        }
+      }
+    },
+    "help": {
+
+    }
+  },
+  "globalOptions":{
+  }
+}

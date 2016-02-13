@@ -1,0 +1,31 @@
+{
+  "name": "react-native-pushy-cli",
+  "version": "0.1.0",
+  "description": "Command tools for javaScript updater with `pushy` service for react native apps.",
+  "main": "index.js",
+  "bin": {
+    "pushy": "cli.js"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reactnativecn/react-native-pushy.git"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "update"
+  ],
+  "author": "reactnativecn",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/reactnativecn/react-native-pushy/issues"
+  },
+  "homepage": "https://github.com/reactnativecn/react-native-pushy/tree/master/react-native-pushy-cli",
+  "dependencies": {
+    "babel-register": "^6.5.2"
+  }
+}
