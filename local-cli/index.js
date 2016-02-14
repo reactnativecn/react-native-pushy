@@ -2,6 +2,7 @@
  * Created by tdzl2003 on 2/13/16.
  */
 
+const {loadSession} = require('./api');
 const userCommands = require('./user').commands;
 
 function printUsage({args}) {
@@ -20,5 +21,8 @@ const commands = {
 
 exports.run = function () {
   const argv = require('cli-arguments').parse(require('./cli.json'));
-  commands[argv.command](argv).catch(err=>console.error(err.stack));
+
+  loadSession()
+    .then(()=>commands[argv.command](argv))
+    .catch(err=>console.error(err.stack));
 };
