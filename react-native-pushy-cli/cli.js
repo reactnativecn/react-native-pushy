@@ -46,6 +46,7 @@ if (fs.existsSync(cliPath)) {
 if (cli) {
   cli.run();
 } else {
+  console.error('Are you at home directory of a react-native project?');
   console.error('`pushy install` is under development, please run `npm install react-native-pushy` to install pushy manually.');
   process.exit(1);
 }
