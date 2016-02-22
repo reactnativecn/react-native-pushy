@@ -1,0 +1,14 @@
+{
+  "plugins": [
+    "syntax-object-rest-spread",
+    "syntax-async-functions",
+    "transform-es2015-arrow-functions",
+    "transform-async-to-generator",
+    "transform-es2015-modules-commonjs",
+    "transform-es2015-destructuring",
+    "transform-es2015-spread",
+    "transform-object-rest-spread",
+    "transform-es2015-parameters",
+    "transform-strict-mode"
+  ]
+}

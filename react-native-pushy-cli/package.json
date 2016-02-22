@@ -4,10 +4,11 @@
   "description": "Command tools for javaScript updater with `pushy` service for react native apps.",
   "main": "index.js",
   "bin": {
-    "pushy": "cli.js"
+    "pushy": "lib/cli.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublish": "node_modules/.bin/babel src --out-dir lib"
   },
   "repository": {
     "type": "git",
@@ -25,7 +26,9 @@
     "url": "https://github.com/reactnativecn/react-native-pushy/issues"
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy/tree/master/react-native-pushy-cli",
-  "dependencies": {
-    "babel-register": "^6.5.2"
+  "devDependencies": {
+    "babel-cli": "^6.5.1",
+    "babel-plugin-transform-es2015-modules-commonjs": "^6.5.2",
+    "babel-plugin-transform-strict-mode": "^6.5.2"
   }
 }

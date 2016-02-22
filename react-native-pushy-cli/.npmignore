@@ -1,0 +1,7 @@
+/.idea
+/src
+/.babelrc
+/.npmignore
+/.eslintrc
+/.nvmrc
+/.travis.yml

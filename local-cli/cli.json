@@ -17,8 +17,41 @@
     },
     "help": {
 
+    },
+    "use": {
+      "description": "Select app created on web and create token for future release."
+    },
+    "build": {
+      "description": "Bundle javascript and copy assets."
+    },
+    "bundle": {
+      "description": "Bundle javascript code only."
+    },
+    "release": {
+      "description": "Push builded file to server."
     }
   },
   "globalOptions":{
+    "dev": {
+      "default": false
+    },
+    "platform": {
+      "hasValue": true
+    },
+    "entryFile": {
+      "default": "index.${platform}.js",
+      "hasValue": true
+    },
+    "intermediaDir": {
+      "default": "build/intermedia/${platform}",
+      "hasValue": true
+    },
+    "output": {
+      "default": "build/output/${platform}.ppk",
+      "hasValue": true
+    },
+    "verbose": {
+
+    }
   }
 }

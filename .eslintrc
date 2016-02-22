@@ -1,0 +1,29 @@
+{
+  "extends": "eslint-config-airbnb/base",
+  "parser": "babel-eslint",
+  "env": {
+    "browser": true,
+    "node": true,
+    "mocha": true
+  },
+  "rules": {
+    // Disable for console/alert
+    "no-console": 0,
+    "no-alert": 0,
+
+    "indent": [2, 2, {"SwitchCase": 1}]
+  },
+  "plugins": [
+    "import"
+  ],
+  "settings": {
+    "import/parser": "babel-eslint",
+    "import/resolve": {
+      "moduleDirectory": ["node_modules", "src"]
+    }
+  },
+  "globals": {
+    "__DEV__": true,
+    "__OPTION__": true
+  }
+}

@@ -2,7 +2,7 @@
  * Created by tdzl2003 on 2/13/16.
  */
 
-const {question} = require('./utils');
+import {question} from './utils';
 const {
   post,
   get,

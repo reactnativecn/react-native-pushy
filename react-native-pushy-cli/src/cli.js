@@ -3,11 +3,10 @@
  * Created by tdzl2003 on 2/13/16.
  */
 
-var path = require('path');
-var fs = require('fs');
+import * as path from 'path';
+import * as fs from 'fs-promise';
 
-
-var CLI_MODULE_PATH = function() {
+const CLI_MODULE_PATH = function() {
   return path.resolve(
     process.cwd(),
     'node_modules',
@@ -16,7 +15,7 @@ var CLI_MODULE_PATH = function() {
   );
 };
 
-var PACKAGE_JSON_PATH = function() {
+const PACKAGE_JSON_PATH = function() {
   return path.resolve(
     process.cwd(),
     'node_modules',
@@ -27,18 +26,8 @@ var PACKAGE_JSON_PATH = function() {
 
 checkForVersionCommand();
 
-require('babel-register')({
-  'plugins': [
-    'transform-async-to-generator',
-    'transform-strict-mode',
-    'transform-object-rest-spread',
-    'transform-es2015-parameters',
-    'transform-es2015-destructuring',
-  ],
-});
-
-var cli;
-var cliPath = CLI_MODULE_PATH();
+let cli;
+const cliPath = CLI_MODULE_PATH();
 if (fs.existsSync(cliPath)) {
   cli = require(cliPath);
 }
@@ -53,7 +42,7 @@ if (cli) {
 
 function checkForVersionCommand() {
   if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
-    console.log('react-native-pushy-cli: ' + require('./package.json').version);
+    console.log('react-native-pushy-cli: ' + require('../package.json').version);
     try {
       console.log('react-native-pushy: ' + require(PACKAGE_JSON_PATH()).version);
     } catch (e) {
