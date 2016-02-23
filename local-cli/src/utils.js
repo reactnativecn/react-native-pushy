@@ -15,6 +15,21 @@ export function question(query, password) {
   }, (err, result)=> err ? reject(err) : resolve(result)));
 }
 
+export function translateOptions(options){
+  const ret = {};
+  for (let key in options) {
+    const v = options[key];
+    if (typeof(v) === 'string') {
+      ret[key] = v.replace(/\$\{(\w+)\}/g, function (v, n){
+        return options[n] || process.env[n] || v;
+      })
+    } else {
+      ret[key] = v;
+    }
+  }
+  return ret;
+}
+
 export function getRNVersion() {
   const version = JSON.parse(fs.readFileSync(path.resolve('node_modules/react-native/package.json'))).version;
 

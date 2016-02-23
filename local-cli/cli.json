@@ -47,7 +47,7 @@
       "hasValue": true
     },
     "output": {
-      "default": "build/output/${platform}.ppk",
+      "default": "build/output/${platform}.${hash}.ppk",
       "hasValue": true
     },
     "verbose": {

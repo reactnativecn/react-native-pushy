@@ -21,21 +21,8 @@ const commands = {
   help: printUsage,
 };
 
-function translateOptions(options){
-  for (let key in options) {
-    const v = options[key];
-    if (typeof(v) === 'string') {
-      options[key] = v.replace(/\$\{(\w+)\}/, function (v, n){
-        return options[n] || process.env[n] || v;
-      })
-    }
-  }
-}
-
 exports.run = function () {
   const argv = require('cli-arguments').parse(require('../cli.json'));
-
-  translateOptions(argv.options);
 
   loadSession()
     .then(()=>commands[argv.command](argv))

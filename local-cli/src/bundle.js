@@ -4,10 +4,14 @@
 
 import * as path from 'path';
 import { mkdir as mkdirRecurisve } from 'mkdir-recursive';
-import { getRNVersion } from './utils';
+import {
+  getRNVersion,
+  translateOptions,
+} from './utils';
 import * as fs from 'fs';
 import {ZipFile} from 'yazl';
 
+import crypto from 'crypto';
 
 function mkdir(dir){
   return new Promise((resolve, reject) => {
@@ -21,43 +25,71 @@ function mkdir(dir){
   });
 }
 
-function pack(dir, output){
-  return mkdir(path.dirname(output))
-    .then(()=>{
-      return new Promise((resolve, reject) => {
-        var zipfile = new ZipFile();
+function calcMd5ForFile(fn) {
+  return new Promise((resolve, reject) => {
+    var hash = crypto.createHash('md5'),
+      stream = fs.createReadStream(fn);
 
-        function addDirectory(root, rel){
-          if (rel) {
-            zipfile.addEmptyDirectory(rel);
-          }
-          const childs = fs.readdirSync(root);
-          for (const name of childs) {
-            if (name === '.' || name === '..'){
-              continue;
-            }
-            const fullPath = path.join(root, name);
-            const stat = fs.statSync(fullPath);
-            if (stat.isFile()) {
-              console.log('adding: ' + rel+name);
-              zipfile.addFile(fullPath, rel+name);
-            } else if (stat.isDirectory()) {
-              console.log('adding: ' + rel+name+'/');
-              addDirectory(fullPath, rel+name+'/');
-            }
-          }
+    stream.on('data', (data) => hash.update(data, 'utf8'));
+    stream.on('end', () => resolve(hash.digest('hex')));
+    stream.on('error', err => reject(err));
+  })
+}
+
+async function calcMd5ForDirectory(dir) {
+  const childs = fs.readdirSync(dir).sort();
+  const result = {};
+  for (const name of childs) {
+    const fullPath = path.join(dir, name);
+    const stat = fs.statSync(fullPath);
+    if (stat.isFile()) {
+      result[name] = 'file:' + await calcMd5ForFile(fullPath);
+    } else {
+      result[name] = 'directory:' + await calcMd5ForDirectory(fullPath);
+    }
+  }
+  var hash = crypto.createHash('md5');
+  hash.update(JSON.stringify(result), 'md5');
+  return hash.digest('hex');
+}
+
+async function pack(dir, output){
+  await mkdir(path.dirname(output))
+  const hash = await calcMd5ForDirectory(dir);
+  await new Promise((resolve, reject) => {
+    var zipfile = new ZipFile();
+
+    function addDirectory(root, rel){
+      if (rel) {
+        zipfile.addEmptyDirectory(rel);
+      }
+      const childs = fs.readdirSync(root);
+      for (const name of childs) {
+        if (name === '.' || name === '..'){
+          continue;
         }
+        const fullPath = path.join(root, name);
+        const stat = fs.statSync(fullPath);
+        if (stat.isFile()) {
+          console.log('adding: ' + rel+name);
+          zipfile.addFile(fullPath, rel+name);
+        } else if (stat.isDirectory()) {
+          console.log('adding: ' + rel+name+'/');
+          addDirectory(fullPath, rel+name+'/');
+        }
+      }
+    }
 
-        addDirectory(dir, '');
+    addDirectory(dir, '');
 
-        zipfile.outputStream.on('error', err => reject(err));
-        zipfile.outputStream.pipe(fs.createWriteStream(output))
-          .on("close", function() {
-            resolve();
-          });
-        zipfile.end();
+    zipfile.outputStream.on('error', err => reject(err));
+    zipfile.outputStream.pipe(fs.createWriteStream(output.replace(/\$\{hash\}/g, hash)))
+      .on("close", function() {
+        resolve();
       });
-    })
+    zipfile.end();
+  });
+  console.log('Bundled with hash: ' + hash);
 }
 
 export const commands = {
@@ -69,7 +101,7 @@ export const commands = {
       output,
       dev,
       verbose
-    } = options;
+    } = translateOptions(options);
 
     if (!platform) {
       throw new Error('Platform must be specified.');
@@ -77,7 +109,7 @@ export const commands = {
 
     await mkdir(intermediaDir);
 
-    const { version, major, minor} = getRNVersion();
+    const { version, major, minor } = getRNVersion();
 
     console.log('Bundling with React Native version: ', version);
 
@@ -87,6 +119,7 @@ export const commands = {
       /private-cli\/src/,
       /local-cli/,
     ]);
+
     const Config = require(path.resolve('node_modules/react-native/local-cli/util/Config'));
     const bundle = require(path.resolve('node_modules/react-native/local-cli/bundle/bundle'));
     const defaultConfig = require(path.resolve('node_modules/react-native/local-cli/default.config'));
