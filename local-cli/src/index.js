@@ -39,7 +39,9 @@ exports.run = function () {
 
   loadSession()
     .then(()=>commands[argv.command](argv))
-    .catch(err=>{setTimeout(()=>{
-      throw err;
-    })});
+    .catch(err=>{
+      setTimeout(()=>{
+        throw err;
+      });
+    });
 };
