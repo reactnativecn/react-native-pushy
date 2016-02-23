@@ -12,6 +12,8 @@
 #import "RCTEventDispatcher.h"
 #import "RCTConvert.h"
 
+static NSString *const curVersionKey = @"REACTNATIVECNHOTUPDATECURVERSIONKEY";
+
 @implementation RCTHotUpdate
 
 @synthesize bridge = _bridge;
@@ -33,15 +35,36 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     return self;
 }
 
-RCT_EXPORT_METHOD(checkForUpdate:(NSDictionary *)options callback:(RCTResponseSenderBlock)callback)
++ (NSURL *)bundleURL
 {
-//    dispatch_queue_t fileOpQueue = dispatch_queue_create("reactnative.cn.hotupdate", DISPATCH_QUEUE_SERIAL);
+    NSString *downloadDir = [self donwloadDirPath];
+    NSString *curVersion = [self loadCurVersion];
+    if (curVersion) {
+        NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:curVersion] stringByAppendingPathComponent:@"index.bundlejs"];
+        
+        if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
+            NSURL *bundleURL = [NSURL fileURLWithPath:bundlePath];
+            return bundleURL;
+        }
+        else {
+            return [self mainBundleURL];
+        }
+    }
+    else {
+        return [self mainBundleURL];
+    }
+}
+
++ (NSURL *)mainBundleURL
+{
+    NSURL *jsCodeLocation = [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
+    return jsCodeLocation;
 }
 
 RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options callback:(RCTResponseSenderBlock)callback)
 {
     NSString *updateUrl = options[@"updateUrl"];
-    NSString *unzipName = options[@"unzipName"]?:@"unzipped";
+    NSString *hashName = options[@"hashName"]?:@"unzipped";
     
     NSString *dir = [self getDownloadDir];
     NSString *savePath = [dir stringByAppendingPathComponent:@"zipfile"];
@@ -57,7 +80,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options callback:(RCTResponseSe
             callback(@[error.description]);
         }
         else {
-            NSString *unzipFilePath = [dir stringByAppendingPathComponent:unzipName];
+            NSString *unzipFilePath = [dir stringByAppendingPathComponent:hashName];
             [SSZipArchive unzipFileAtPath:savePath toDestination:unzipFilePath progressHandler:^(NSString *entry, unz_file_info zipInfo, long entryNumber, long total) {
                 [self.bridge.eventDispatcher sendAppEventWithName:@"RCTHotUpdateUnzipProgress"
                                                              body:@{
@@ -80,15 +103,27 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options callback:(RCTResponseSe
 
 RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 {
+    NSString *hashName = options[@"hashName"];
+    if (hashName.length) {
+        [[self class] saveCurVersion:hashName];
+    }
 }
 
 RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 {
+    NSString *hashName = options[@"hashName"];
+    if (hashName.length) {
+        [[self class] saveCurVersion:hashName];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [_bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
+            [_bridge reload];
+        });
+    }
 }
 
 #pragma mark - private
 
-- (NSString *)donwloadDirPath
++ (NSString *)donwloadDirPath
 {
     NSString *directory = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) firstObject];
     NSString *downloadDir = [directory stringByAppendingPathComponent:@"reactnativecnhotupdate"];
@@ -98,7 +133,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 
 - (NSString *)constDir
 {
-    NSString *downloadDir = [self donwloadDirPath];
+    NSString *downloadDir = [[self class] donwloadDirPath];
     NSFileManager *fileManager = [NSFileManager defaultManager];
     BOOL isDir;
     if ([fileManager fileExistsAtPath:downloadDir isDirectory:&isDir]) {
@@ -112,7 +147,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 
 - (NSString *)getDownloadDir
 {
-    NSString *downloadDir = [self donwloadDirPath];
+    NSString *downloadDir = [[self class] donwloadDirPath];
     
     NSFileManager *fileManager = [NSFileManager defaultManager];
     
@@ -133,6 +168,20 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
     }
     
     return downloadDir;
+}
+
++ (void)saveCurVersion:(NSString *)hashCode
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:hashCode forKey:curVersionKey];
+    [defaults synchronize];
+}
+
++ (NSString *)loadCurVersion
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSString *curVersion = [defaults stringForKey:curVersionKey];
+    return curVersion;
 }
 
 @end
