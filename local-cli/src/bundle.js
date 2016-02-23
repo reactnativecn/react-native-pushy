@@ -6,8 +6,8 @@ import * as path from 'path';
 import { mkdir as mkdirRecurisve } from 'mkdir-recursive';
 import { getRNVersion } from './utils';
 import * as fs from 'fs';
-import * as tar from 'tar';
-import fstream from 'fstream';
+import {ZipFile} from 'yazl';
+
 
 function mkdir(dir){
   return new Promise((resolve, reject) => {
@@ -25,25 +25,37 @@ function pack(dir, output){
   return mkdir(path.dirname(output))
     .then(()=>{
       return new Promise((resolve, reject) => {
-        const dest = fs.createWriteStream(output);
+        var zipfile = new ZipFile();
 
-        var packer = tar.Pack({
-            noProprietary: true,
-            fromBase: true,
-          })
-          .on('error', err => {
-            reject(err);
-          })
-          .on('end', () => {
+        function addDirectory(root, rel){
+          if (rel) {
+            zipfile.addEmptyDirectory(rel);
+          }
+          const childs = fs.readdirSync(root);
+          for (const name of childs) {
+            if (name === '.' || name === '..'){
+              continue;
+            }
+            const fullPath = path.join(root, name);
+            const stat = fs.statSync(fullPath);
+            if (stat.isFile()) {
+              console.log('adding: ' + rel+name);
+              zipfile.addFile(fullPath, rel+name);
+            } else if (stat.isDirectory()) {
+              console.log('adding: ' + rel+name+'/');
+              addDirectory(fullPath, rel+name+'/');
+            }
+          }
+        }
+
+        addDirectory(dir, '');
+
+        zipfile.outputStream.on('error', err => reject(err));
+        zipfile.outputStream.pipe(fs.createWriteStream(output))
+          .on("close", function() {
             resolve();
           });
-
-        fstream.Reader({ path: dir, type: "Directory" })
-          .on('error', err => {
-            reject(err);
-          })
-          .pipe(packer)
-          .pipe(dest);
+        zipfile.end();
       });
     })
 }
