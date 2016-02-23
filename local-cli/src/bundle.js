@@ -10,6 +10,7 @@ import {
 } from './utils';
 import * as fs from 'fs';
 import {ZipFile} from 'yazl';
+import {open as openZipFile} from 'yauzl';
 
 import crypto from 'crypto';
 
@@ -54,8 +55,9 @@ async function calcMd5ForDirectory(dir) {
 }
 
 async function pack(dir, output){
-  await mkdir(path.dirname(output))
   const hash = await calcMd5ForDirectory(dir);
+  const realOutput = output.replace(/\$\{hash\}/g, hash);
+  await mkdir(path.dirname(realOutput))
   await new Promise((resolve, reject) => {
     var zipfile = new ZipFile();
 
@@ -83,13 +85,34 @@ async function pack(dir, output){
     addDirectory(dir, '');
 
     zipfile.outputStream.on('error', err => reject(err));
-    zipfile.outputStream.pipe(fs.createWriteStream(output.replace(/\$\{hash\}/g, hash)))
+    zipfile.outputStream.pipe(fs.createWriteStream(realOutput))
       .on("close", function() {
         resolve();
       });
     zipfile.end();
   });
   console.log('Bundled with hash: ' + hash);
+}
+
+function enumZipEntries(zipFn, callback) {
+  return new Promise((resolve, reject) => {
+    openZipFile(zipFn, {lazyEntries:true}, (err, zipfile) => {
+      if (err) {
+        return reject(err);
+      }
+      zipfile.on('end', resolve);
+      zipfile.on('error', reject);
+      zipfile.on('entry', entry => {
+        const result = callback(entry, zipfile);
+        if (result && typeof(result.then) === 'function') {
+          result.then(() => zipfile.readEntry());
+        } else {
+          zipfile.readEntry();
+        }
+      });
+      zipfile.readEntry();
+    });
+  });
 }
 
 export const commands = {
@@ -142,5 +165,79 @@ export const commands = {
     console.log('Packing');
 
     await pack(intermediaDir, output);
+  },
+
+  async diff({args, options}) {
+    const [origin, next] = args;
+    const {output} = options;
+
+    if (!origin || !next) {
+      console.error('pushy diff <origin> <next>');
+      process.exit(1);
+    }
+
+    //Read crc32 map from origin
+    const originMap = {};
+    const originEntries = {};
+
+    await enumZipEntries(origin, entry => {
+      if (!/\/$/.test(entry.fileName)) {
+        // isFile
+        originEntries[entry.fileName] = entry.crc32;
+        originMap[entry.crc32] = entry.fileName;
+      }
+    });
+
+    const copies = {};
+
+    var zipfile = new ZipFile();
+
+    const writePromise = new Promise((resolve, reject)=>{
+      zipfile.outputStream.on('error', err => {throw err;});
+      zipfile.outputStream.pipe(fs.createWriteStream(output))
+        .on("close", function() {
+          resolve();
+        });
+    });
+
+    await enumZipEntries(next, (entry, nextZipfile) => {
+      if (/\/$/.test(entry.fileName)) {
+        // Directory
+        zipfile.addEmptyDirectory(entry.fileName);
+      } else {
+        // If same file.
+        if (originEntries[entry.fileName] === entry.crc32) {
+          console.log('keep:', entry.fileName);
+          copies[entry.fileName] = 1;
+          return;
+        }
+        // If moved from other place
+        if (originMap[entry.crc32]){
+          console.log('move:' + originMap[entry.crc32] + '->' + entry.fileName);
+          copies[entry.fileName] = originMap[entry.crc32];
+          return;
+        }
+
+        // TODO: test diff
+        console.log('add:' + entry.fileName);
+
+        return new Promise((resolve, reject)=>{
+          nextZipfile.openReadStream(entry, function(err, readStream) {
+            if (err){
+              return reject(err);
+            }
+            zipfile.addReadStream(readStream, entry.fileName);
+            readStream.on('end', () => {
+              console.log('add finished');
+              resolve();
+            });
+          });
+        })
+      }
+    });
+
+    zipfile.addBuffer(new Buffer(JSON.stringify({copies})), '__diff.json');
+    zipfile.end();
+    await writePromise;
   }
 };

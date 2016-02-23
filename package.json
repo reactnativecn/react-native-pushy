@@ -4,7 +4,8 @@
   "description": "react-native hot update",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublish": "node_modules/.bin/babel local-cli/src --out-dir local-cli/lib"
   },
   "repository": {
     "type": "git",
@@ -31,6 +32,7 @@
     "isomorphic-fetch": "^2.2.1",
     "mkdir-recursive": "^0.2.1",
     "read": "^1.0.7",
+    "yauzl": "^2.4.1",
     "yazl": "^2.3.0"
   },
   "devDependencies": {
