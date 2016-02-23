@@ -1,0 +1,27 @@
+{
+  "name": "react-native-update",
+  "version": "1.0.0",
+  "description": "react-native hot update",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reactnativecn/react-native-pushy.git"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "update",
+    "hot",
+    "update"
+  ],
+  "author": "lvbingru, tdzl",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/reactnativecn/react-native-pushy/issues"
+  },
+  "homepage": "https://github.com/reactnativecn/react-native-pushy#readme"
+}
