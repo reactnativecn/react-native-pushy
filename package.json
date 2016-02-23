@@ -1,0 +1,51 @@
+{
+  "name": "react-native-pushy",
+  "version": "0.1.0",
+  "description": "JavaScript updater with `pushy` service for react native apps.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepublish": "node_modules/.bin/babel local-cli/src --out-dir local-cli/lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reactnativecn/react-native-pushy.git"
+  },
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "update"
+  ],
+  "author": "reactnativecn",
+  "license": "BSD-3-Clause",
+  "bugs": {
+    "url": "https://github.com/reactnativecn/react-native-pushy/issues"
+  },
+  "peerDependencies": {
+    "react-native": ">=0.18.0"
+  },
+  "homepage": "https://github.com/reactnativecn/react-native-pushy#readme",
+  "dependencies": {
+    "cli-arguments": "^0.2.1",
+    "fs-promise": "^0.4.1",
+    "isomorphic-fetch": "^2.2.1",
+    "mkdir-recursive": "^0.2.1",
+    "read": "^1.0.7",
+    "yazl": "^2.3.0"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.5.1",
+    "babel-eslint": "^4.1.6",
+    "babel-plugin-syntax-async-functions": "^6.5.0",
+    "babel-plugin-syntax-object-rest-spread": "^6.5.0",
+    "babel-plugin-transform-async-to-generator": "^6.3.13",
+    "babel-plugin-transform-es2015-arrow-functions": "^6.5.2",
+    "babel-plugin-transform-es2015-destructuring": "^6.3.15",
+    "babel-plugin-transform-es2015-modules-commonjs": "^6.3.16",
+    "babel-plugin-transform-es2015-parameters": "^6.5.0",
+    "babel-plugin-transform-es2015-spread": "^6.5.2",
+    "babel-plugin-transform-object-rest-spread": "^6.5.0",
+    "babel-plugin-transform-strict-mode": "^6.5.2"
+  }
+}
