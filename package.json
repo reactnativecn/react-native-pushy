@@ -1,11 +1,10 @@
 {
-  "name": "react-native-pushy",
-  "version": "0.1.0",
-  "description": "JavaScript updater with `pushy` service for react native apps.",
+  "name": "react-native-update",
+  "version": "1.0.0",
+  "description": "react-native hot update",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "prepublish": "node_modules/.bin/babel local-cli/src --out-dir local-cli/lib"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
     "type": "git",

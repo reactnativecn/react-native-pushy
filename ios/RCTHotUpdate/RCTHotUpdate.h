@@ -10,4 +10,6 @@
 
 @interface RCTHotUpdate : NSObject<RCTBridgeModule>
 
++ (NSURL *)bundleURL;
+
 @end
