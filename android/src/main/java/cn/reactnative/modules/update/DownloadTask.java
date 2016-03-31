@@ -230,6 +230,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
                     while( keys.hasNext() ) {
                         String to = (String)keys.next();
                         String from = copies.getString(to);
+                        if (from.isEmpty()) {
+                            from = to;
+                        }
                         copyFromResource(from, new File(param.unzipDirectory, to));
                     }
                     continue;

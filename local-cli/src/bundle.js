@@ -88,7 +88,126 @@ function readEntire(entry, zipFile) {
   })
 }
 
-async function diffWithApk(origin, next, output) {
+function basename(fn) {
+  const m = /^(.+\/)[^\/]+\/?$/.exec(fn);
+  return m && m[1];
+}
+
+async function diffWithPPK(origin, next, output) {
+  const originEntries = {};
+  const originMap = {};
+
+  let originSource;
+
+  await enumZipEntries(origin, (entry, zipFile) => {
+    originEntries[entry.fileName] = entry;
+    if (!/\/$/.test(entry.fileName)) {
+      // isFile
+      originMap[entry.crc32] = entry.fileName;
+
+      if (entry.fileName === 'index.bundlejs') {
+        // This is source.
+        return readEntire(entry, zipFile).then(v=>originSource = v);
+      }
+    }
+  });
+
+  originSource = originSource || new Buffer(0);
+
+  const copies = {};
+
+  var zipfile = new ZipFile();
+
+  const writePromise = new Promise((resolve, reject)=>{
+    zipfile.outputStream.on('error', err => {throw err;});
+    zipfile.outputStream.pipe(fs.createWriteStream(output))
+      .on("close", function() {
+        resolve();
+      });
+  });
+
+  const addedEntry = {};
+
+  function addEntry(fn) {
+    console.log(fn);
+    if (addedEntry[fn]) {
+      return;
+    }
+    const base = basename(fn);
+    if (base) {
+      addEntry(base);
+    }
+    zipfile.addEmptyDirectory(fn);
+  }
+
+  const newEntries = {};
+
+  await enumZipEntries(next, (entry, nextZipfile) => {
+    newEntries[entry.fileName] = entry;
+
+    if (/\/$/.test(entry.fileName)) {
+      // Directory
+      if (!originEntries[entry.fileName]) {
+        addEntry(entry.fileName);
+      }
+    } else if (entry.fileName === 'index.bundlejs') {
+      console.log('Found bundle');
+      return readEntire(entry, nextZipfile).then( newSource => {
+        console.log('Begin diff');
+        zipfile.addBuffer(diff(originSource, newSource), 'index.bundlejs.patch');
+        console.log('End diff');
+      });
+    } else {
+      // If same file.
+      const originEntry = originEntries[entry.fileName];
+      if (originEntry && originEntry.crc32 === entry.crc32) {
+        // ignore
+        return;
+      }
+
+      // If moved from other place
+      if (originMap[entry.crc32]){
+        const base = basename(entry.fileName);
+        if (!originEntries[base]) {
+          addEntry(base);
+        }
+        copies[entry.fileName] = originMap[entry.crc32];
+        return;
+      }
+
+      // New file.
+      addEntry(basename(entry.fileName));
+
+      return new Promise((resolve, reject)=>{
+        nextZipfile.openReadStream(entry, function(err, readStream) {
+          if (err){
+            return reject(err);
+          }
+          zipfile.addReadStream(readStream, entry.fileName);
+          readStream.on('end', () => {
+            console.log('add finished');
+            resolve();
+          });
+        });
+      })
+    }
+  });
+
+  const deletes = {};
+
+  for (var k in originEntries) {
+    if (!newEntries[k]) {
+      deletes[k] = 1;
+    }
+  }
+
+  console.log({copies, deletes});
+  zipfile.addBuffer(new Buffer(JSON.stringify({copies, deletes})), '__diff.json');
+  zipfile.end();
+  await writePromise;
+}
+
+async function diffWithPackage(origin, next, output, originBundleName) {
   const originEntries = {};
   const originMap = {};
 
@@ -100,7 +219,7 @@ async function diffWithApk(origin, next, output) {
       originEntries[entry.fileName] = entry.crc32;
       originMap[entry.crc32] = entry.fileName;
 
-      if (entry.fileName === 'assets/index.android.bundle') {
+      if (entry.fileName === originBundleName) {
         // This is source.
         return readEntire(entry, zipFile).then(v=>originSource = v);
       }
@@ -135,7 +254,7 @@ async function diffWithApk(origin, next, output) {
     } else {
       // If same file.
       if (originEntries[entry.fileName] === entry.crc32) {
-        copies[entry.fileName] = 1;
+        copies[entry.fileName] = '';
         return;
       }
       // If moved from other place
@@ -241,69 +360,14 @@ export const commands = {
     const [origin, next] = args;
     const {output} = options;
 
+    const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
+
     if (!origin || !next) {
-      console.error('pushy diff <origin> <next>');
+      console.error('pushy diffWithApk <origin> <next>');
       process.exit(1);
     }
 
-    //Read crc32 map from origin
-    const originMap = {};
-    const originEntries = {};
-
-    await enumZipEntries(origin, entry => {
-      if (!/\/$/.test(entry.fileName)) {
-        // isFile
-        originEntries[entry.fileName] = entry.crc32;
-        originMap[entry.crc32] = entry.fileName;
-      }
-    });
-
-    const copies = {};
-
-    var zipfile = new ZipFile();
-
-    const writePromise = new Promise((resolve, reject)=>{
-      zipfile.outputStream.on('error', err => {throw err;});
-      zipfile.outputStream.pipe(fs.createWriteStream(output))
-        .on("close", function() {
-          resolve();
-        });
-    });
-
-    await enumZipEntries(next, (entry, nextZipfile) => {
-      if (/\/$/.test(entry.fileName)) {
-        // Directory
-        zipfile.addEmptyDirectory(entry.fileName);
-      } else {
-        // If same file.
-        if (originEntries[entry.fileName] === entry.crc32) {
-          copies[entry.fileName] = 1;
-          return;
-        }
-        // If moved from other place
-        if (originMap[entry.crc32]){
-          copies[entry.fileName] = originMap[entry.crc32];
-          return;
-        }
-
-        return new Promise((resolve, reject)=>{
-          nextZipfile.openReadStream(entry, function(err, readStream) {
-            if (err){
-              return reject(err);
-            }
-            zipfile.addReadStream(readStream, entry.fileName);
-            readStream.on('end', () => {
-              console.log('add finished');
-              resolve();
-            });
-          });
-        })
-      }
-    });
-
-    zipfile.addBuffer(new Buffer(JSON.stringify({copies})), '__diff.json');
-    zipfile.end();
-    await writePromise;
+    await diffWithPPK(origin, next, realOutput, 'index.bundlejs');
   },
 
   async diffWithApk({args, options}) {
@@ -317,7 +381,6 @@ export const commands = {
       process.exit(1);
     }
 
-    await diffWithApk(origin, next, realOutput);
-
+    await diffWithPackage(origin, next, realOutput, 'assets/index.android.bundle');
   },
 };
