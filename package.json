@@ -31,7 +31,7 @@
     "fs-promise": "^0.4.1",
     "isomorphic-fetch": "^2.2.1",
     "mkdir-recursive": "^0.2.1",
-    "node-bsdiff": "^0.1.1",
+    "node-bsdiff": "^0.1.2",
     "read": "^1.0.7",
     "yauzl": "^2.4.1",
     "yazl": "^2.3.0"

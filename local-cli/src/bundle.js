@@ -11,6 +11,7 @@ import {
 import * as fs from 'fs';
 import {ZipFile} from 'yazl';
 import {open as openZipFile} from 'yauzl';
+import {diff} from 'node-bsdiff';
 
 import crypto from 'crypto';
 
@@ -63,6 +64,105 @@ async function pack(dir, output){
     zipfile.end();
   });
   console.log('Bundled saved to: ' + realOutput);
+}
+
+function readEntire(entry, zipFile) {
+  const buffers = [];
+  return new Promise((resolve, reject) => {
+    zipFile.openReadStream(entry, (err, stream) => {
+      stream.pipe({
+        write(chunk) {
+          buffers.push(chunk);
+        },
+        end() {
+          resolve(Buffer.concat(buffers));
+        },
+        on() {
+        },
+        once() {
+        },
+        emit() {
+        },
+      })
+    });
+  })
+}
+
+async function diffWithApk(origin, next, output) {
+  const originEntries = {};
+  const originMap = {};
+
+  let originSource;
+
+  await enumZipEntries(origin, (entry, zipFile) => {
+    if (!/\/$/.test(entry.fileName)) {
+      // isFile
+      originEntries[entry.fileName] = entry.crc32;
+      originMap[entry.crc32] = entry.fileName;
+
+      if (entry.fileName === 'assets/index.android.bundle') {
+        // This is source.
+        return readEntire(entry, zipFile).then(v=>originSource = v);
+      }
+    }
+  });
+
+  originSource = originSource || new Buffer(0);
+
+  const copies = {};
+
+  var zipfile = new ZipFile();
+
+  const writePromise = new Promise((resolve, reject)=>{
+    zipfile.outputStream.on('error', err => {throw err;});
+    zipfile.outputStream.pipe(fs.createWriteStream(output))
+      .on("close", function() {
+        resolve();
+      });
+  });
+
+  await enumZipEntries(next, (entry, nextZipfile) => {
+    if (/\/$/.test(entry.fileName)) {
+      // Directory
+      zipfile.addEmptyDirectory(entry.fileName);
+    } else if (entry.fileName === 'index.bundlejs') {
+      console.log('Found bundle');
+      return readEntire(entry, nextZipfile).then( newSource => {
+        console.log('Begin diff');
+        zipfile.addBuffer(diff(originSource, newSource), 'index.bundlejs.patch');
+        console.log('End diff');
+      });
+    } else {
+      // If same file.
+      if (originEntries[entry.fileName] === entry.crc32) {
+        copies[entry.fileName] = 1;
+        return;
+      }
+      // If moved from other place
+      if (originMap[entry.crc32]){
+        copies[entry.fileName] = originMap[entry.crc32];
+        return;
+      }
+
+      return new Promise((resolve, reject)=>{
+        nextZipfile.openReadStream(entry, function(err, readStream) {
+          if (err){
+            return reject(err);
+          }
+          zipfile.addReadStream(readStream, entry.fileName);
+          readStream.on('end', () => {
+            console.log('add finished');
+            resolve();
+          });
+        });
+      })
+    }
+  });
+
+  console.log(copies);
+  zipfile.addBuffer(new Buffer(JSON.stringify({copies})), '__diff.json');
+  zipfile.end();
+  await writePromise;
 }
 
 function enumZipEntries(zipFn, callback) {
@@ -205,5 +305,20 @@ export const commands = {
     zipfile.addBuffer(new Buffer(JSON.stringify({copies})), '__diff.json');
     zipfile.end();
     await writePromise;
-  }
+  },
+
+  async diffWithApk({args, options}) {
+    const [origin, next] = args;
+    const {output} = options;
+
+    const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
+
+    if (!origin || !next) {
+      console.error('pushy diffWithApk <origin> <next>');
+      process.exit(1);
+    }
+
+    await diffWithApk(origin, next, realOutput);
+
+  },
 };
