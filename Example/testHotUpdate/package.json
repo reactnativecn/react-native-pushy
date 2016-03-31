@@ -7,6 +7,6 @@
   },
   "dependencies": {
     "react-native": "^0.20.0",
-    "react-native-update": "git+https://github.com/reactnativecn/react-native-pushy"
+    "react-native-pushy": "../.."
   }
 }

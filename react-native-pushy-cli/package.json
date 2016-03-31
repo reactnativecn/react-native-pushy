@@ -1,5 +1,5 @@
 {
-  "name": "react-native-pushy-cli",
+  "name": "react-native-update-cli",
   "version": "0.1.0",
   "description": "Command tools for javaScript updater with `pushy` service for react native apps.",
   "main": "index.js",

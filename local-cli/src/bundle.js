@@ -26,38 +26,9 @@ function mkdir(dir){
   });
 }
 
-function calcMd5ForFile(fn) {
-  return new Promise((resolve, reject) => {
-    var hash = crypto.createHash('md5'),
-      stream = fs.createReadStream(fn);
-
-    stream.on('data', (data) => hash.update(data, 'utf8'));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', err => reject(err));
-  })
-}
-
-async function calcMd5ForDirectory(dir) {
-  const childs = fs.readdirSync(dir).sort();
-  const result = {};
-  for (const name of childs) {
-    const fullPath = path.join(dir, name);
-    const stat = fs.statSync(fullPath);
-    if (stat.isFile()) {
-      result[name] = 'file:' + await calcMd5ForFile(fullPath);
-    } else {
-      result[name] = 'directory:' + await calcMd5ForDirectory(fullPath);
-    }
-  }
-  var hash = crypto.createHash('md5');
-  hash.update(JSON.stringify(result), 'md5');
-  return hash.digest('hex');
-}
-
 async function pack(dir, output){
-  const hash = await calcMd5ForDirectory(dir);
-  const realOutput = output.replace(/\$\{hash\}/g, hash);
-  await mkdir(path.dirname(realOutput))
+  const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
+  await mkdir(path.dirname(realOutput));
   await new Promise((resolve, reject) => {
     var zipfile = new ZipFile();
 
@@ -91,7 +62,7 @@ async function pack(dir, output){
       });
     zipfile.end();
   });
-  console.log('Bundled with hash: ' + hash);
+  console.log('Bundled saved to: ' + realOutput);
 }
 
 function enumZipEntries(zipFn, callback) {
@@ -207,19 +178,14 @@ export const commands = {
       } else {
         // If same file.
         if (originEntries[entry.fileName] === entry.crc32) {
-          console.log('keep:', entry.fileName);
           copies[entry.fileName] = 1;
           return;
         }
         // If moved from other place
         if (originMap[entry.crc32]){
-          console.log('move:' + originMap[entry.crc32] + '->' + entry.fileName);
           copies[entry.fileName] = originMap[entry.crc32];
           return;
         }
-
-        // TODO: test diff
-        console.log('add:' + entry.fileName);
 
         return new Promise((resolve, reject)=>{
           nextZipfile.openReadStream(entry, function(err, readStream) {

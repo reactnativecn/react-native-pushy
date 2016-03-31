@@ -10,7 +10,7 @@ const CLI_MODULE_PATH = function() {
   return path.resolve(
     process.cwd(),
     'node_modules',
-    'react-native-pushy',
+    'react-native-update',
     'local-cli'
   );
 };
@@ -19,7 +19,7 @@ const PACKAGE_JSON_PATH = function() {
   return path.resolve(
     process.cwd(),
     'node_modules',
-    'react-native-pushy',
+    'react-native-update',
     'package.json'
   );
 };
@@ -36,17 +36,17 @@ if (cli) {
   cli.run();
 } else {
   console.error('Are you at home directory of a react-native project?');
-  console.error('`pushy install` is under development, please run `npm install react-native-pushy` to install pushy manually.');
+  console.error('`pushy install` is under development, please run `npm install react-native-update` to install pushy manually.');
   process.exit(1);
 }
 
 function checkForVersionCommand() {
   if (process.argv.indexOf('-v') >= 0 || process.argv[2] === 'version') {
-    console.log('react-native-pushy-cli: ' + require('../package.json').version);
+    console.log('react-native-update-cli: ' + require('../package.json').version);
     try {
-      console.log('react-native-pushy: ' + require(PACKAGE_JSON_PATH()).version);
+      console.log('react-native-update: ' + require(PACKAGE_JSON_PATH()).version);
     } catch (e) {
-      console.log('react-native-pushy: n/a - not inside a React Native project directory')
+      console.log('react-native-update: n/a - not inside a React Native project directory')
     }
     process.exit();
   }
