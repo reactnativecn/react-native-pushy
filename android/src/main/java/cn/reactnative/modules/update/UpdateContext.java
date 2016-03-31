@@ -63,7 +63,7 @@ public class UpdateContext {
 
     public void downloadPatchFromPpk(String url, String hashName, String originHashName, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK;
+        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
         params.url = url;
         params.hash = hashName;
         params.originHash = originHashName;
