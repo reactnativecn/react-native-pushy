@@ -65,4 +65,22 @@ public class UpdateModule extends ReactContextBaseJavaModule{
             }
         });
     }
+
+    @ReactMethod
+    public void downloadPatchFromPpk(ReadableMap options, final Promise promise){
+        String url = options.getString("updateUrl");
+        String hash = options.getString("hashName");
+        String originHash = options.getString("originHashName");
+        updateContext.downloadPatchFromPpk(url, hash, originHash, new UpdateContext.DownloadFileListener() {
+            @Override
+            public void onDownloadCompleted() {
+                promise.resolve(null);
+            }
+
+            @Override
+            public void onDownloadFailed(Throwable error) {
+                promise.reject(error);
+            }
+        });
+    }
 }

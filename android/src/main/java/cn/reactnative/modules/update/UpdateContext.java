@@ -60,4 +60,17 @@ public class UpdateContext {
         params.unzipDirectory = new File(rootDir, hashName);
         new DownloadTask(context).execute(params);
     }
+
+    public void downloadPatchFromPpk(String url, String hashName, String originHashName, DownloadFileListener listener) {
+        DownloadTaskParams params = new DownloadTaskParams();
+        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK;
+        params.url = url;
+        params.hash = hashName;
+        params.originHash = originHashName;
+        params.listener = listener;
+        params.zipFilePath = new File(rootDir, originHashName + "-" + hashName + ".ppk.patch");
+        params.unzipDirectory = new File(rootDir, hashName);
+        params.originDirectory = new File(rootDir, originHashName);
+        new DownloadTask(context).execute(params);
+    }
 }

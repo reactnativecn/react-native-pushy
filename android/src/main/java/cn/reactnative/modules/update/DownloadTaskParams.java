@@ -10,12 +10,14 @@ import java.io.File;
 class DownloadTaskParams {
     static final int TASK_TYPE_FULL_DOWNLOAD = 1;
     static final int TASK_TYPE_PATCH_FROM_APK = 2;
-    static final int TASK_TYPE_PATCH_FROM_HASH = 3;
+    static final int TASK_TYPE_PATCH_FROM_PPK = 3;
 
     int         type;
     String      url;
     String      hash;
-    File zipFilePath;
-    File unzipDirectory;
+    String      originHash;
+    File        zipFilePath;
+    File        unzipDirectory;
+    File        originDirectory;
     UpdateContext.DownloadFileListener listener;
 }

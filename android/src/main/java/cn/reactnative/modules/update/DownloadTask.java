@@ -67,6 +67,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         Request request = new Request.Builder().url(url)
                 .build();
         Response response = client.newCall(request).execute();
+        if (response.code() > 299) {
+            throw new Error("Server return code " + response.code());
+        }
         ResponseBody body = response.body();
         long contentLength = body.contentLength();
         BufferedSource source = body.source();
@@ -118,6 +121,21 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         zis.closeEntry();
     }
 
+    private void copyFile(File from, File fmd) throws IOException {
+        int count;
+
+        InputStream in = new FileInputStream(from);
+        FileOutputStream fout = new FileOutputStream(fmd);
+
+        while ((count = in.read(buffer)) != -1)
+        {
+            fout.write(buffer, 0, count);
+        }
+
+        fout.close();
+        in.close();
+    }
+
     private byte[] readBytes(ZipInputStream zis) throws IOException {
         int count;
 
@@ -145,6 +163,48 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         fout.close();
         in.close();
         return fout.toByteArray();
+    }
+
+    private byte[] readFile(File file)  throws IOException {
+        InputStream in = new FileInputStream(file);
+        int count;
+
+        ByteArrayOutputStream fout = new ByteArrayOutputStream();
+        while ((count = in.read(buffer)) != -1)
+        {
+            fout.write(buffer, 0, count);
+        }
+
+        fout.close();
+        in.close();
+        return fout.toByteArray();
+    }
+
+    private void copyFilesWithBlacklist(String current, File from, File to, JSONObject blackList) throws IOException {
+        File[] files = from.listFiles();
+        for (File file : files) {
+            if (file.isDirectory()) {
+                String subName = current + file.getName() + '/';
+                if (blackList.has(subName)) {
+                    continue;
+                }
+                File toFile = new File(to, file.getName());
+                if (!toFile.exists()) {
+                    toFile.mkdir();
+                }
+                copyFilesWithBlacklist(subName, file, toFile, blackList);
+            } else if (!blackList.has(current + file.getName())) {
+                // Copy file.
+                File toFile = new File(to, file.getName());
+                if (!toFile.exists()) {
+                    copyFile(file, toFile);
+                }
+            }
+        }
+    }
+
+    private void copyFilesWithBlacklist(File from, File to, JSONObject blackList) throws IOException {
+        copyFilesWithBlacklist("", from, to, blackList);
     }
 
     private void doDownload(DownloadTaskParams param) {
@@ -274,6 +334,79 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         }
     }
 
+    private void doPatchFromPpk(DownloadTaskParams param) {
+        try {
+            downloadFile(param.url, param.zipFilePath);
+
+            ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
+            ZipEntry ze;
+            int count;
+            String filename;
+
+            removeDirectory(param.unzipDirectory);
+            param.unzipDirectory.mkdirs();
+
+            while ((ze = zis.getNextEntry()) != null)
+            {
+                String fn = ze.getName();
+
+                if (fn.equals("__diff.json")) {
+                    // copy files from assets
+                    byte[] bytes = readBytes(zis);
+                    String json = new String(bytes, "UTF-8");
+                    JSONObject obj = (JSONObject)new JSONTokener(json).nextValue();
+
+                    JSONObject copies = obj.getJSONObject("copies");
+                    Iterator<?> keys = copies.keys();
+                    while( keys.hasNext() ) {
+                        String to = (String)keys.next();
+                        String from = copies.getString(to);
+                        if (from.isEmpty()) {
+                            from = to;
+                        }
+                        copyFile(new File(param.originDirectory, from), new File(param.unzipDirectory, to));
+                    }
+                    JSONObject blackList = obj.getJSONObject("deletes");
+                    copyFilesWithBlacklist(param.originDirectory, param.unzipDirectory, blackList);
+                    continue;
+                }
+                if (fn.equals("index.bundlejs.patch")) {
+                    // do bsdiff patch
+                    byte[] patched = bsdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
+
+                    FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
+                    fout.write(patched);
+                    fout.close();
+                    continue;
+                }
+                File fmd = new File(param.unzipDirectory, fn);
+
+                if (UpdateContext.DEBUG) {
+                    Log.d("RNUpdate", "Unzipping " + fn);
+                }
+
+                if (ze.isDirectory()) {
+                    fmd.mkdirs();
+                    continue;
+                }
+
+                unzipToFile(zis, fmd);
+            }
+
+            zis.close();
+
+            if (UpdateContext.DEBUG) {
+                Log.d("RNUpdate", "Unzip finished");
+            }
+
+        } catch (Throwable e) {
+            if (UpdateContext.DEBUG) {
+                e.printStackTrace();
+            }
+            param.listener.onDownloadFailed(e);
+        }
+    }
+
     @Override
     protected Void doInBackground(DownloadTaskParams... params) {
         switch (params[0].type) {
@@ -282,6 +415,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
                 break;
             case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
                 doPatchFromApk(params[0]);
+                break;
+            case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
+                doPatchFromPpk(params[0]);
                 break;
         }
         return null;
