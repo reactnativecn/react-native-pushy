@@ -41,11 +41,23 @@ public class UpdateContext {
 
     public void downloadFile(String url, String hashName, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
+        params.type = DownloadTaskParams.TASK_TYPE_FULL_DOWNLOAD;
         params.url = url;
         params.hash = hashName;
         params.listener = listener;
         params.zipFilePath = new File(rootDir, hashName + ".ppk");
         params.unzipDirectory = new File(rootDir, hashName);
-        new DownloadTask().execute(params);
+        new DownloadTask(context).execute(params);
+    }
+
+    public void downloadPatchFromApk(String url, String hashName, DownloadFileListener listener) {
+        DownloadTaskParams params = new DownloadTaskParams();
+        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK;
+        params.url = url;
+        params.hash = hashName;
+        params.listener = listener;
+        params.zipFilePath = new File(rootDir, hashName + ".apk.patch");
+        params.unzipDirectory = new File(rootDir, hashName);
+        new DownloadTask(context).execute(params);
     }
 }

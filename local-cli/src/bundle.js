@@ -159,7 +159,6 @@ async function diffWithApk(origin, next, output) {
     }
   });
 
-  console.log(copies);
   zipfile.addBuffer(new Buffer(JSON.stringify({copies})), '__diff.json');
   zipfile.end();
   await writePromise;

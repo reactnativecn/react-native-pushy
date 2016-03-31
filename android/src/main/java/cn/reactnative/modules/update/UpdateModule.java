@@ -48,4 +48,21 @@ public class UpdateModule extends ReactContextBaseJavaModule{
             }
         });
     }
+
+    @ReactMethod
+    public void downloadPatchFromApk(ReadableMap options, final Promise promise){
+        String url = options.getString("updateUrl");
+        String hash = options.getString("hashName");
+        updateContext.downloadPatchFromApk(url, hash, new UpdateContext.DownloadFileListener() {
+            @Override
+            public void onDownloadCompleted() {
+                promise.resolve(null);
+            }
+
+            @Override
+            public void onDownloadFailed(Throwable error) {
+                promise.reject(error);
+            }
+        });
+    }
 }
