@@ -151,7 +151,12 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
     }
 
     private byte[] readOriginBundle()  throws IOException {
-        InputStream in = context.getAssets().open("index.android.bundle");
+        InputStream in;
+        try {
+            in = context.getAssets().open("index.android.bundle");
+        } catch (Exception e) {
+            return new byte[0];
+        }
         int count;
 
         ByteArrayOutputStream fout = new ByteArrayOutputStream();
