@@ -207,7 +207,7 @@ async function diffWithPPK(origin, next, output) {
   await writePromise;
 }
 
-async function diffWithPackage(origin, next, output, originBundleName) {
+async function diffWithPackage(origin, next, output, originBundleName, transformPackagePath = v=>v) {
   const originEntries = {};
   const originMap = {};
 
@@ -215,11 +215,16 @@ async function diffWithPackage(origin, next, output, originBundleName) {
 
   await enumZipEntries(origin, (entry, zipFile) => {
     if (!/\/$/.test(entry.fileName)) {
-      // isFile
-      originEntries[entry.fileName] = entry.crc32;
-      originMap[entry.crc32] = entry.fileName;
+      const fn = transformPackagePath(entry.filename);
+      if (!fn) {
+        return;
+      }
 
-      if (entry.fileName === originBundleName) {
+      // isFile
+      originEntries[fn] = entry.crc32;
+      originMap[entry.crc32] = fn;
+
+      if (fn === originBundleName) {
         // This is source.
         return readEntire(entry, zipFile).then(v=>originSource = v);
       }
@@ -381,6 +386,26 @@ export const commands = {
       process.exit(1);
     }
 
-    await diffWithPackage(origin, next, realOutput, 'assets/index.android.bundle');
+    await diffWithPackage(origin, next, realOutput, 'assets/index.android.bundle', v=>{
+      const m = /^res\/(.+)$/.exec(v);
+      return m && m[1];
+    });
+  },
+
+  async diffWithIpa({args, options}) {
+    const [origin, next] = args;
+    const {output} = options;
+
+    const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
+
+    if (!origin || !next) {
+      console.error('pushy diffWithIpa <origin> <next>');
+      process.exit(1);
+    }
+
+    await diffWithPackage(origin, next, realOutput, 'index.ios.bundle', v=>{
+      const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
+      return m && m[1];
+    });
   },
 };
