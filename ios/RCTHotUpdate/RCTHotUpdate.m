@@ -7,14 +7,46 @@
 //
 
 #import "RCTHotUpdate.h"
-#import "ZipArchive.h"
 #import "RCTHotUpdateDownloader.h"
 #import "RCTEventDispatcher.h"
 #import "RCTConvert.h"
+#import "RCTHotUpdateManager.h"
+#import "RCTLog.h"
 
+//
 static NSString *const curVersionKey = @"REACTNATIVECNHOTUPDATECURVERSIONKEY";
 
-@implementation RCTHotUpdate
+// app info
+static NSString * const AppVersionKey = @"appVersion";
+static NSString * const BuildVersionKey = @"buildVersion";
+
+// file def
+static NSString * const BUNDLE_FILE_NAME = @"index.bundlejs";
+static NSString * const SOURCE_DIR_NAME = @"assets";
+static NSString * const SOURCE_PATCH_NAME = @"__diff.json";
+static NSString * const BUNDLE_PATCH_NAME = @"index.bundlejs.patch";
+
+// error def
+static NSString * const ERROR_OPTIONS = @"options error";
+static NSString * const ERROR_BSDIFF = @"bsdiff error";
+static NSString * const ERROR_FILE_OPERATION = @"file operation error";
+
+// event def
+static NSString * const EVENT_PROGRESS_DOWNLOAD = @"RCTHotUpdateDownloadProgress";
+static NSString * const EVENT_PROGRESS_UNZIP = @"RCTHotUpdateUnzipProgress";
+static NSString * const PARAM_PROGRESS_RECEIVED = @"received";
+static NSString * const PARAM_PROGRESS_TOTAL = @"total";
+
+
+typedef NS_ENUM(NSInteger, HotUpdateType) {
+    HotUpdateTypeFullDownload = 1,
+    HotUpdateTypePatchFromIpa = 2,
+    HotUpdateTypePatchFromPpa = 3,
+};
+
+@implementation RCTHotUpdate {
+    RCTHotUpdateManager *_fileManager;
+}
 
 @synthesize bridge = _bridge;
 @synthesize methodQueue = _methodQueue;
@@ -23,80 +55,84 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 
 - (NSDictionary *)constantsToExport
 {
-    return @{ @"downloadRootDir": [self constDir] };
+    return @{ @"downloadRootDir": [RCTHotUpdate donwloadDir]};
 }
 
 - (instancetype)init
 {
     self = [super init];
     if (self) {
-        
+        _fileManager = [RCTHotUpdateManager new];
     }
     return self;
 }
 
 + (NSURL *)bundleURL
 {
-    NSString *downloadDir = [self donwloadDirPath];
+    NSString *downloadDir = [RCTHotUpdate donwloadDir];
     NSString *curVersion = [self loadCurVersion];
     if (curVersion) {
-        NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:curVersion] stringByAppendingPathComponent:@"index.bundlejs"];
-        
+        NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:curVersion] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
         if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
             NSURL *bundleURL = [NSURL fileURLWithPath:bundlePath];
             return bundleURL;
         }
-        else {
-            return [self mainBundleURL];
-        }
     }
-    else {
-        return [self mainBundleURL];
-    }
+    return [RCTHotUpdate binaryBundleURL];
 }
 
-+ (NSURL *)mainBundleURL
+RCT_EXPORT_METHOD(getVersionInfo:(RCTResponseSenderBlock)callback)
 {
-    NSURL *jsCodeLocation = [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
-    return jsCodeLocation;
-}
-
-RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options callback:(RCTResponseSenderBlock)callback)
-{
-    NSString *updateUrl = options[@"updateUrl"];
-    NSString *hashName = options[@"hashName"]?:@"unzipped";
+    NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
     
-    NSString *dir = [self getDownloadDir];
-    NSString *savePath = [dir stringByAppendingPathComponent:@"zipfile"];
+    NSString *appVersion = [infoDictionary objectForKey:@"CFBundleShortVersionString"];
+    NSString *buildVersion = [infoDictionary objectForKey:@"CFBundleVersion"];
+    
+    NSDictionary *versionInfo = @{AppVersionKey:appVersion, BuildVersionKey:buildVersion};
+    if (callback) {
+        callback(@[versionInfo]);
+    }
+}
 
-    [RCTHotUpdateDownloader download:updateUrl savePath:savePath progressHandler:^(long long receivedBytes, long long totalBytes) {
-        [self.bridge.eventDispatcher sendAppEventWithName:@"RCTHotUpdateDownloadProgress"
-                                     body:@{
-                                            @"receivedBytes":[NSNumber numberWithLongLong:receivedBytes],
-                                            @"totalBytes":[NSNumber numberWithLongLong:totalBytes]
-                                            }];
-    } completionHandler:^(NSString *path, NSError *error) {
+
+RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    [self hotUpdate:HotUpdateTypeFullDownload options:options callback:^(NSError *error) {
         if (error) {
-            callback(@[error.description]);
+            [self reject:reject error:error];
         }
         else {
-            NSString *unzipFilePath = [dir stringByAppendingPathComponent:hashName];
-            [SSZipArchive unzipFileAtPath:savePath toDestination:unzipFilePath progressHandler:^(NSString *entry, unz_file_info zipInfo, long entryNumber, long total) {
-                [self.bridge.eventDispatcher sendAppEventWithName:@"RCTHotUpdateUnzipProgress"
-                                                             body:@{
-                                                                    @"receivedBytes":[NSNumber numberWithLong:entryNumber],
-                                                                    @"totalBytes":[NSNumber numberWithLong:total]
-                                                                    }];
-                
-                //            NSLog(@"%ld %ld", entryNumber, total);
-            } completionHandler:^(NSString *path, BOOL succeeded, NSError *error) {
-                if (error) {
-                    callback(@[error.description]);
-                }
-                else {
-                    callback(@[[NSNull null]]);
-                }
-            }];
+            resolve(nil);
+        }
+    }];
+}
+
+RCT_EXPORT_METHOD(downloadPatchFromIpa:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    [self hotUpdate:HotUpdateTypePatchFromIpa options:options callback:^(NSError *error) {
+        if (error) {
+            [self reject:reject error:error];
+        }
+        else {
+            resolve(nil);
+        }
+    }];
+}
+
+RCT_EXPORT_METHOD(downloadPatchFromPpa:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    [self hotUpdate:HotUpdateTypePatchFromPpa options:options callback:^(NSError *error) {
+        if (error) {
+            [self reject:reject error:error];
+        }
+        else {
+            resolve(nil);
         }
     }];
 }
@@ -121,53 +157,154 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
     }
 }
 
+RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
+{
+    NSString *downloadDir = [RCTHotUpdate donwloadDir];
+    NSString *curVersion = [RCTHotUpdate loadCurVersion];
+    
+    NSError *error = nil;
+    NSArray *list = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:downloadDir error:&error];
+    if (error) {
+        return;
+    }
+    
+    for(NSString *fileName in list) {
+        if (![fileName isEqualToString:curVersion]) {
+            [_fileManager removeFile:curVersion completionHandler:nil];
+        }
+    }
+}
+
 #pragma mark - private
-
-+ (NSString *)donwloadDirPath
+- (void)hotUpdate:(HotUpdateType)type options:(NSDictionary *)options callback:(void (^)(NSError *error))callback
 {
-    NSString *directory = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) firstObject];
-    NSString *downloadDir = [directory stringByAppendingPathComponent:@"reactnativecnhotupdate"];
+    NSString *updateUrl = [RCTConvert NSString:options[@"updateUrl"]];
+    NSString *hashName = [RCTConvert NSString:options[@"hashName"]];
+    if (updateUrl.length<=0 || hashName.length<=0) {
+        callback([self errorWithMessage:ERROR_OPTIONS]);
+        return;
+    }
+    NSString *originHashName = [RCTConvert NSString:options[@"originHashName"]];
+    if (type == HotUpdateTypePatchFromPpa && originHashName<=0) {
+        callback([self errorWithMessage:ERROR_OPTIONS]);
+        return;
+    }
+    
+    NSString *dir = [RCTHotUpdate donwloadDir];
+    BOOL success = [_fileManager createDir:dir];
+    if (!success) {
+        callback([self errorWithMessage:ERROR_FILE_OPERATION]);
+        return;
+    }
+    
+    NSString *zipFilePath = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@, %@",hashName, [self zipExtension:type]]];
+    NSString *unzipDir = [dir stringByAppendingPathComponent:hashName];
 
-    return downloadDir;
+    RCTLogInfo(@"RNUpdate -- download file %@", updateUrl);
+    [RCTHotUpdateDownloader download:updateUrl savePath:zipFilePath progressHandler:^(long long receivedBytes, long long totalBytes) {
+        [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_DOWNLOAD
+                                                     body:@{
+                                                            PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLongLong:receivedBytes],
+                                                            PARAM_PROGRESS_TOTAL:[NSNumber numberWithLongLong:totalBytes]
+                                                            }];
+    } completionHandler:^(NSString *path, NSError *error) {
+        if (error) {
+            callback(error);
+        }
+        else {
+            RCTLogInfo(@"RNUpdate -- unzip file %@", zipFilePath);
+            NSString *unzipFilePath = [dir stringByAppendingPathComponent:hashName];
+            [_fileManager unzipFileAtPath:unzipDir toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
+                [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_UNZIP
+                                                             body:@{
+                                                                    PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLong:entryNumber],
+                                                                    PARAM_PROGRESS_TOTAL:[NSNumber numberWithLong:total]
+                                                                    }];
+                
+            } completionHandler:^(NSString *path, BOOL succeeded, NSError *error) {
+                dispatch_async(_methodQueue, ^{
+                    if (error) {
+                        callback(error);
+                    }
+                    else {
+                        switch (type) {
+                            case HotUpdateTypePatchFromIpa:
+                            {
+                                NSString *sourceOrigin = [RCTHotUpdate binarySourceDir];
+                                NSString *bundleOrigin = [[RCTHotUpdate binaryBundleURL] absoluteString];
+                                [self patch:hashName romBundle:bundleOrigin source:sourceOrigin callback:callback];
+                            }
+                                break;
+                            case HotUpdateTypePatchFromPpa:
+                            {
+                                NSString *lastVertionDir = [dir stringByAppendingPathComponent:originHashName];
+                                
+                                NSString *sourceOrigin = [lastVertionDir stringByAppendingPathComponent:SOURCE_DIR_NAME];
+                                NSString *bundleOrigin = [lastVertionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+                                [self patch:hashName romBundle:bundleOrigin source:sourceOrigin callback:callback];
+                            }
+                                break;
+                            default:
+                                callback(nil);
+                                break;
+                        }
+                    }
+                });
+            }];
+        }
+    }];
 }
 
-- (NSString *)constDir
+- (void)patch:(NSString *)hashName romBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
 {
-    NSString *downloadDir = [[self class] donwloadDirPath];
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    BOOL isDir;
-    if ([fileManager fileExistsAtPath:downloadDir isDirectory:&isDir]) {
-        if (isDir) {
-            return downloadDir;
-        }
-    }
+    NSString *unzipDir = [[RCTHotUpdate donwloadDir] stringByAppendingPathComponent:hashName];
+    NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
+    NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME];
     
-    return @"";
+    NSString *destination = [unzipDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+    [_fileManager bsdiffFileAtPath:bundlePatch fromOrigin:bundleOrigin toDestination:destination completionHandler:^(BOOL success) {
+        if (success) {
+            
+            NSData *data = [NSData dataWithContentsOfFile:sourcePatch];
+            NSError *error = nil;
+            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error:&error];
+            if (error) {
+                callback(error);
+                return;
+            }
+            NSDictionary *copies = json[@"copies"];
+            [_fileManager copyFiles:copies fromDir:sourceOrigin toDir:unzipDir completionHandler:^(NSError *error) {
+                if (error) {
+                    callback(error);
+                }
+                else {
+                    callback(nil);
+                }
+            }];
+        }
+        else {
+            callback([self errorWithMessage:ERROR_BSDIFF]);
+        }
+    }];
 }
 
-- (NSString *)getDownloadDir
+- (NSString *)zipExtension:(HotUpdateType)type
 {
-    NSString *downloadDir = [[self class] donwloadDirPath];
-    
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    
-    BOOL isDir;
-    if ([fileManager fileExistsAtPath:downloadDir isDirectory:&isDir]) {
-        if (isDir) {
-            return downloadDir;
-        }
+    switch (type) {
+        case HotUpdateTypeFullDownload:
+            return @".ppk";
+        case HotUpdateTypePatchFromIpa:
+            return @".apk.patch";
+        case HotUpdateTypePatchFromPpa:
+            return @".ppk.patch";
+        default:
+            break;
     }
-    
-    NSError *error;
-    if (![fileManager createDirectoryAtPath:downloadDir
-                withIntermediateDirectories:YES
-                                 attributes:nil
-                                      error:&error])
-    {
-        return nil;
-    }
-    
-    return downloadDir;
+}
+
+- (void)reject:(RCTPromiseRejectBlock)reject error:(NSError *)error
+{
+    reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
 }
 
 + (void)saveCurVersion:(NSString *)hashCode
@@ -184,4 +321,29 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
     return curVersion;
 }
 
+- (NSError *)errorWithMessage:(NSString *)errorMessage
+{
+    return [NSError errorWithDomain:@"cn.reactnative.hotupdate"
+                               code:-1
+                           userInfo:@{ NSLocalizedDescriptionKey: NSLocalizedString(errorMessage, nil) }];
+}
+
++ (NSString *)donwloadDir
+{
+    NSString *directory = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
+    NSString *downloadDir = [directory stringByAppendingPathComponent:@"reactnativecnhotupdate"];
+    
+    return downloadDir;
+}
+
++ (NSURL *)binaryBundleURL
+{
+    NSURL *url = [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
+    return url;
+}
+
++ (NSString *)binarySourceDir
+{
+    return [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:SOURCE_DIR_NAME];
+}
 @end
