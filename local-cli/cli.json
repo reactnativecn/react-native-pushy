@@ -70,6 +70,15 @@
           "hasValue": true
         }
       }
+    },
+    "diffWithIpa": {
+      "description": "Create diff patch from a iOS package(.ipa)",
+      "options": {
+        "output": {
+          "default": "build/output/diff-${time}.ipa-patch",
+          "hasValue": true
+        }
+      }
     }
   },
   "globalOptions":{
