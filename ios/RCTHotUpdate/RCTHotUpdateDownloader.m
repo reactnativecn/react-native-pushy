@@ -32,6 +32,10 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
     [downloader download:downloadPath];
 }
 
+- (void)dealloc
+{
+}
+
 - (void)download:(NSString *)path
 {
     NSURL *url = [NSURL URLWithString:path];
