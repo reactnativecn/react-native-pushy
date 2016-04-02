@@ -4,6 +4,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
+import ApkReader from 'node-apk-parser';
+import ipaMetadata from 'ipa-metadata';
 
 var read = require('read');
 
@@ -40,4 +42,18 @@ export function getRNVersion() {
     major: match[1] | 0,
     minor: match[2] | 0,
   };
+}
+
+export function getApkVersion(fn) {
+  const reader = ApkReader.readFile(fn);
+  const manifest = reader.readManifestSync();
+  return Promise.resolve(manifest.versionName);
+}
+
+export function getIPAVersion(fn) {
+  return new Promise((resolve, reject) => {
+    ipaMetadata(fn, (err, data) => {
+      err ? reject(err) : resolve(data);
+    });
+  });
 }
