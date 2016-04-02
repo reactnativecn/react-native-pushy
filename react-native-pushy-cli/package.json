@@ -25,6 +25,9 @@
   "bugs": {
     "url": "https://github.com/reactnativecn/react-native-pushy/issues"
   },
+  "dependencies": {
+    "fs-promise": "^0.4.1"
+  },
   "homepage": "https://github.com/reactnativecn/react-native-pushy/tree/master/react-native-pushy-cli",
   "devDependencies": {
     "babel-cli": "^6.5.1",
