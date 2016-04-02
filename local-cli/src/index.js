@@ -3,8 +3,6 @@
  */
 
 const {loadSession} = require('./api');
-const userCommands = require('./user').commands;
-import {commands as bundleCommands} from './bundle';
 
 function printUsage({args}) {
   // const commandName = args[0];
@@ -16,8 +14,10 @@ function printUsage({args}) {
 }
 
 const commands = {
-  ...userCommands,
-  ...bundleCommands,
+  ...require('./user').commands,
+  ...require('./bundle').commands,
+  ...require('./app').commands,
+  ...require('./package').commands,
   help: printUsage,
 };
 
@@ -27,6 +27,11 @@ exports.run = function () {
   loadSession()
     .then(()=>commands[argv.command](argv))
     .catch(err=>{
+      if (err.status === 401) {
+        console.log('Not loggined.\nRun `pushy login` at your project directory to login.');
+        return;
+      }
+      console.log(err.message);
       setTimeout(()=>{
         throw err;
       });

@@ -2,25 +2,42 @@
   "useCommand": true,
   "defaultCommand": "help",
   "commands": {
-    "login":{
-      "options": {
-        "username": {
+    "help": {
+    },
 
+    "login":{
+    },
+    "logout": {
+    },
+    "me": {
+    },
+
+    "createApp": {
+      "options": {
+        "name": {
+          "hasValue": true
+        },
+        "platform": {
+          "hasValue": true
         }
       }
     },
-    "logout": {
+    "apps": {
+    },
+    "deleteApp": {
+    },
+    "selectApp": {
+      "options": {
+        "platform": {
+          "hasValue": true
+        }
+      }
+    },
+
+    "uploadIpa": {
 
     },
-    "me": {
 
-    },
-    "help": {
-
-    },
-    "use": {
-      "description": "Select app created on web and create token for future release."
-    },
     "build": {
       "description": "Bundle javascript and copy assets."
     },

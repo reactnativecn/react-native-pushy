@@ -34,7 +34,9 @@
     "mkdir-recursive": "^0.2.1",
     "node-apk-parser": "^0.2.3",
     "node-bsdiff": "^0.1.2",
+    "progress": "^1.1.8",
     "read": "^1.0.7",
+    "request": "^2.69.0",
     "yauzl": "^2.4.1",
     "yazl": "^2.3.0"
   },

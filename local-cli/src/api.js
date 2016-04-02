@@ -5,6 +5,9 @@
 const fetch = require('isomorphic-fetch');
 let host = process.env.PUSHY_REGISTRY || 'http://pushy.reactnative.cn';
 const fs = require('fs-promise');
+import * as fsOrigin from 'fs';
+import request from 'request';
+import ProgressBar from 'progress';
 
 let session = undefined;
 let savedSession = undefined;
@@ -45,7 +48,7 @@ exports.closeSession = async function(){
     savedSession = undefined;
   }
   session = undefined;
-  host = process.env.PUSHY_REGISTRY || 'http://pushy.reactnative.cn';
+  host = process.env.PUSHY_REGISTRY || 'http://update.reactnative.cn';
 }
 
 async function query(url, options) {
@@ -84,3 +87,44 @@ function queryWithBody(method) {
 exports.get = queryWithoutBody('GET');
 exports.post = queryWithBody('POST');
 exports.put = queryWithBody('PUT');
+exports.doDelete = queryWithBody('DELETE');
+
+async function uploadFile(fn) {
+  const {url, fieldName, formData} = await exports.post('/upload', {});
+  let realUrl = url;
+
+  if (!/^https?\:\/\//.test(url)) {
+    url = host + url;
+  }
+
+  const fileSize = (await fs.stat(fn)).size;
+
+  const bar = new ProgressBar('  Uploading [:bar] :percent :etas', {
+    complete: '=',
+    incomplete: ' ',
+    total: fileSize,
+  });
+
+  const info = await new Promise((resolve, reject) => {
+    formData.file = fsOrigin.createReadStream(fn);
+
+    formData.file.on('data', function(data) {
+      bar.tick(data.length);
+    })
+    request.post({
+      url,
+      formData,
+    }, (err, resp, body) => {
+      if (err) {
+        return reject(err);
+      }
+      if (resp.statusCode > 299) {
+        return reject(Object.assign(new Error(body), {status: resp.statusCode}));
+      }
+      resolve(JSON.parse(body));
+    })
+  });
+  return info;
+}
+
+exports.uploadFile = uploadFile;

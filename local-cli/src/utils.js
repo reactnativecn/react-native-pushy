@@ -53,7 +53,7 @@ export function getApkVersion(fn) {
 export function getIPAVersion(fn) {
   return new Promise((resolve, reject) => {
     ipaMetadata(fn, (err, data) => {
-      err ? reject(err) : resolve(data);
+      err ? reject(err) : resolve(data.metadata.CFBundleShortVersionString);
     });
   });
 }
