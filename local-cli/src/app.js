@@ -54,8 +54,8 @@ export async function chooseApp(platform) {
   const list = await listApp(platform);
 
   while (true) {
-    const id = await question('Platform(ios/android):');
-    const app = list.find(v=>v.id === id);
+    const id = await question('Enter appId:');
+    const app = list.find(v=>v.id === (id|0));
     if (app) {
       return app;
     }

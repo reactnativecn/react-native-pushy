@@ -7,10 +7,39 @@ const {
   post,
   uploadFile,
 } = require('./api');
+import { question } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 
 import {getIPAVersion, getApkVersion} from './utils';
+
+export async function listPackage(appId){
+  const {data} = await get(`/app/${appId}/package/list?limit=1000`);
+  for (const pkg of data) {
+    const {version} = pkg;
+    let versionInfo = '';
+    if (version) {
+      versionInfo = ` - ${version.id} ${version.hash.slice(0, 8)} ${version.name}`;
+    } else {
+      versionInfo = ' (newest)';
+    }
+    console.log(`${pkg.id}) ${pkg.name}(${pkg.status})${versionInfo}`);
+  }
+  console.log(`\nTotal ${data.length} packages.`);
+  return data;
+}
+
+export async function choosePackage(appId) {
+  const list = await listPackage(appId);
+
+  while (true) {
+    const id = await question('Enter packageId:');
+    const app = list.find(v=>v.id === (id|0));
+    if (app) {
+      return app;
+    }
+  }
+}
 
 export const commands = {
   uploadIpa: async function({args}) {
@@ -44,5 +73,10 @@ export const commands = {
       hash,
     });
     console.log('Ok.');
+  },
+  packages: async function({options}) {
+    const { platform } = options;
+    const { appId } = await getSelectedApp(platform);
+    await listPackage(appId);
   },
 };

@@ -43,6 +43,13 @@
     },
     "uploadApk": {
     },
+    "packages": {
+      "options": {
+        "platform": {
+          "hasValue": true
+        }
+      }
+    },
 
     "publish": {
       "options": {
@@ -56,6 +63,21 @@
           "hasValue": true
         },
         "metaInfo": {
+          "hasValue": true
+        }
+      }
+    },
+    "versions": {
+      "options": {
+        "platform": {
+          "hasValue": true
+        }
+      }
+    },
+
+    "update": {
+      "options": {
+        "platform": {
           "hasValue": true
         }
       }
