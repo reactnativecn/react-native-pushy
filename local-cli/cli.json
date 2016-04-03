@@ -23,6 +23,11 @@
       }
     },
     "apps": {
+      "options": {
+        "platform": {
+          "hasValue": true
+        }
+      }
     },
     "deleteApp": {
     },

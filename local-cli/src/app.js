@@ -36,6 +36,32 @@ export async function getSelectedApp(platform) {
   return updateInfo[platform];
 }
 
+export async function listApp(platform){
+  const {data} = await get('/app/list');
+  const list = platform?data.filter(v=>v.platform===platform):data;
+  for (const app of list) {
+    console.log(`${app.id}) ${app.name}(${app.platform})`);
+  }
+  if (platform) {
+    console.log(`\nTotal ${list.length} ${platform} apps`);
+  } else {
+    console.log(`\nTotal ${list.length} apps`);
+  }
+  return list;
+}
+
+export async function chooseApp(platform) {
+  const list = await listApp(platform);
+
+  while (true) {
+    const id = await question('Platform(ios/android):');
+    const app = list.find(v=>v.id === id);
+    if (app) {
+      return app;
+    }
+  }
+}
+
 export const commands = {
   createApp: async function ({options}) {
     const name = options.name || await question('App Name:');
@@ -55,22 +81,14 @@ export const commands = {
     await doDelete(`/app/${id}`);
     console.log('Ok.');
   },
-  apps: async function (_, platform){
-    const {data} = await get('/app/list');
-    const list = platform?data.filter(v=>v.platform===platform):data;
-    for (const app of list) {
-      console.log(`${app.id}) ${app.name}(${app.platform})`);
-    }
-    if (platform) {
-      console.log(`\nTotal ${list.length} ${platform} apps`);
-    } else {
-      console.log(`\nTotal ${list.length} apps`);
-    }
+  apps: async function ({options}){
+    const {platform} = options;
+    listApp(platform);
   },
   selectApp: async function({args, options}) {
     const {platform} = options;
     checkPlatform(platform);
-    const id = args[0] || ((await this.apps(null, platform)), (await question('Choose App used for ${platform}:')));
+    const id = args[0] || (await chooseApp()).id;
 
     let updateInfo = {};
     if (await fs.exists('update.json')) {
