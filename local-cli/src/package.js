@@ -27,5 +27,22 @@ export const commands = {
       name,
       hash,
     });
-  }
+    console.log('Ok.');
+  },
+  uploadApk: async function({args}) {
+    const fn = args[0];
+    if (!fn) {
+      throw new Error('Usage: pushy uploadApk <ipaFile>');
+    }
+    const name = await getApkVersion(fn);
+    const {appId} = await getSelectedApp('android');
+
+    const {hash} = await uploadFile(fn);
+
+    await post(`/app/${appId}/package/create`, {
+      name,
+      hash,
+    });
+    console.log('Ok.');
+  },
 };

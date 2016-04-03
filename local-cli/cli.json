@@ -35,7 +35,25 @@
     },
 
     "uploadIpa": {
+    },
+    "uploadApk": {
+    },
 
+    "publish": {
+      "options": {
+        "platform": {
+          "hasValue": true
+        },
+        "name": {
+          "hasValue": true
+        },
+        "description": {
+          "hasValue": true
+        },
+        "metaInfo": {
+          "hasValue": true
+        }
+      }
     },
 
     "build": {

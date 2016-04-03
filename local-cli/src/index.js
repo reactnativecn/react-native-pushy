@@ -18,6 +18,7 @@ const commands = {
   ...require('./bundle').commands,
   ...require('./app').commands,
   ...require('./package').commands,
+  ...require('./versions').commands,
   help: printUsage,
 };
 
