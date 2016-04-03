@@ -3,7 +3,7 @@
  */
 
 const fetch = require('isomorphic-fetch');
-let host = process.env.PUSHY_REGISTRY || 'http://pushy.reactnative.cn';
+let host = process.env.PUSHY_REGISTRY || 'http://update.reactnative.cn';
 const fs = require('fs-promise');
 import * as fsOrigin from 'fs';
 import request from 'request';
@@ -13,9 +13,9 @@ let session = undefined;
 let savedSession = undefined;
 
 exports.loadSession = async function() {
-  if (await fs.exists('.pushy')) {
+  if (await fs.exists('.update')) {
     try {
-      exports.replaceSession(JSON.parse(await fs.readFile('.pushy', 'utf8')));
+      exports.replaceSession(JSON.parse(await fs.readFile('.update', 'utf8')));
       savedSession = session;
     } catch (e) {
       console.error('Failed to parse file `.pushy`. Try to remove it manually.');
@@ -37,14 +37,14 @@ exports.saveSession = async function(){
   if (session !== savedSession) {
     const current = session;
     const data = JSON.stringify(current, null, 4);
-    await fs.writeFile('.pushy', data, 'utf8');
+    await fs.writeFile('.update', data, 'utf8');
     savedSession = current;
   }
 }
 
 exports.closeSession = async function(){
-  if (await fs.exists('.pushy')) {
-    await fs.unlink('.pushy');
+  if (await fs.exists('.update')) {
+    await fs.unlink('.update');
     savedSession = undefined;
   }
   session = undefined;

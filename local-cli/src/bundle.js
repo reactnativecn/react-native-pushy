@@ -386,10 +386,7 @@ export const commands = {
       process.exit(1);
     }
 
-    await diffWithPackage(origin, next, realOutput, 'assets/index.android.bundle', v=>{
-      const m = /^res\/(.+)$/.exec(v);
-      return m && m[1];
-    });
+    await diffWithPackage(origin, next, realOutput, 'assets/index.android.bundle');
   },
 
   async diffWithIpa({args, options}) {
