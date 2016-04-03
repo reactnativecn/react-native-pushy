@@ -5,6 +5,7 @@
 const {
   get,
   post,
+  put,
   uploadFile,
 } = require('./api');
 import { question } from './utils';
@@ -100,7 +101,9 @@ export const commands = {
     const { appId } = await getSelectedApp(platform);
     const version = await chooseVersion(appId);
     const pkg = await choosePackage(appId);
-    console.log(version);
-    console.log(pkg);
+    await put(`/app/${appId}/package/${pkg.id}`, {
+      versionId: version.id,
+    });
+    console.log('Ok.');
   }
 };
