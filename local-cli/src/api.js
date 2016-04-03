@@ -112,7 +112,7 @@ async function uploadFile(fn) {
       bar.tick(data.length);
     })
     request.post({
-      url,
+      realUrl,
       formData,
     }, (err, resp, body) => {
       if (err) {
