@@ -375,7 +375,7 @@ export const commands = {
     await diffWithPPK(origin, next, realOutput, 'index.bundlejs');
   },
 
-  async diffWithApk({args, options}) {
+  async diffFromApk({args, options}) {
     const [origin, next] = args;
     const {output} = options;
 
@@ -389,7 +389,7 @@ export const commands = {
     await diffWithPackage(origin, next, realOutput, 'assets/index.android.bundle');
   },
 
-  async diffWithIpa({args, options}) {
+  async diffFromIpa({args, options}) {
     const [origin, next] = args;
     const {output} = options;
 

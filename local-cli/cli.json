@@ -124,7 +124,7 @@
         }
       }
     },
-    "diffWithApk": {
+    "diffFromApk": {
       "description": "Create diff patch from a Android package(.apk)",
       "options": {
         "output": {
@@ -133,7 +133,7 @@
         }
       }
     },
-    "diffWithIpa": {
+    "diffFromIpa": {
       "description": "Create diff patch from a iOS package(.ipa)",
       "options": {
         "output": {
