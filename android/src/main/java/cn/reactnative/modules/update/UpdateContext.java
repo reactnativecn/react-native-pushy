@@ -133,7 +133,7 @@ public class UpdateContext {
     }
 
     public String getBundleUrl() {
-        return getBundleUrl("assets://index.android.bundle");
+        return this.getBundleUrl((String)null);
     }
 
     public String getBundleUrl(String defaultAssetsUrl) {

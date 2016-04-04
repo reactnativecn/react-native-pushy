@@ -123,4 +123,14 @@ public class UpdateModule extends ReactContextBaseJavaModule{
             }
         });
     }
+
+    @ReactMethod
+    public void clearFirstTimeMark() {
+        UiThreadUtil.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateContext.clearFirstTimeMark();
+            }
+        });
+    }
 }

@@ -45,10 +45,10 @@ async function pack(dir, output){
         const fullPath = path.join(root, name);
         const stat = fs.statSync(fullPath);
         if (stat.isFile()) {
-          console.log('adding: ' + rel+name);
+          //console.log('adding: ' + rel+name);
           zipfile.addFile(fullPath, rel+name);
         } else if (stat.isDirectory()) {
-          console.log('adding: ' + rel+name+'/');
+          //console.log('adding: ' + rel+name+'/');
           addDirectory(fullPath, rel+name+'/');
         }
       }
@@ -129,7 +129,7 @@ async function diffWithPPK(origin, next, output) {
   const addedEntry = {};
 
   function addEntry(fn) {
-    console.log(fn);
+    //console.log(fn);
     if (addedEntry[fn]) {
       return;
     }
@@ -151,11 +151,11 @@ async function diffWithPPK(origin, next, output) {
         addEntry(entry.fileName);
       }
     } else if (entry.fileName === 'index.bundlejs') {
-      console.log('Found bundle');
+      //console.log('Found bundle');
       return readEntire(entry, nextZipfile).then( newSource => {
-        console.log('Begin diff');
+        //console.log('Begin diff');
         zipfile.addBuffer(diff(originSource, newSource), 'index.bundlejs.patch');
-        console.log('End diff');
+        //console.log('End diff');
       });
     } else {
       // If same file.
@@ -185,7 +185,7 @@ async function diffWithPPK(origin, next, output) {
           }
           zipfile.addReadStream(readStream, entry.fileName);
           readStream.on('end', () => {
-            console.log('add finished');
+            //console.log('add finished');
             resolve();
           });
         });
@@ -201,7 +201,7 @@ async function diffWithPPK(origin, next, output) {
     }
   }
 
-  console.log({copies, deletes});
+  //console.log({copies, deletes});
   zipfile.addBuffer(new Buffer(JSON.stringify({copies, deletes})), '__diff.json');
   zipfile.end();
   await writePromise;
@@ -215,11 +215,12 @@ async function diffWithPackage(origin, next, output, originBundleName, transform
 
   await enumZipEntries(origin, (entry, zipFile) => {
     if (!/\/$/.test(entry.fileName)) {
-      const fn = transformPackagePath(entry.filename);
+      const fn = transformPackagePath(entry.fileame);
       if (!fn) {
         return;
       }
 
+      //console.log(fn);
       // isFile
       originEntries[fn] = entry.crc32;
       originMap[entry.crc32] = fn;
@@ -250,11 +251,11 @@ async function diffWithPackage(origin, next, output, originBundleName, transform
       // Directory
       zipfile.addEmptyDirectory(entry.fileName);
     } else if (entry.fileName === 'index.bundlejs') {
-      console.log('Found bundle');
+      //console.log('Found bundle');
       return readEntire(entry, nextZipfile).then( newSource => {
-        console.log('Begin diff');
+        //console.log('Begin diff');
         zipfile.addBuffer(diff(originSource, newSource), 'index.bundlejs.patch');
-        console.log('End diff');
+        //console.log('End diff');
       });
     } else {
       // If same file.
@@ -275,7 +276,7 @@ async function diffWithPackage(origin, next, output, originBundleName, transform
           }
           zipfile.addReadStream(readStream, entry.fileName);
           readStream.on('end', () => {
-            console.log('add finished');
+            //console.log('add finished');
             resolve();
           });
         });
@@ -387,6 +388,7 @@ export const commands = {
     }
 
     await diffWithPackage(origin, next, realOutput, 'assets/index.android.bundle');
+    console.log(`${realOutput} generated.`);
   },
 
   async diffFromIpa({args, options}) {
@@ -400,9 +402,11 @@ export const commands = {
       process.exit(1);
     }
 
-    await diffWithPackage(origin, next, realOutput, 'index.ios.bundle', v=>{
+    await diffWithPackage(origin, next, realOutput, 'main.jsbundle', v=>{
       const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
       return m && m[1];
     });
+
+    console.log(`${realOutput} generated.`);
   },
 };
