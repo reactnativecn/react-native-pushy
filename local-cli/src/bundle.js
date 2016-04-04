@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import {ZipFile} from 'yazl';
 import {open as openZipFile} from 'yauzl';
 import {diff} from 'node-bsdiff';
+import { question } from './utils';
 
 import crypto from 'crypto';
 
@@ -28,8 +29,7 @@ function mkdir(dir){
 }
 
 async function pack(dir, output){
-  const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
-  await mkdir(path.dirname(realOutput));
+  await mkdir(path.dirname(output));
   await new Promise((resolve, reject) => {
     var zipfile = new ZipFile();
 
@@ -57,13 +57,13 @@ async function pack(dir, output){
     addDirectory(dir, '');
 
     zipfile.outputStream.on('error', err => reject(err));
-    zipfile.outputStream.pipe(fs.createWriteStream(realOutput))
+    zipfile.outputStream.pipe(fs.createWriteStream(output))
       .on("close", function() {
         resolve();
       });
     zipfile.end();
   });
-  console.log('Bundled saved to: ' + realOutput);
+  console.log('Bundled saved to: ' + output);
 }
 
 function readEntire(entry, zipFile) {
@@ -94,6 +94,8 @@ function basename(fn) {
 }
 
 async function diffWithPPK(origin, next, output) {
+  await mkdir(path.dirname(output));
+
   const originEntries = {};
   const originMap = {};
 
@@ -208,6 +210,8 @@ async function diffWithPPK(origin, next, output) {
 }
 
 async function diffWithPackage(origin, next, output, originBundleName, transformPackagePath = v=>v) {
+  await mkdir(path.dirname(output));
+
   const originEntries = {};
   const originMap = {};
 
@@ -320,6 +324,7 @@ export const commands = {
       dev,
       verbose
     } = translateOptions(options);
+    const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
 
     if (!platform) {
       throw new Error('Platform must be specified.');
@@ -359,7 +364,14 @@ export const commands = {
 
     console.log('Packing');
 
-    await pack(intermediaDir, output);
+    await pack(intermediaDir, realOutput);
+
+    const v = await question('Would you like to publish it?(Y/N)');
+    if (v.toLowerCase() === 'y') {
+      await this.publish({args: [realOutput], options: {
+        platform,
+      }})
+    }
   },
 
   async diff({args, options}) {
@@ -374,6 +386,7 @@ export const commands = {
     }
 
     await diffWithPPK(origin, next, realOutput, 'index.bundlejs');
+    console.log(`${realOutput} generated.`);
   },
 
   async diffFromApk({args, options}) {

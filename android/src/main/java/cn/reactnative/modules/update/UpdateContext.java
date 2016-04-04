@@ -124,6 +124,14 @@ public class UpdateContext {
         this.clearUp();
     }
 
+    public void clearRollbackMark() {
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putBoolean("rolledBack", false);
+        editor.apply();
+
+        this.clearUp();
+    }
+
     public static String getBundleUrl(Context context) {
         return new UpdateContext(context.getApplicationContext()).getBundleUrl();
     }
@@ -133,7 +141,7 @@ public class UpdateContext {
     }
 
     public String getBundleUrl() {
-        return this.getBundleUrl((String)null);
+        return this.getBundleUrl((String) null);
     }
 
     public String getBundleUrl(String defaultAssetsUrl) {
@@ -150,7 +158,7 @@ public class UpdateContext {
             editor.putBoolean("shouldRollback", true);
             editor.apply();
         }
-        return new File(rootDir, currentVersion+"/index.bundlejs").toURI().toString();
+        return (new File(rootDir, currentVersion+"/index.bundlejs").toString());
     }
 
     private void rollBack() {

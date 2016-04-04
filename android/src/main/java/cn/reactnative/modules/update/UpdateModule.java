@@ -34,8 +34,12 @@ public class UpdateModule extends ReactContextBaseJavaModule{
         constants.put("downloadRootDir", updateContext.getRootDir());
         constants.put("packageVersion", updateContext.getPackageVersion());
         constants.put("currentVersion", updateContext.getCurrentVersion());
-        constants.put("firstTime", updateContext.isFirstTime());
-        constants.put("rolledBack", updateContext.isRolledBack());
+        constants.put("isFirstTime", updateContext.isFirstTime());
+        boolean isRolledBack = updateContext.isRolledBack();
+        constants.put("isRolledBack", isRolledBack);
+        if (isRolledBack) {
+            updateContext.clearRollbackMark();
+        }
         return constants;
     }
 

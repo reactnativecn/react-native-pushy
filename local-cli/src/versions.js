@@ -57,7 +57,6 @@ async function chooseVersion(appId) {
       case 'B': offset = 0; break;
       default:
       {
-        console.log(data.find(v=>v.id === (cmd | 0)));
         const v = data.find(v=>v.id === (cmd | 0));
         if (v) {
           return v;
@@ -79,16 +78,16 @@ export const commands = {
     const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/version/create`, {
-      name,
+      name: name || await question('Enter version name:') || '(未命名)',
       hash,
-      description,
-      metaInfo,
+      description: description || await question('Enter description:'),
+      metaInfo: metaInfo || await question('Enter meta info:'),
     });
     console.log('Ok.');
 
     const v = await question('Would you like to bind packages to this version?(Y/N)');
     if (v.toLowerCase() === 'y') {
-      await this.update({args:[], options:{packageId: id, }});
+      await this.update({args:[], options:{packageId: id, platform}});
     }
   },
   versions: async function({options}) {
