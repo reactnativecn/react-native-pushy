@@ -197,7 +197,7 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
         return;
     }
     
-    NSString *zipFilePath = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@, %@",hashName, [self zipExtension:type]]];
+    NSString *zipFilePath = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@",hashName, [self zipExtension:type]]];
     NSString *unzipDir = [dir stringByAppendingPathComponent:hashName];
 
     RCTLogInfo(@"RNUpdate -- download file %@", updateUrl);
@@ -214,7 +214,7 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
         else {
             RCTLogInfo(@"RNUpdate -- unzip file %@", zipFilePath);
             NSString *unzipFilePath = [dir stringByAppendingPathComponent:hashName];
-            [_fileManager unzipFileAtPath:unzipDir toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
+            [_fileManager unzipFileAtPath:zipFilePath toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
                 [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_UNZIP
                                                              body:@{
                                                                     PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLong:entryNumber],
