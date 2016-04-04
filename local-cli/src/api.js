@@ -3,7 +3,7 @@
  */
 
 const fetch = require('isomorphic-fetch');
-let host = process.env.PUSHY_REGISTRY || 'http://update.reactnative.cn';
+let host = process.env.PUSHY_REGISTRY || 'http://update.reactnative.cn/api';
 const fs = require('fs-promise');
 import * as fsOrigin from 'fs';
 import request from 'request';
@@ -18,7 +18,7 @@ exports.loadSession = async function() {
       exports.replaceSession(JSON.parse(await fs.readFile('.update', 'utf8')));
       savedSession = session;
     } catch (e) {
-      console.error('Failed to parse file `.pushy`. Try to remove it manually.');
+      console.error('Failed to parse file `.update`. Try to remove it manually.');
       throw e;
     }
   }
@@ -94,7 +94,7 @@ async function uploadFile(fn) {
   let realUrl = url;
 
   if (!/^https?\:\/\//.test(url)) {
-    url = host + url;
+    realUrl = host + url;
   }
 
   const fileSize = (await fs.stat(fn)).size;
@@ -111,8 +111,7 @@ async function uploadFile(fn) {
     formData.file.on('data', function(data) {
       bar.tick(data.length);
     })
-    request.post({
-      realUrl,
+    request.post(realUrl, {
       formData,
     }, (err, resp, body) => {
       if (err) {

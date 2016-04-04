@@ -1,8 +1,12 @@
 package cn.reactnative.modules.update;
 
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 
 import java.io.File;
+import java.net.URL;
 
 /**
  * Created by tdzl2003 on 3/31/16.
@@ -13,13 +17,6 @@ public class UpdateContext {
 
     public static boolean DEBUG = false;
 
-
-    private static UpdateContext currentInstance = null;
-
-    static UpdateContext instance() {
-        return currentInstance;
-    }
-
     public UpdateContext(Context context) {
         this.context = context;
 
@@ -28,10 +25,24 @@ public class UpdateContext {
         if (!rootDir.exists()) {
             rootDir.mkdir();
         }
+
+        this.sp = context.getSharedPreferences("update", Context.MODE_PRIVATE);
     }
 
     public String getRootDir() {
         return rootDir.toString();
+    }
+
+    public String getPackageVersion() {
+        PackageManager pm = context.getPackageManager();
+        PackageInfo pi = null;
+        try {
+            pi = pm.getPackageInfo(context.getPackageName(), 0);
+            return pi.versionName;
+        } catch( PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     public interface DownloadFileListener {
@@ -71,6 +82,104 @@ public class UpdateContext {
         params.zipFilePath = new File(rootDir, originHashName + "-" + hashName + ".ppk.patch");
         params.unzipDirectory = new File(rootDir, hashName);
         params.originDirectory = new File(rootDir, originHashName);
+        new DownloadTask(context).execute(params);
+    }
+
+    private SharedPreferences sp;
+
+    public void switchVersion(String hashName) {
+        if (!new File(rootDir, hashName).exists()) {
+            throw new Error("Hash name not found, must download first.");
+        }
+        String lastVersion = getCurrentVersion();
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putString("currentVersion", hashName);
+        if (lastVersion != null) {
+            editor.putString("lastVersion", hashName);
+        }
+        editor.putBoolean("firstTime", true);
+        editor.putBoolean("shouldRollback", false);
+        editor.putBoolean("rolledBack", false);
+        editor.apply();
+    }
+
+    public String getCurrentVersion() {
+        return sp.getString("currentVersion", null);
+    }
+
+    public boolean isFirstTime() {
+        return sp.getBoolean("firstTime", false);
+    }
+
+    public boolean isRolledBack() {
+        return sp.getBoolean("rolledBack", false);
+    }
+
+    public void clearFirstTimeMark() {
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putBoolean("firstTime", false);
+        editor.putBoolean("shouldRollback", false);
+        editor.apply();
+
+        this.clearUp();
+    }
+
+    public static String getBundleUrl(Context context) {
+        return new UpdateContext(context.getApplicationContext()).getBundleUrl();
+    }
+
+    public static String getBundleUrl(Context context, String defaultAssetsUrl) {
+        return new UpdateContext(context.getApplicationContext()).getBundleUrl(defaultAssetsUrl);
+    }
+
+    public String getBundleUrl() {
+        return getBundleUrl("assets://index.android.bundle");
+    }
+
+    public String getBundleUrl(String defaultAssetsUrl) {
+        // Test should rollback.
+        if (sp.getBoolean("shouldRollback", false)) {
+            this.rollBack();
+        }
+        String currentVersion = getCurrentVersion();
+        if (currentVersion == null) {
+            return defaultAssetsUrl;
+        }
+        if (sp.getBoolean("firstTime", false)) {
+            SharedPreferences.Editor editor = sp.edit();
+            editor.putBoolean("shouldRollback", true);
+            editor.apply();
+        }
+        return new File(rootDir, currentVersion+"/index.bundlejs").toURI().toString();
+    }
+
+    private void rollBack() {
+        String lastVersion = sp.getString("lastVersion", null);
+        if (lastVersion == null) {
+            throw new Error("This should never happen");
+        }
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putString("currentVersion", lastVersion);
+        editor.putBoolean("shouldRollback", false);
+        editor.putBoolean("firstTime", false);
+        editor.putBoolean("rolledBack", true);
+        editor.apply();
+    }
+
+    private void clearUp() {
+        DownloadTaskParams params = new DownloadTaskParams();
+        params.type = DownloadTaskParams.TASK_TYPE_CLEARUP;
+        params.hash = sp.getString("currentVersion", null);
+        params.originHash = sp.getString("lastVersion", null);;
+        params.listener = new DownloadFileListener() {
+            @Override
+            public void onDownloadCompleted() {
+            }
+
+            @Override
+            public void onDownloadFailed(Throwable error) {
+            }
+        };
         new DownloadTask(context).execute(params);
     }
 }

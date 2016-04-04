@@ -61,7 +61,7 @@ export const commands = {
   uploadApk: async function({args}) {
     const fn = args[0];
     if (!fn) {
-      throw new Error('Usage: pushy uploadApk <ipaFile>');
+      throw new Error('Usage: pushy uploadApk <apkFile>');
     }
     const name = await getApkVersion(fn);
     const {appId} = await getSelectedApp('android');

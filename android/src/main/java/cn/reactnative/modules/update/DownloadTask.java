@@ -9,6 +9,7 @@ import com.squareup.okhttp.Request;
 import com.squareup.okhttp.Response;
 import com.squareup.okhttp.ResponseBody;
 
+import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
@@ -212,45 +213,37 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         copyFilesWithBlacklist("", from, to, blackList);
     }
 
-    private void doDownload(DownloadTaskParams param) {
-        try {
-            downloadFile(param.url, param.zipFilePath);
+    private void doDownload(DownloadTaskParams param) throws IOException {
+        downloadFile(param.url, param.zipFilePath);
 
-            ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
-            ZipEntry ze;
-            String filename;
+        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
+        ZipEntry ze;
+        String filename;
 
-            removeDirectory(param.unzipDirectory);
-            param.unzipDirectory.mkdirs();
+        removeDirectory(param.unzipDirectory);
+        param.unzipDirectory.mkdirs();
 
-            while ((ze = zis.getNextEntry()) != null)
-            {
-                String fn = ze.getName();
-                File fmd = new File(param.unzipDirectory, fn);
-
-                if (UpdateContext.DEBUG) {
-                    Log.d("RNUpdate", "Unzipping " + fn);
-                }
-
-                if (ze.isDirectory()) {
-                    fmd.mkdirs();
-                    continue;
-                }
-
-                unzipToFile(zis, fmd);
-            }
-
-            zis.close();
+        while ((ze = zis.getNextEntry()) != null)
+        {
+            String fn = ze.getName();
+            File fmd = new File(param.unzipDirectory, fn);
 
             if (UpdateContext.DEBUG) {
-                Log.d("RNUpdate", "Unzip finished");
+                Log.d("RNUpdate", "Unzipping " + fn);
             }
 
-        } catch (Throwable e) {
-            if (UpdateContext.DEBUG) {
-                e.printStackTrace();
+            if (ze.isDirectory()) {
+                fmd.mkdirs();
+                continue;
             }
-            param.listener.onDownloadFailed(e);
+
+            unzipToFile(zis, fmd);
+        }
+
+        zis.close();
+
+        if (UpdateContext.DEBUG) {
+            Log.d("RNUpdate", "Unzip finished");
         }
     }
 
@@ -268,162 +261,161 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         }
     }
 
-    private void doPatchFromApk(DownloadTaskParams param) {
-        try {
-            downloadFile(param.url, param.zipFilePath);
+    private void doPatchFromApk(DownloadTaskParams param) throws IOException, JSONException {
+        downloadFile(param.url, param.zipFilePath);
 
-            ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
-            ZipEntry ze;
-            int count;
-            String filename;
+        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
+        ZipEntry ze;
+        int count;
+        String filename;
 
-            removeDirectory(param.unzipDirectory);
-            param.unzipDirectory.mkdirs();
+        removeDirectory(param.unzipDirectory);
+        param.unzipDirectory.mkdirs();
 
-            while ((ze = zis.getNextEntry()) != null)
-            {
-                String fn = ze.getName();
+        while ((ze = zis.getNextEntry()) != null)
+        {
+            String fn = ze.getName();
 
-                if (fn.equals("__diff.json")) {
-                    // copy files from assets
-                    byte[] bytes = readBytes(zis);
-                    String json = new String(bytes, "UTF-8");
-                    JSONObject obj = (JSONObject)new JSONTokener(json).nextValue();
+            if (fn.equals("__diff.json")) {
+                // copy files from assets
+                byte[] bytes = readBytes(zis);
+                String json = new String(bytes, "UTF-8");
+                JSONObject obj = (JSONObject)new JSONTokener(json).nextValue();
 
-                    JSONObject copies = obj.getJSONObject("copies");
-                    Iterator<?> keys = copies.keys();
-                    while( keys.hasNext() ) {
-                        String to = (String)keys.next();
-                        String from = copies.getString(to);
-                        if (from.isEmpty()) {
-                            from = to;
-                        }
-                        copyFromResource(from, new File(param.unzipDirectory, to));
+                JSONObject copies = obj.getJSONObject("copies");
+                Iterator<?> keys = copies.keys();
+                while( keys.hasNext() ) {
+                    String to = (String)keys.next();
+                    String from = copies.getString(to);
+                    if (from.isEmpty()) {
+                        from = to;
                     }
-                    continue;
+                    copyFromResource(from, new File(param.unzipDirectory, to));
                 }
-                if (fn.equals("index.bundlejs.patch")) {
-                    // do bsdiff patch
-                    byte[] patched = bsdiffPatch(readOriginBundle(), readBytes(zis));
-
-                    FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
-                    fout.write(patched);
-                    fout.close();
-                    continue;
-                }
-                File fmd = new File(param.unzipDirectory, fn);
-
-                if (UpdateContext.DEBUG) {
-                    Log.d("RNUpdate", "Unzipping " + fn);
-                }
-
-                if (ze.isDirectory()) {
-                    fmd.mkdirs();
-                    continue;
-                }
-
-                unzipToFile(zis, fmd);
+                continue;
             }
+            if (fn.equals("index.bundlejs.patch")) {
+                // do bsdiff patch
+                byte[] patched = bsdiffPatch(readOriginBundle(), readBytes(zis));
 
-            zis.close();
+                FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
+                fout.write(patched);
+                fout.close();
+                continue;
+            }
+            File fmd = new File(param.unzipDirectory, fn);
 
             if (UpdateContext.DEBUG) {
-                Log.d("RNUpdate", "Unzip finished");
+                Log.d("RNUpdate", "Unzipping " + fn);
             }
 
-        } catch (Throwable e) {
-            if (UpdateContext.DEBUG) {
-                e.printStackTrace();
+            if (ze.isDirectory()) {
+                fmd.mkdirs();
+                continue;
             }
-            param.listener.onDownloadFailed(e);
+
+            unzipToFile(zis, fmd);
         }
+
+        zis.close();
+
+        if (UpdateContext.DEBUG) {
+            Log.d("RNUpdate", "Unzip finished");
+        }
+
     }
 
-    private void doPatchFromPpk(DownloadTaskParams param) {
-        try {
-            downloadFile(param.url, param.zipFilePath);
+    private void doPatchFromPpk(DownloadTaskParams param) throws IOException, JSONException {
+        downloadFile(param.url, param.zipFilePath);
 
-            ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
-            ZipEntry ze;
-            int count;
-            String filename;
+        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
+        ZipEntry ze;
+        int count;
+        String filename;
 
-            removeDirectory(param.unzipDirectory);
-            param.unzipDirectory.mkdirs();
+        removeDirectory(param.unzipDirectory);
+        param.unzipDirectory.mkdirs();
 
-            while ((ze = zis.getNextEntry()) != null)
-            {
-                String fn = ze.getName();
+        while ((ze = zis.getNextEntry()) != null)
+        {
+            String fn = ze.getName();
 
-                if (fn.equals("__diff.json")) {
-                    // copy files from assets
-                    byte[] bytes = readBytes(zis);
-                    String json = new String(bytes, "UTF-8");
-                    JSONObject obj = (JSONObject)new JSONTokener(json).nextValue();
+            if (fn.equals("__diff.json")) {
+                // copy files from assets
+                byte[] bytes = readBytes(zis);
+                String json = new String(bytes, "UTF-8");
+                JSONObject obj = (JSONObject)new JSONTokener(json).nextValue();
 
-                    JSONObject copies = obj.getJSONObject("copies");
-                    Iterator<?> keys = copies.keys();
-                    while( keys.hasNext() ) {
-                        String to = (String)keys.next();
-                        String from = copies.getString(to);
-                        if (from.isEmpty()) {
-                            from = to;
-                        }
-                        copyFile(new File(param.originDirectory, from), new File(param.unzipDirectory, to));
+                JSONObject copies = obj.getJSONObject("copies");
+                Iterator<?> keys = copies.keys();
+                while( keys.hasNext() ) {
+                    String to = (String)keys.next();
+                    String from = copies.getString(to);
+                    if (from.isEmpty()) {
+                        from = to;
                     }
-                    JSONObject blackList = obj.getJSONObject("deletes");
-                    copyFilesWithBlacklist(param.originDirectory, param.unzipDirectory, blackList);
-                    continue;
+                    copyFile(new File(param.originDirectory, from), new File(param.unzipDirectory, to));
                 }
-                if (fn.equals("index.bundlejs.patch")) {
-                    // do bsdiff patch
-                    byte[] patched = bsdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
-
-                    FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
-                    fout.write(patched);
-                    fout.close();
-                    continue;
-                }
-                File fmd = new File(param.unzipDirectory, fn);
-
-                if (UpdateContext.DEBUG) {
-                    Log.d("RNUpdate", "Unzipping " + fn);
-                }
-
-                if (ze.isDirectory()) {
-                    fmd.mkdirs();
-                    continue;
-                }
-
-                unzipToFile(zis, fmd);
+                JSONObject blackList = obj.getJSONObject("deletes");
+                copyFilesWithBlacklist(param.originDirectory, param.unzipDirectory, blackList);
+                continue;
             }
+            if (fn.equals("index.bundlejs.patch")) {
+                // do bsdiff patch
+                byte[] patched = bsdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
 
-            zis.close();
+                FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
+                fout.write(patched);
+                fout.close();
+                continue;
+            }
+            File fmd = new File(param.unzipDirectory, fn);
 
             if (UpdateContext.DEBUG) {
-                Log.d("RNUpdate", "Unzip finished");
+                Log.d("RNUpdate", "Unzipping " + fn);
             }
 
-        } catch (Throwable e) {
-            if (UpdateContext.DEBUG) {
-                e.printStackTrace();
+            if (ze.isDirectory()) {
+                fmd.mkdirs();
+                continue;
             }
-            param.listener.onDownloadFailed(e);
+
+            unzipToFile(zis, fmd);
         }
+
+        zis.close();
+
+        if (UpdateContext.DEBUG) {
+            Log.d("RNUpdate", "Unzip finished");
+        }
+    }
+    private void doCleanUp(DownloadTaskParams param) {
+
     }
 
     @Override
     protected Void doInBackground(DownloadTaskParams... params) {
-        switch (params[0].type) {
-            case DownloadTaskParams.TASK_TYPE_FULL_DOWNLOAD:
-                doDownload(params[0]);
-                break;
-            case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
-                doPatchFromApk(params[0]);
-                break;
-            case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
-                doPatchFromPpk(params[0]);
-                break;
+        try {
+            switch (params[0].type) {
+                case DownloadTaskParams.TASK_TYPE_FULL_DOWNLOAD:
+                    doDownload(params[0]);
+                    break;
+                case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
+                    doPatchFromApk(params[0]);
+                    break;
+                case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
+                    doPatchFromPpk(params[0]);
+                    break;
+                case DownloadTaskParams.TASK_TYPE_CLEARUP:
+                    doCleanUp(params[0]);
+                    break;
+            }
+            params[0].listener.onDownloadCompleted();
+        } catch (Throwable e) {
+            if (UpdateContext.DEBUG) {
+                e.printStackTrace();
+            }
+            params[0].listener.onDownloadFailed(e);
         }
         return null;
     }
