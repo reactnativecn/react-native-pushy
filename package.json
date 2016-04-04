@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "react-native hot update",
   "main": "index.js",
   "scripts": {
