@@ -132,20 +132,6 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     return self;
 }
 
-RCT_EXPORT_METHOD(getVersionInfo:(RCTResponseSenderBlock)callback)
-{
-    NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
-    
-    NSString *appVersion = [infoDictionary objectForKey:@"CFBundleShortVersionString"];
-    NSString *buildVersion = [infoDictionary objectForKey:@"CFBundleVersion"];
-    
-    NSDictionary *versionInfo = @{AppVersionKey:appVersion, BuildVersionKey:buildVersion};
-    if (callback) {
-        callback(@[versionInfo]);
-    }
-}
-
-
 RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
