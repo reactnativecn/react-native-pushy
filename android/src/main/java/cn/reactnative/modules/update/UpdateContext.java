@@ -174,16 +174,20 @@ public class UpdateContext {
                 currentVersion = this.rollBack();
             }
         }
+        if (currentVersion == null) {
+            return defaultAssetsUrl;
+        }
         return (new File(rootDir, currentVersion+"/index.bundlejs").toString());
     }
 
     private String rollBack() {
         String lastVersion = sp.getString("lastVersion", null);
-        if (lastVersion == null) {
-            throw new Error("This should never happen");
-        }
         SharedPreferences.Editor editor = sp.edit();
-        editor.putString("currentVersion", lastVersion);
+        if (lastVersion == null) {
+            editor.remove("currentVersion");
+        } else {
+            editor.putString("currentVersion", lastVersion);
+        }
         editor.putBoolean("firstTimeOk", true);
         editor.putBoolean("firstTime", false);
         editor.putBoolean("rolledBack", true);
