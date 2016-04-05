@@ -58,6 +58,11 @@
       completionHandler:(void (^)(NSString *path, BOOL succeeded, NSError *error))completionHandler
 {
     dispatch_async(_opQueue, ^{
+        
+        if ([[NSFileManager defaultManager] fileExistsAtPath:destination]) {
+            [[NSFileManager defaultManager] removeItemAtPath:destination error:nil];
+        }
+        
         [SSZipArchive unzipFileAtPath:path toDestination:destination progressHandler:^(NSString *entry, unz_file_info zipInfo, long entryNumber, long total) {
             progressHandler(entry, entryNumber, total);
         } completionHandler:^(NSString *path, BOOL succeeded, NSError *error) {

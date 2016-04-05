@@ -106,12 +106,13 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSMutableDictionary *packageInfo = [[defaults dictionaryForKey:rnHotUpdatePackageInfoKey] mutableCopy];
     
-    NSDictionary *ret = @{ @"downloadRootDir": [RCTHotUpdate downloadDir],
-                           @"packageVersion": [infoDictionary objectForKey:@"CFBundleShortVersionString"],
-                           @"currentVersion": [packageInfo objectForKey:paramCurrentVersion],
-                           @"isFirstTime": [packageInfo objectForKey:paramIsFirstTime],
-                           @"isRolledBack": [packageInfo objectForKey:paramIsRolledBack]
-                           };
+    NSMutableDictionary *ret = [@{} mutableCopy];
+    ret[@"downloadRootDir"] = [RCTHotUpdate downloadDir];
+    ret[@"packageVersion"] = [infoDictionary objectForKey:@"CFBundleShortVersionString"];
+    ret[@"currentVersion"] = [packageInfo objectForKey:paramCurrentVersion];
+    ret[@"isFirstTime"] = [packageInfo objectForKey:paramIsFirstTime];
+    ret[@"isRolledBack"] = [packageInfo objectForKey:paramIsRolledBack];
+    
     if (packageInfo) {
         // clear isFirstTime and isRolledBack
         packageInfo[paramIsFirstTime] = @(NO);
@@ -130,20 +131,6 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     }
     return self;
 }
-
-RCT_EXPORT_METHOD(getVersionInfo:(RCTResponseSenderBlock)callback)
-{
-    NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
-    
-    NSString *appVersion = [infoDictionary objectForKey:@"CFBundleShortVersionString"];
-    NSString *buildVersion = [infoDictionary objectForKey:@"CFBundleVersion"];
-    
-    NSDictionary *versionInfo = @{AppVersionKey:appVersion, BuildVersionKey:buildVersion};
-    if (callback) {
-        callback(@[versionInfo]);
-    }
-}
-
 
 RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
