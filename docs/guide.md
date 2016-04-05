@@ -24,6 +24,24 @@ $ rnpm link react-native-update
 
 // 文档建设中 
 
+在工程target的Build Phases->Link Binary with Libraries中加入libz.tbd、libbz2.1.0.tbd
+
+
+在你的AppDelegate.m文件中增加如下代码：
+
+```objective-c
+// ... 其它代码
+
+#import "RCTHotUpdate.h"
+
+- (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+	
+	jsCodeLocation = [RCTHotUpdate bundleURL];
+    // ... 其它代码
+}
+```
+
 ## 配置Bundle URL(Android)
 
 在你的ReactActivity中增加如下代码：
