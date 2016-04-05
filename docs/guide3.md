@@ -37,7 +37,7 @@ $ pushy uploadApk android/app/build/outputs/apk/app-release.apk
 
 ## 发布新的热更新版本
 
-首先生成新的热更新版本。
+你可以尝试修改一行代码(譬如将版本一修改为版本二)，然后生成新的热更新版本。
 
 ```bash
 $ pushy bundle --platform <ios|android>

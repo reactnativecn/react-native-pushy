@@ -80,7 +80,7 @@ import {
   markSuccess,
 } from 'react-native-update';
 
-import _updateConfig from '../update.json';
+import _updateConfig from './update.json';
 const {appKey} = _updateConfig[Platform.OS];
 
 class MyProject extends Component {
