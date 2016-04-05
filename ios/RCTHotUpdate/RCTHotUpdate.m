@@ -106,12 +106,13 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSMutableDictionary *packageInfo = [[defaults dictionaryForKey:rnHotUpdatePackageInfoKey] mutableCopy];
     
-    NSDictionary *ret = @{ @"downloadRootDir": [RCTHotUpdate downloadDir],
-                           @"packageVersion": [infoDictionary objectForKey:@"CFBundleShortVersionString"],
-                           @"currentVersion": [packageInfo objectForKey:paramCurrentVersion],
-                           @"isFirstTime": [packageInfo objectForKey:paramIsFirstTime],
-                           @"isRolledBack": [packageInfo objectForKey:paramIsRolledBack]
-                           };
+    NSMutableDictionary *ret = [@{} mutableCopy];
+    ret[@"downloadRootDir"] = [RCTHotUpdate downloadDir];
+    ret[@"packageVersion"] = [infoDictionary objectForKey:@"CFBundleShortVersionString"];
+    ret[@"currentVersion"] = [packageInfo objectForKey:paramCurrentVersion];
+    ret[@"isFirstTime"] = [packageInfo objectForKey:paramIsFirstTime];
+    ret[@"isRolledBack"] = [packageInfo objectForKey:paramIsRolledBack];
+    
     if (packageInfo) {
         // clear isFirstTime and isRolledBack
         packageInfo[paramIsFirstTime] = @(NO);
