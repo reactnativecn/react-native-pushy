@@ -32,9 +32,6 @@ exports.run = function () {
         console.log('Not loggined.\nRun `pushy login` at your project directory to login.');
         return;
       }
-      console.log(err.message);
-      setTimeout(()=>{
-        throw err;
-      });
+      console.error(err.message);
     });
 };

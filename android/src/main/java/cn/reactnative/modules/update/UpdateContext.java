@@ -178,7 +178,8 @@ public class UpdateContext {
         DownloadTaskParams params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_CLEARUP;
         params.hash = sp.getString("currentVersion", null);
-        params.originHash = sp.getString("lastVersion", null);;
+        params.originHash = sp.getString("lastVersion", null);
+        params.unzipDirectory = rootDir;
         params.listener = new DownloadFileListener() {
             @Override
             public void onDownloadCompleted() {
