@@ -61,7 +61,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
                 removeDirectory(f);
             }
         }
-        if (!file.delete()) {
+        if (file.exists() && !file.delete()) {
             throw new IOException("Failed to delete directory");
         }
     }

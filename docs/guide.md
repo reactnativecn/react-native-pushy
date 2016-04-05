@@ -6,7 +6,7 @@
 
 所以我们也假设你已经拥有了开发React Native应用的一切环境，包括`Node.js`、`npm`、`XCode`、`Android SDK`等等。
 
-如果你之前没安装过，你还必须安装[Android NDK](http://androiddevtools.cn)，并设置环境变量`ANDROID_NDK`，指向你的NDK根目录(例如`/Users/tdzl2003/Downloads/android-ndk-r10e`)。
+如果你之前没安装过，你还必须安装[Android NDK](http://androiddevtools.cn)，并设置环境变量`ANDROID_NDK_HOME`，指向你的NDK根目录(例如`/Users/tdzl2003/Downloads/android-ndk-r10e`)。
 
 ## 安装
 
@@ -32,7 +32,6 @@ $ rnpm link react-native-update
 // ... 其它代码
 
 import cn.reactnative.modules.update.UpdateContext;
-import cn.reactnative.modules.update.UpdatePackage;
 
 public class MainActivity extends ReactActivity {
 
@@ -72,9 +71,9 @@ App Name: <输入应用名字>
 ```bash
 $ pushy selectApp --platform ios
 1) 鱼多多(ios)
-3) 支付宝(ios)
+3) 招财旺(ios)
 
-Total 2 apps
+Total 2 ios apps
 Enter appId: <输入应用前面的编号> 
 ```
 

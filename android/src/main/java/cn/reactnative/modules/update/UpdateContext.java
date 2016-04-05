@@ -128,6 +128,7 @@ public class UpdateContext {
     public void markSuccess() {
         SharedPreferences.Editor editor = sp.edit();
         editor.putBoolean("firstTimeOk", true);
+        editor.remove("lastVersion");
         editor.apply();
 
         this.clearUp();

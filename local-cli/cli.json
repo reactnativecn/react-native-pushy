@@ -79,6 +79,12 @@
       "options": {
         "platform": {
           "hasValue": true
+        },
+        "versionId": {
+          "hasValue": true
+        },
+        "packageId": {
+          "hasValue": true
         }
       }
     },

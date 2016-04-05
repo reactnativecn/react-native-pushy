@@ -69,10 +69,13 @@ async function chooseVersion(appId) {
 export const commands = {
   publish: async function({args, options}) {
     const fn = args[0];
-    const {platform, name, description, metaInfo } = options;
-    if (!fn || !platform) {
+    const {name, description, metaInfo } = options;
+
+    if (!fn) {
       throw new Error('Usage: pushy publish <ppkFile> --platform ios|android');
     }
+
+    const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
     const { appId } = await getSelectedApp(platform);
 
     const { hash } = await uploadFile(fn);
@@ -87,21 +90,21 @@ export const commands = {
 
     const v = await question('Would you like to bind packages to this version?(Y/N)');
     if (v.toLowerCase() === 'y') {
-      await this.update({args:[], options:{packageId: id, platform}});
+      await this.update({args:[], options:{versionId: id, platform}});
     }
   },
   versions: async function({options}) {
-    const { platform } = options;
+    const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
     const { appId } = await getSelectedApp(platform);
     await listVersions(appId);
   },
   update: async function({args, options}) {
-    const { platform } = options;
+    const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
     const { appId } = await getSelectedApp(platform);
-    const version = await chooseVersion(appId);
-    const pkg = await choosePackage(appId);
-    await put(`/app/${appId}/package/${pkg.id}`, {
-      versionId: version.id,
+    const versionId = options.versionId || (await chooseVersion(appId)).id;
+    const pkgId = options.packageId || (await choosePackage(appId)).id;
+    await put(`/app/${appId}/package/${pkgId}`, {
+      versionId,
     });
     console.log('Ok.');
   }

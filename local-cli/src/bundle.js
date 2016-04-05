@@ -13,7 +13,7 @@ import {ZipFile} from 'yazl';
 import {open as openZipFile} from 'yauzl';
 import {diff} from 'node-bsdiff';
 import { question } from './utils';
-
+import {checkPlatform} from './app';
 import crypto from 'crypto';
 
 function mkdir(dir){
@@ -316,14 +316,16 @@ function enumZipEntries(zipFn, callback) {
 
 export const commands = {
   bundle: async function({options}){
+    const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
+
     const {
       entryFile,
       intermediaDir,
-      platform,
       output,
       dev,
       verbose
-    } = translateOptions(options);
+    } = translateOptions({...options, platform});
+
     const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
 
     if (!platform) {

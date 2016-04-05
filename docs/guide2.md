@@ -80,7 +80,7 @@ import {
   markSuccess,
 } from 'react-native-update';
 
-import _updateConfig from '../update.json';
+import _updateConfig from './update.json';
 const {appKey} = _updateConfig[Platform.OS];
 
 class MyProject extends Component {
@@ -114,7 +114,7 @@ class MyProject extends Component {
       } else if (info.upToDate) {
         Alert.alert('提示', '您的应用版本已是最新.');
       } else {
-        Alert.alert('提示', '检查到新的版本,是否下载?\n'+ info.description, [
+        Alert.alert('提示', '检查到新的版本'+info.name+',是否下载?\n'+ info.description, [
           {text: '是', onPress: ()=>{this.doUpdate(info)}},
           {text: '否',},
         ]);
