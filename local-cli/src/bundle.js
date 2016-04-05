@@ -219,7 +219,7 @@ async function diffWithPackage(origin, next, output, originBundleName, transform
 
   await enumZipEntries(origin, (entry, zipFile) => {
     if (!/\/$/.test(entry.fileName)) {
-      const fn = transformPackagePath(entry.fileame);
+      const fn = transformPackagePath(entry.fileName);
       if (!fn) {
         return;
       }
