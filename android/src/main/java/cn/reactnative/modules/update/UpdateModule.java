@@ -34,7 +34,11 @@ public class UpdateModule extends ReactContextBaseJavaModule{
         constants.put("downloadRootDir", updateContext.getRootDir());
         constants.put("packageVersion", updateContext.getPackageVersion());
         constants.put("currentVersion", updateContext.getCurrentVersion());
-        constants.put("isFirstTime", updateContext.isFirstTime());
+        boolean isFirstTime = updateContext.isFirstTime();
+        constants.put("isFirstTime", isFirstTime);
+        if (isFirstTime) {
+            updateContext.clearFirstTime();
+        }
         boolean isRolledBack = updateContext.isRolledBack();
         constants.put("isRolledBack", isRolledBack);
         if (isRolledBack) {
@@ -129,11 +133,11 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     }
 
     @ReactMethod
-    public void clearFirstTimeMark() {
+    public void markSuccess() {
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                updateContext.clearFirstTimeMark();
+                updateContext.markSuccess();
             }
         });
     }

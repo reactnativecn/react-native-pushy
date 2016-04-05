@@ -88,7 +88,7 @@ export const commands = {
   selectApp: async function({args, options}) {
     const {platform} = options;
     checkPlatform(platform);
-    const id = args[0] || (await chooseApp()).id;
+    const id = args[0] || (await chooseApp(platform)).id;
 
     let updateInfo = {};
     if (await fs.exists('update.json')) {
