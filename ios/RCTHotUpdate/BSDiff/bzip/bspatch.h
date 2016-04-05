@@ -37,5 +37,6 @@ struct bspatch_stream
 };
 
 int bspatch(const uint8_t* old, int64_t oldsize, uint8_t* newBuf, int64_t newsize, struct bspatch_stream* stream);
+int beginPatch(const char* oldfile, const char* newfile, const char* patchfile);
 
 #endif

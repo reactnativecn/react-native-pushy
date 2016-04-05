@@ -22,7 +22,6 @@ static NSString * const BuildVersionKey = @"buildVersion";
 
 // file def
 static NSString * const BUNDLE_FILE_NAME = @"index.bundlejs";
-static NSString * const SOURCE_DIR_NAME = @"assets";
 static NSString * const SOURCE_PATCH_NAME = @"__diff.json";
 static NSString * const BUNDLE_PATCH_NAME = @"index.bundlejs.patch";
 
@@ -55,7 +54,14 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 
 - (NSDictionary *)constantsToExport
 {
-    return @{ @"downloadRootDir": [RCTHotUpdate donwloadDir]};
+    NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
+
+    return @{ @"downloadRootDir": [RCTHotUpdate donwloadDir],
+              @"packageVersion": [infoDictionary objectForKey:@"CFBundleShortVersionString"],
+              @"currentVersion": @"",
+              @"isFirstTime":@(YES),
+              @"isRolledBack":@(NO)
+              };
 }
 
 - (instancetype)init
@@ -230,8 +236,8 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
                         switch (type) {
                             case HotUpdateTypePatchFromIpa:
                             {
-                                NSString *sourceOrigin = [RCTHotUpdate binarySourceDir];
-                                NSString *bundleOrigin = [[RCTHotUpdate binaryBundleURL] absoluteString];
+                                NSString *sourceOrigin = [[NSBundle mainBundle] resourcePath];
+                                NSString *bundleOrigin = [[RCTHotUpdate binaryBundleURL] path];
                                 [self patch:hashName romBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
@@ -239,7 +245,7 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
                             {
                                 NSString *lastVertionDir = [dir stringByAppendingPathComponent:originHashName];
                                 
-                                NSString *sourceOrigin = [lastVertionDir stringByAppendingPathComponent:SOURCE_DIR_NAME];
+                                NSString *sourceOrigin = lastVertionDir;
                                 NSString *bundleOrigin = [lastVertionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
                                 [self patch:hashName romBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
@@ -264,7 +270,6 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
     NSString *destination = [unzipDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
     [_fileManager bsdiffFileAtPath:bundlePatch fromOrigin:bundleOrigin toDestination:destination completionHandler:^(BOOL success) {
         if (success) {
-            
             NSData *data = [NSData dataWithContentsOfFile:sourcePatch];
             NSError *error = nil;
             NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingAllowFragments error:&error];
@@ -342,8 +347,4 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
     return url;
 }
 
-+ (NSString *)binarySourceDir
-{
-    return [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:SOURCE_DIR_NAME];
-}
 @end

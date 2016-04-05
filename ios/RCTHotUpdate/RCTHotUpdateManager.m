@@ -9,6 +9,7 @@
 #import "RCTHotUpdateManager.h"
 #import "ZipArchive.h"
 #import "BSDiff.h"
+#import "bspatch.h"
 
 @implementation RCTHotUpdateManager {
     dispatch_queue_t _opQueue;
