@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.AsyncTask;
 import android.util.Log;
 
+import com.facebook.stetho.inspector.elements.ShadowDocument;
 import com.squareup.okhttp.OkHttpClient;
 import com.squareup.okhttp.Request;
 import com.squareup.okhttp.Response;
@@ -46,7 +47,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         System.loadLibrary("rnupdate");
     }
 
-    private void removeDirectory(File file) {
+    private void removeDirectory(File file) throws IOException {
         if (UpdateContext.DEBUG) {
             Log.d("RNUpdate", "Removing " + file);
         }
@@ -60,7 +61,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
                 removeDirectory(f);
             }
         }
-        file.delete();
+        if (!file.delete()) {
+            throw new IOException("Failed to delete directory");
+        }
     }
 
     private void downloadFile(String url, File writePath) throws IOException {
@@ -389,8 +392,24 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
             Log.d("RNUpdate", "Unzip finished");
         }
     }
-    private void doCleanUp(DownloadTaskParams param) {
-
+    private void doCleanUp(DownloadTaskParams param) throws IOException {
+        if (UpdateContext.DEBUG) {
+            Log.d("RNUpdate", "Start cleaning up");
+        }
+        File root = param.unzipDirectory;
+        for (File sub : root.listFiles()) {
+            if (sub.getName().charAt(0) == '.') {
+                continue;
+            }
+            if (sub.isFile()) {
+                sub.delete();
+            } else {
+                if (sub.getName().equals(param.hash) || sub.getName().equals(param.originHash)) {
+                    continue;
+                }
+                removeDirectory(sub);
+            }
+        }
     }
 
     @Override

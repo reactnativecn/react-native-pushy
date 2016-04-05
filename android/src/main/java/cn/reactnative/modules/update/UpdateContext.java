@@ -27,6 +27,16 @@ public class UpdateContext {
         }
 
         this.sp = context.getSharedPreferences("update", Context.MODE_PRIVATE);
+
+        String packageVersion = getPackageVersion();
+        if (!packageVersion.equals(this.sp.getString("packageVersion", null))) {
+            SharedPreferences.Editor editor = sp.edit();
+            editor.clear();
+            editor.putString("packageVersion", packageVersion);
+            editor.apply();
+
+            this.clearUp();
+        }
     }
 
     public String getRootDir() {
@@ -98,7 +108,7 @@ public class UpdateContext {
             editor.putString("lastVersion", hashName);
         }
         editor.putBoolean("firstTime", true);
-        editor.putBoolean("shouldRollback", false);
+        editor.putBoolean("firstTimeOk", false);
         editor.putBoolean("rolledBack", false);
         editor.apply();
     }
@@ -115,10 +125,17 @@ public class UpdateContext {
         return sp.getBoolean("rolledBack", false);
     }
 
-    public void clearFirstTimeMark() {
+    public void markSuccess() {
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putBoolean("firstTimeOk", true);
+        editor.apply();
+
+        this.clearUp();
+    }
+
+    public void clearFirstTime() {
         SharedPreferences.Editor editor = sp.edit();
         editor.putBoolean("firstTime", false);
-        editor.putBoolean("shouldRollback", false);
         editor.apply();
 
         this.clearUp();
@@ -145,40 +162,40 @@ public class UpdateContext {
     }
 
     public String getBundleUrl(String defaultAssetsUrl) {
-        // Test should rollback.
-        if (sp.getBoolean("shouldRollback", false)) {
-            this.rollBack();
-        }
         String currentVersion = getCurrentVersion();
         if (currentVersion == null) {
             return defaultAssetsUrl;
         }
-        if (sp.getBoolean("firstTime", false)) {
-            SharedPreferences.Editor editor = sp.edit();
-            editor.putBoolean("shouldRollback", true);
-            editor.apply();
+        // Test should rollback.
+        if (!sp.getBoolean("firstTime", false)) {
+            if (!sp.getBoolean("firstTimeOk", true)) {
+                // Not firstTime, but not ok, so we roll back.
+                currentVersion = this.rollBack();
+            }
         }
         return (new File(rootDir, currentVersion+"/index.bundlejs").toString());
     }
 
-    private void rollBack() {
+    private String rollBack() {
         String lastVersion = sp.getString("lastVersion", null);
         if (lastVersion == null) {
             throw new Error("This should never happen");
         }
         SharedPreferences.Editor editor = sp.edit();
         editor.putString("currentVersion", lastVersion);
-        editor.putBoolean("shouldRollback", false);
+        editor.putBoolean("firstTimeOk", true);
         editor.putBoolean("firstTime", false);
         editor.putBoolean("rolledBack", true);
         editor.apply();
+        return lastVersion;
     }
 
     private void clearUp() {
         DownloadTaskParams params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_CLEARUP;
         params.hash = sp.getString("currentVersion", null);
-        params.originHash = sp.getString("lastVersion", null);;
+        params.originHash = sp.getString("lastVersion", null);
+        params.unzipDirectory = rootDir;
         params.listener = new DownloadFileListener() {
             @Override
             public void onDownloadCompleted() {
