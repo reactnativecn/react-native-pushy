@@ -14,7 +14,13 @@
 #import "RCTLog.h"
 
 //
-static NSString *const curVersionKey = @"REACTNATIVECNHOTUPDATECURVERSIONKEY";
+//static NSString *const curVersionKey = @"REACTNATIVECNHOTUPDATECURVERSIONKEY";
+static NSString *const rnHotUpdatePackageInfoKey = @"REACTNATIVECNHOTUPDATEPACKAGEINFOKEY";
+static NSString *const paramLastVersion = @"lastVersion";
+static NSString *const paramCurrentVersion = @"currentVersion";
+static NSString *const paramIsFirstTime = @"isFirstTime";
+static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
+static NSString *const paramIsRolledBack = @"isRolledBack";
 
 // app info
 static NSString * const AppVersionKey = @"appVersion";
@@ -39,8 +45,8 @@ static NSString * const PARAM_PROGRESS_TOTAL = @"total";
 
 typedef NS_ENUM(NSInteger, HotUpdateType) {
     HotUpdateTypeFullDownload = 1,
-    HotUpdateTypePatchFromIpa = 2,
-    HotUpdateTypePatchFromPpa = 3,
+    HotUpdateTypePatchFromPackage = 2,
+    HotUpdateTypePatchFromPpk = 3,
 };
 
 @implementation RCTHotUpdate {
@@ -52,16 +58,68 @@ typedef NS_ENUM(NSInteger, HotUpdateType) {
 
 RCT_EXPORT_MODULE(RCTHotUpdate);
 
++ (NSURL *)bundleURL
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSDictionary *packageInfo = [defaults dictionaryForKey:rnHotUpdatePackageInfoKey];
+    
+    if (packageInfo) {
+        NSString *curVersion = packageInfo[paramCurrentVersion];
+        NSString *lastVersion = packageInfo[paramLastVersion];
+        
+        BOOL isFirstTime = [packageInfo[paramIsFirstTime] boolValue];
+        BOOL isFirstLoadOK = [packageInfo[paramIsFirstLoadOk] boolValue];
+        
+        NSString *loadVersioin = curVersion;
+        if ((isFirstTime == NO && isFirstLoadOK == NO) || (loadVersioin.length<=0 && lastVersion.length>0)) {
+            loadVersioin = lastVersion;
+            
+            // roll back to last version
+            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+            if (lastVersion.length) {
+                [defaults setObject:@{paramCurrentVersion:lastVersion, paramIsFirstTime:@(NO), paramIsFirstLoadOk:@(YES), paramIsRolledBack:@(YES)} forKey:rnHotUpdatePackageInfoKey];
+            }
+            else {
+                [defaults setObject:@{paramIsRolledBack:@(YES)} forKey:rnHotUpdatePackageInfoKey];
+            }
+            [defaults setObject:packageInfo forKey:rnHotUpdatePackageInfoKey];
+            [defaults synchronize];
+        }
+        
+        if (loadVersioin.length) {
+            NSString *downloadDir = [RCTHotUpdate downloadDir];
+            
+            NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:loadVersioin] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+            if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
+                NSURL *bundleURL = [NSURL fileURLWithPath:bundlePath];
+                return bundleURL;
+            }
+        }
+    }
+    
+    return [RCTHotUpdate binaryBundleURL];
+}
+
 - (NSDictionary *)constantsToExport
 {
     NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
-
-    return @{ @"downloadRootDir": [RCTHotUpdate donwloadDir],
-              @"packageVersion": [infoDictionary objectForKey:@"CFBundleShortVersionString"],
-              @"currentVersion": @"",
-              @"isFirstTime":@(YES),
-              @"isRolledBack":@(NO)
-              };
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSMutableDictionary *packageInfo = [[defaults dictionaryForKey:rnHotUpdatePackageInfoKey] mutableCopy];
+    
+    NSDictionary *ret = @{ @"downloadRootDir": [RCTHotUpdate downloadDir],
+                           @"packageVersion": [infoDictionary objectForKey:@"CFBundleShortVersionString"],
+                           @"currentVersion": [packageInfo objectForKey:paramCurrentVersion],
+                           @"isFirstTime": [packageInfo objectForKey:paramIsFirstTime],
+                           @"isRolledBack": [packageInfo objectForKey:paramIsRolledBack]
+                           };
+    if (packageInfo) {
+        // clear isFirstTime and isRolledBack
+        packageInfo[paramIsFirstTime] = @(NO);
+        packageInfo[paramIsRolledBack] = @(NO);
+        [defaults setObject:packageInfo forKey:rnHotUpdatePackageInfoKey];
+        [defaults synchronize];
+    }
+    return ret;
 }
 
 - (instancetype)init
@@ -71,20 +129,6 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
         _fileManager = [RCTHotUpdateManager new];
     }
     return self;
-}
-
-+ (NSURL *)bundleURL
-{
-    NSString *downloadDir = [RCTHotUpdate donwloadDir];
-    NSString *curVersion = [self loadCurVersion];
-    if (curVersion) {
-        NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:curVersion] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
-            NSURL *bundleURL = [NSURL fileURLWithPath:bundlePath];
-            return bundleURL;
-        }
-    }
-    return [RCTHotUpdate binaryBundleURL];
 }
 
 RCT_EXPORT_METHOD(getVersionInfo:(RCTResponseSenderBlock)callback)
@@ -115,11 +159,11 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
     }];
 }
 
-RCT_EXPORT_METHOD(downloadPatchFromIpa:(NSDictionary *)options
+RCT_EXPORT_METHOD(downloadPatchFromPackage:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    [self hotUpdate:HotUpdateTypePatchFromIpa options:options callback:^(NSError *error) {
+    [self hotUpdate:HotUpdateTypePatchFromPackage options:options callback:^(NSError *error) {
         if (error) {
             [self reject:reject error:error];
         }
@@ -129,11 +173,11 @@ RCT_EXPORT_METHOD(downloadPatchFromIpa:(NSDictionary *)options
     }];
 }
 
-RCT_EXPORT_METHOD(downloadPatchFromPpa:(NSDictionary *)options
+RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    [self hotUpdate:HotUpdateTypePatchFromPpa options:options callback:^(NSError *error) {
+    [self hotUpdate:HotUpdateTypePatchFromPpk options:options callback:^(NSError *error) {
         if (error) {
             [self reject:reject error:error];
         }
@@ -147,7 +191,7 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 {
     NSString *hashName = options[@"hashName"];
     if (hashName.length) {
-        [[self class] saveCurVersion:hashName];
+        [self saveCurVersion:hashName];
     }
 }
 
@@ -155,7 +199,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 {
     NSString *hashName = options[@"hashName"];
     if (hashName.length) {
-        [[self class] saveCurVersion:hashName];
+        [self saveCurVersion:hashName];
         dispatch_async(dispatch_get_main_queue(), ^{
             [_bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
             [_bridge reload];
@@ -163,10 +207,21 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
     }
 }
 
-RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
+RCT_EXPORT_METHOD(markSuccuss)
 {
-    NSString *downloadDir = [RCTHotUpdate donwloadDir];
-    NSString *curVersion = [RCTHotUpdate loadCurVersion];
+    // update package info
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSMutableDictionary *packageInfo = [[defaults objectForKey:rnHotUpdatePackageInfoKey] mutableCopy];
+    [packageInfo setObject:@(NO) forKey:paramIsFirstTime];
+    [packageInfo setObject:@(YES) forKey:paramIsFirstLoadOk];
+    [packageInfo setObject:@(NO) forKey:paramIsRolledBack];
+
+    [defaults setObject:packageInfo forKey:rnHotUpdatePackageInfoKey];
+    [defaults synchronize];
+    
+    // clear other package dir
+    NSString *downloadDir = [RCTHotUpdate downloadDir];
+    NSString *curVersion = [packageInfo objectForKey:paramCurrentVersion];
     
     NSError *error = nil;
     NSArray *list = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:downloadDir error:&error];
@@ -191,12 +246,12 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
         return;
     }
     NSString *originHashName = [RCTConvert NSString:options[@"originHashName"]];
-    if (type == HotUpdateTypePatchFromPpa && originHashName<=0) {
+    if (type == HotUpdateTypePatchFromPpk && originHashName<=0) {
         callback([self errorWithMessage:ERROR_OPTIONS]);
         return;
     }
     
-    NSString *dir = [RCTHotUpdate donwloadDir];
+    NSString *dir = [RCTHotUpdate downloadDir];
     BOOL success = [_fileManager createDir:dir];
     if (!success) {
         callback([self errorWithMessage:ERROR_FILE_OPERATION]);
@@ -234,14 +289,14 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
                     }
                     else {
                         switch (type) {
-                            case HotUpdateTypePatchFromIpa:
+                            case HotUpdateTypePatchFromPackage:
                             {
                                 NSString *sourceOrigin = [[NSBundle mainBundle] resourcePath];
                                 NSString *bundleOrigin = [[RCTHotUpdate binaryBundleURL] path];
                                 [self patch:hashName romBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
-                            case HotUpdateTypePatchFromPpa:
+                            case HotUpdateTypePatchFromPpk:
                             {
                                 NSString *lastVertionDir = [dir stringByAppendingPathComponent:originHashName];
                                 
@@ -263,7 +318,7 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
 
 - (void)patch:(NSString *)hashName romBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
 {
-    NSString *unzipDir = [[RCTHotUpdate donwloadDir] stringByAppendingPathComponent:hashName];
+    NSString *unzipDir = [[RCTHotUpdate downloadDir] stringByAppendingPathComponent:hashName];
     NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
     NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME];
     
@@ -298,9 +353,9 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
     switch (type) {
         case HotUpdateTypeFullDownload:
             return @".ppk";
-        case HotUpdateTypePatchFromIpa:
+        case HotUpdateTypePatchFromPackage:
             return @".apk.patch";
-        case HotUpdateTypePatchFromPpa:
+        case HotUpdateTypePatchFromPpk:
             return @".ppk.patch";
         default:
             break;
@@ -312,28 +367,31 @@ RCT_EXPORT_METHOD(removePreviousUpdates:(NSDictionary *)options)
     reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
 }
 
-+ (void)saveCurVersion:(NSString *)hashCode
+- (void)saveCurVersion:(NSString *)hashCode
 {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setObject:hashCode forKey:curVersionKey];
+    NSMutableDictionary *packageInfo = [[defaults objectForKey:rnHotUpdatePackageInfoKey] mutableCopy];
+    if (packageInfo == nil) {
+        packageInfo = [@{} mutableCopy];
+    }
+    packageInfo[paramLastVersion] = packageInfo[paramCurrentVersion];
+    packageInfo[paramCurrentVersion] = hashCode;
+    packageInfo[paramIsFirstTime] = @(YES);
+    packageInfo[paramIsFirstLoadOk] = @(NO);
+    packageInfo[paramIsRolledBack] = @(NO);
+    
+    [defaults setObject:packageInfo forKey:rnHotUpdatePackageInfoKey];
     [defaults synchronize];
-}
-
-+ (NSString *)loadCurVersion
-{
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSString *curVersion = [defaults stringForKey:curVersionKey];
-    return curVersion;
 }
 
 - (NSError *)errorWithMessage:(NSString *)errorMessage
 {
     return [NSError errorWithDomain:@"cn.reactnative.hotupdate"
                                code:-1
-                           userInfo:@{ NSLocalizedDescriptionKey: NSLocalizedString(errorMessage, nil) }];
+                           userInfo:@{ NSLocalizedDescriptionKey: errorMessage}];
 }
 
-+ (NSString *)donwloadDir
++ (NSString *)downloadDir
 {
     NSString *directory = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
     NSString *downloadDir = [directory stringByAppendingPathComponent:@"reactnativecnhotupdate"];
