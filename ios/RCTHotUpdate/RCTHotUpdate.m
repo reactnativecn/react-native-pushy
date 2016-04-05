@@ -14,13 +14,14 @@
 #import "RCTLog.h"
 
 //
-//static NSString *const curVersionKey = @"REACTNATIVECNHOTUPDATECURVERSIONKEY";
-static NSString *const rnHotUpdatePackageInfoKey = @"REACTNATIVECNHOTUPDATEPACKAGEINFOKEY";
+static NSString *const keyUpdateInfo = @"REACTNATIVECN_HOTUPDATE_INFO_KEY";
+static NSString *const paramPackageVersion = @"packageVersion";
 static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
 static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
-static NSString *const paramIsRolledBack = @"isRolledBack";
+static NSString *const keyRolledBackMarked = @"REACTNATIVECN_HOTUPDATE_ROLLEDBACKMARKED_KEY";
+static NSString *const KeyPackageUpdatedMarked = @"REACTNATIVECN_HOTUPDATE_ISPACKAGEUPDATEDMARKED_KEY";
 
 // app info
 static NSString * const AppVersionKey = @"appVersion";
@@ -61,38 +62,56 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 + (NSURL *)bundleURL
 {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSDictionary *packageInfo = [defaults dictionaryForKey:rnHotUpdatePackageInfoKey];
     
-    if (packageInfo) {
-        NSString *curVersion = packageInfo[paramCurrentVersion];
-        NSString *lastVersion = packageInfo[paramLastVersion];
+    NSDictionary *updateInfo = [defaults dictionaryForKey:keyUpdateInfo];
+    if (updateInfo) {
+        NSString *curPackageVersion = [RCTHotUpdate packageVersion];
+        NSString *packageVersion = [updateInfo objectForKey:paramPackageVersion];
         
-        BOOL isFirstTime = [packageInfo[paramIsFirstTime] boolValue];
-        BOOL isFirstLoadOK = [packageInfo[paramIsFirstLoadOk] boolValue];
-        
-        NSString *loadVersioin = curVersion;
-        if ((isFirstTime == NO && isFirstLoadOK == NO) || (loadVersioin.length<=0 && lastVersion.length>0)) {
-            loadVersioin = lastVersion;
-            
-            // roll back to last version
-            NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-            if (lastVersion.length) {
-                [defaults setObject:@{paramCurrentVersion:lastVersion, paramIsFirstTime:@(NO), paramIsFirstLoadOk:@(YES), paramIsRolledBack:@(YES)} forKey:rnHotUpdatePackageInfoKey];
-            }
-            else {
-                [defaults setObject:@{paramIsRolledBack:@(YES)} forKey:rnHotUpdatePackageInfoKey];
-            }
-            [defaults setObject:packageInfo forKey:rnHotUpdatePackageInfoKey];
+        BOOL needClearUpdateInfo = ![curPackageVersion isEqualToString:packageVersion];
+        if (needClearUpdateInfo) {
+            [defaults setObject:nil forKey:keyUpdateInfo];
+            [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked];
             [defaults synchronize];
+            // ...need clear files later
         }
-        
-        if (loadVersioin.length) {
-            NSString *downloadDir = [RCTHotUpdate downloadDir];
+        else {
+            NSString *curVersion = updateInfo[paramCurrentVersion];
+            NSString *lastVersion = updateInfo[paramLastVersion];
             
-            NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:loadVersioin] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
-                NSURL *bundleURL = [NSURL fileURLWithPath:bundlePath];
-                return bundleURL;
+            BOOL isFirstTime = [updateInfo[paramIsFirstTime] boolValue];
+            BOOL isFirstLoadOK = [updateInfo[paramIsFirstLoadOk] boolValue];
+            
+            NSString *loadVersioin = curVersion;
+            BOOL needRollback = (isFirstTime == NO && isFirstLoadOK == NO) || (loadVersioin.length<=0 && lastVersion.length>0);
+            if (needRollback) {
+                loadVersioin = lastVersion;
+                
+                if (lastVersion.length) {
+                    // roll back to last version
+                    [defaults setObject:@{paramCurrentVersion:lastVersion,
+                                          paramIsFirstTime:@(NO),
+                                          paramIsFirstLoadOk:@(YES),
+                                          paramPackageVersion:curPackageVersion}
+                                 forKey:keyUpdateInfo];
+                }
+                else {
+                    // roll back to bundle
+                    [defaults setObject:nil forKey:keyUpdateInfo];
+                }
+                [defaults setObject:@(YES) forKey:keyRolledBackMarked];
+                [defaults synchronize];
+                // ...need clear files later
+            }
+            
+            if (loadVersioin.length) {
+                NSString *downloadDir = [RCTHotUpdate downloadDir];
+                
+                NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:loadVersioin] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+                if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
+                    NSURL *bundleURL = [NSURL fileURLWithPath:bundlePath];
+                    return bundleURL;
+                }
             }
         }
     }
@@ -102,24 +121,36 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 
 - (NSDictionary *)constantsToExport
 {
-    NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableDictionary *packageInfo = [[defaults dictionaryForKey:rnHotUpdatePackageInfoKey] mutableCopy];
     
     NSMutableDictionary *ret = [@{} mutableCopy];
     ret[@"downloadRootDir"] = [RCTHotUpdate downloadDir];
-    ret[@"packageVersion"] = [infoDictionary objectForKey:@"CFBundleShortVersionString"];
-    ret[@"currentVersion"] = [packageInfo objectForKey:paramCurrentVersion];
-    ret[@"isFirstTime"] = [packageInfo objectForKey:paramIsFirstTime];
-    ret[@"isRolledBack"] = [packageInfo objectForKey:paramIsRolledBack];
+    ret[@"packageVersion"] = [RCTHotUpdate packageVersion];
+    ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
+    NSDictionary *updateInfo = [defaults dictionaryForKey:keyUpdateInfo];
+    ret[@"currentVersion"] = [updateInfo objectForKey:paramCurrentVersion];
+    ret[@"isFirstTime"] = [updateInfo objectForKey:paramIsFirstTime];
     
-    if (packageInfo) {
-        // clear isFirstTime and isRolledBack
-        packageInfo[paramIsFirstTime] = @(NO);
-        packageInfo[paramIsRolledBack] = @(NO);
-        [defaults setObject:packageInfo forKey:rnHotUpdatePackageInfoKey];
-        [defaults synchronize];
+    // clear isFirstTime
+    if (updateInfo) {
+        NSMutableDictionary *newInfo = [updateInfo mutableCopy];
+        newInfo[paramIsFirstTime] = @(NO);
+        [defaults setObject:newInfo forKey:keyUpdateInfo];
     }
+    
+    // clear rolledbackmark
+    if ([[defaults objectForKey:keyRolledBackMarked] boolValue]) {
+        [defaults setObject:nil forKey:keyRolledBackMarked];
+        [self clearInvalidFiles];
+    }
+    
+    // clear packageupdatemarked
+    if ([[defaults objectForKey:KeyPackageUpdatedMarked] boolValue]) {
+        [defaults setObject:nil forKey:KeyPackageUpdatedMarked];
+        [self clearInvalidFiles];
+    }
+    [defaults synchronize];
+
     return ret;
 }
 
@@ -178,7 +209,22 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 {
     NSString *hashName = options[@"hashName"];
     if (hashName.length) {
-        [self saveCurVersion:hashName];
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        NSString *lastVersion = nil;
+        if ([defaults objectForKey:keyUpdateInfo]) {
+            NSDictionary *updateInfo = [defaults objectForKey:keyUpdateInfo];
+            lastVersion = updateInfo[paramCurrentVersion];
+        }
+        
+        NSMutableDictionary *newInfo = [@{} mutableCopy];
+        newInfo[paramCurrentVersion] = hashName;
+        newInfo[paramLastVersion] = lastVersion;
+        newInfo[paramIsFirstTime] = @(YES);
+        newInfo[paramIsFirstLoadOk] = @(NO);
+        newInfo[paramPackageVersion] = [RCTHotUpdate packageVersion];
+        [defaults setObject:newInfo forKey:keyUpdateInfo];
+        
+        [defaults synchronize];
     }
 }
 
@@ -186,7 +232,9 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 {
     NSString *hashName = options[@"hashName"];
     if (hashName.length) {
-        [self saveCurVersion:hashName];
+        [self setNeedUpdate:options];
+        
+        // reload
         dispatch_async(dispatch_get_main_queue(), ^{
             [_bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
             [_bridge reload];
@@ -198,29 +246,14 @@ RCT_EXPORT_METHOD(markSuccuss)
 {
     // update package info
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableDictionary *packageInfo = [[defaults objectForKey:rnHotUpdatePackageInfoKey] mutableCopy];
+    NSMutableDictionary *packageInfo = [[defaults objectForKey:keyUpdateInfo] mutableCopy];
     [packageInfo setObject:@(NO) forKey:paramIsFirstTime];
     [packageInfo setObject:@(YES) forKey:paramIsFirstLoadOk];
-    [packageInfo setObject:@(NO) forKey:paramIsRolledBack];
-
-    [defaults setObject:packageInfo forKey:rnHotUpdatePackageInfoKey];
+    [defaults setObject:packageInfo forKey:keyUpdateInfo];
     [defaults synchronize];
     
     // clear other package dir
-    NSString *downloadDir = [RCTHotUpdate downloadDir];
-    NSString *curVersion = [packageInfo objectForKey:paramCurrentVersion];
-    
-    NSError *error = nil;
-    NSArray *list = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:downloadDir error:&error];
-    if (error) {
-        return;
-    }
-    
-    for(NSString *fileName in list) {
-        if (![fileName isEqualToString:curVersion]) {
-            [_fileManager removeFile:curVersion completionHandler:nil];
-        }
-    }
+    [self clearInvalidFiles];
 }
 
 #pragma mark - private
@@ -335,6 +368,26 @@ RCT_EXPORT_METHOD(markSuccuss)
     }];
 }
 
+- (void)clearInvalidFiles
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSDictionary *updateInfo = [defaults objectForKey:keyUpdateInfo];
+    NSString *curVersion = [updateInfo objectForKey:paramCurrentVersion];
+    
+    NSString *downloadDir = [RCTHotUpdate downloadDir];
+    NSError *error = nil;
+    NSArray *list = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:downloadDir error:&error];
+    if (error) {
+        return;
+    }
+    
+    for(NSString *fileName in list) {
+        if (![fileName isEqualToString:curVersion]) {
+            [_fileManager removeFile:curVersion completionHandler:nil];
+        }
+    }
+}
+
 - (NSString *)zipExtension:(HotUpdateType)type
 {
     switch (type) {
@@ -352,23 +405,6 @@ RCT_EXPORT_METHOD(markSuccuss)
 - (void)reject:(RCTPromiseRejectBlock)reject error:(NSError *)error
 {
     reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
-}
-
-- (void)saveCurVersion:(NSString *)hashCode
-{
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableDictionary *packageInfo = [[defaults objectForKey:rnHotUpdatePackageInfoKey] mutableCopy];
-    if (packageInfo == nil) {
-        packageInfo = [@{} mutableCopy];
-    }
-    packageInfo[paramLastVersion] = packageInfo[paramCurrentVersion];
-    packageInfo[paramCurrentVersion] = hashCode;
-    packageInfo[paramIsFirstTime] = @(YES);
-    packageInfo[paramIsFirstLoadOk] = @(NO);
-    packageInfo[paramIsRolledBack] = @(NO);
-    
-    [defaults setObject:packageInfo forKey:rnHotUpdatePackageInfoKey];
-    [defaults synchronize];
 }
 
 - (NSError *)errorWithMessage:(NSString *)errorMessage
@@ -390,6 +426,18 @@ RCT_EXPORT_METHOD(markSuccuss)
 {
     NSURL *url = [[NSBundle mainBundle] URLForResource:@"main" withExtension:@"jsbundle"];
     return url;
+}
+
++ (NSString *)packageVersion
+{
+    static NSString *version = nil;
+
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSDictionary *infoDictionary = [[NSBundle mainBundle] infoDictionary];
+        version = [infoDictionary objectForKey:@"CFBundleShortVersionString"];
+    });
+    return version;
 }
 
 @end
