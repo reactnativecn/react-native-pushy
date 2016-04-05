@@ -10,14 +10,7 @@
 		91C5F0031C76ECA90037E727 /* RCTHotUpdate.h in CopyFiles */ = {isa = PBXBuildFile; fileRef = 91C5F0021C76ECA90037E727 /* RCTHotUpdate.h */; };
 		91C5F0051C76ECA90037E727 /* RCTHotUpdate.m in Sources */ = {isa = PBXBuildFile; fileRef = 91C5F0041C76ECA90037E727 /* RCTHotUpdate.m */; };
 		9F1BCB1D1CAE5937000EF2CB /* RCTHotUpdateManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB1C1CAE5937000EF2CB /* RCTHotUpdateManager.m */; };
-		9F1BCB451CAF6B3E000EF2CB /* blocksort.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB3A1CAF6B3E000EF2CB /* blocksort.c */; };
 		9F1BCB461CAF6B3E000EF2CB /* bspatch.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB3B1CAF6B3E000EF2CB /* bspatch.c */; };
-		9F1BCB471CAF6B3E000EF2CB /* bzlib.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB3D1CAF6B3E000EF2CB /* bzlib.c */; };
-		9F1BCB481CAF6B3E000EF2CB /* compress.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB401CAF6B3E000EF2CB /* compress.c */; };
-		9F1BCB491CAF6B3E000EF2CB /* crctable.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB411CAF6B3E000EF2CB /* crctable.c */; };
-		9F1BCB4A1CAF6B3E000EF2CB /* decompress.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB421CAF6B3E000EF2CB /* decompress.c */; };
-		9F1BCB4B1CAF6B3E000EF2CB /* huffman.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB431CAF6B3E000EF2CB /* huffman.c */; };
-		9F1BCB4C1CAF6B3E000EF2CB /* randtable.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB441CAF6B3E000EF2CB /* randtable.c */; };
 		9F1BCB4F1CAF6B68000EF2CB /* BSDiff.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB4E1CAF6B68000EF2CB /* BSDiff.m */; };
 		9F292F7D1C7C44290095945D /* RCTHotUpdateDownloader.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F292F7C1C7C44290095945D /* RCTHotUpdateDownloader.m */; };
 		9F394D7D1C7C25DC00C794C0 /* aescrypt.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F394D5B1C7C25DC00C794C0 /* aescrypt.c */; };
@@ -55,17 +48,8 @@
 		91C5F0041C76ECA90037E727 /* RCTHotUpdate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RCTHotUpdate.m; sourceTree = "<group>"; };
 		9F1BCB1B1CAE5937000EF2CB /* RCTHotUpdateManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RCTHotUpdateManager.h; sourceTree = "<group>"; };
 		9F1BCB1C1CAE5937000EF2CB /* RCTHotUpdateManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RCTHotUpdateManager.m; sourceTree = "<group>"; };
-		9F1BCB3A1CAF6B3E000EF2CB /* blocksort.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = blocksort.c; sourceTree = "<group>"; };
 		9F1BCB3B1CAF6B3E000EF2CB /* bspatch.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bspatch.c; sourceTree = "<group>"; };
 		9F1BCB3C1CAF6B3E000EF2CB /* bspatch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bspatch.h; sourceTree = "<group>"; };
-		9F1BCB3D1CAF6B3E000EF2CB /* bzlib.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bzlib.c; sourceTree = "<group>"; };
-		9F1BCB3E1CAF6B3E000EF2CB /* bzlib.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bzlib.h; sourceTree = "<group>"; };
-		9F1BCB3F1CAF6B3E000EF2CB /* bzlib_private.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bzlib_private.h; sourceTree = "<group>"; };
-		9F1BCB401CAF6B3E000EF2CB /* compress.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = compress.c; sourceTree = "<group>"; };
-		9F1BCB411CAF6B3E000EF2CB /* crctable.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = crctable.c; sourceTree = "<group>"; };
-		9F1BCB421CAF6B3E000EF2CB /* decompress.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = decompress.c; sourceTree = "<group>"; };
-		9F1BCB431CAF6B3E000EF2CB /* huffman.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = huffman.c; sourceTree = "<group>"; };
-		9F1BCB441CAF6B3E000EF2CB /* randtable.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = randtable.c; sourceTree = "<group>"; };
 		9F1BCB4D1CAF6B68000EF2CB /* BSDiff.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BSDiff.h; sourceTree = "<group>"; };
 		9F1BCB4E1CAF6B68000EF2CB /* BSDiff.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BSDiff.m; sourceTree = "<group>"; };
 		9F292F7B1C7C44290095945D /* RCTHotUpdateDownloader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RCTHotUpdateDownloader.h; sourceTree = "<group>"; };
@@ -162,17 +146,8 @@
 		9F1BCB391CAF6B3E000EF2CB /* bzip */ = {
 			isa = PBXGroup;
 			children = (
-				9F1BCB3A1CAF6B3E000EF2CB /* blocksort.c */,
 				9F1BCB3B1CAF6B3E000EF2CB /* bspatch.c */,
 				9F1BCB3C1CAF6B3E000EF2CB /* bspatch.h */,
-				9F1BCB3D1CAF6B3E000EF2CB /* bzlib.c */,
-				9F1BCB3E1CAF6B3E000EF2CB /* bzlib.h */,
-				9F1BCB3F1CAF6B3E000EF2CB /* bzlib_private.h */,
-				9F1BCB401CAF6B3E000EF2CB /* compress.c */,
-				9F1BCB411CAF6B3E000EF2CB /* crctable.c */,
-				9F1BCB421CAF6B3E000EF2CB /* decompress.c */,
-				9F1BCB431CAF6B3E000EF2CB /* huffman.c */,
-				9F1BCB441CAF6B3E000EF2CB /* randtable.c */,
 			);
 			path = bzip;
 			sourceTree = "<group>";
@@ -294,27 +269,20 @@
 				9F394D851C7C25DC00C794C0 /* sha1.c in Sources */,
 				9F394D811C7C25DC00C794C0 /* fileenc.c in Sources */,
 				9F394D871C7C25DC00C794C0 /* mztools.c in Sources */,
-				9F1BCB471CAF6B3E000EF2CB /* bzlib.c in Sources */,
 				9F394D821C7C25DC00C794C0 /* hmac.c in Sources */,
 				9F394D881C7C25DC00C794C0 /* unzip.c in Sources */,
 				9F1BCB1D1CAE5937000EF2CB /* RCTHotUpdateManager.m in Sources */,
 				9F1BCB4F1CAF6B68000EF2CB /* BSDiff.m in Sources */,
-				9F1BCB4B1CAF6B3E000EF2CB /* huffman.c in Sources */,
-				9F1BCB4A1CAF6B3E000EF2CB /* decompress.c in Sources */,
 				9F394D7E1C7C25DC00C794C0 /* aeskey.c in Sources */,
 				9F394D7F1C7C25DC00C794C0 /* aestab.c in Sources */,
 				9F394D7D1C7C25DC00C794C0 /* aescrypt.c in Sources */,
 				9F394D801C7C25DC00C794C0 /* entropy.c in Sources */,
 				9F292F7D1C7C44290095945D /* RCTHotUpdateDownloader.m in Sources */,
 				9F394D831C7C25DC00C794C0 /* prng.c in Sources */,
-				9F1BCB481CAF6B3E000EF2CB /* compress.c in Sources */,
-				9F1BCB4C1CAF6B3E000EF2CB /* randtable.c in Sources */,
 				9F394D861C7C25DC00C794C0 /* ioapi.c in Sources */,
 				9F1BCB461CAF6B3E000EF2CB /* bspatch.c in Sources */,
 				9F394D8A1C7C25DC00C794C0 /* SSZipArchive.m in Sources */,
 				9F394D891C7C25DC00C794C0 /* zip.c in Sources */,
-				9F1BCB451CAF6B3E000EF2CB /* blocksort.c in Sources */,
-				9F1BCB491CAF6B3E000EF2CB /* crctable.c in Sources */,
 				9F394D841C7C25DC00C794C0 /* pwd2key.c in Sources */,
 				91C5F0051C76ECA90037E727 /* RCTHotUpdate.m in Sources */,
 			);
