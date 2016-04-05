@@ -75,7 +75,7 @@ export const commands = {
     console.log('Ok.');
   },
   packages: async function({options}) {
-    const { platform } = options;
+    const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
     const { appId } = await getSelectedApp(platform);
     await listPackage(appId);
   },

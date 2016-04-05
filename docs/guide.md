@@ -72,9 +72,9 @@ App Name: <输入应用名字>
 ```bash
 $ pushy selectApp --platform ios
 1) 鱼多多(ios)
-3) 支付宝(ios)
+3) 招财旺(ios)
 
-Total 2 apps
+Total 2 ios apps
 Enter appId: <输入应用前面的编号> 
 ```
 

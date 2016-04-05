@@ -65,16 +65,18 @@ export async function chooseApp(platform) {
 export const commands = {
   createApp: async function ({options}) {
     const name = options.name || await question('App Name:');
+    const {downloadUrl} = options;
     const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
     const {id} = await post('/app/create', {name, platform});
     console.log(`Created app ${id}`);
     await this.selectApp({
       args: [id],
-      options: {platform},
+      options: {platform, downloadUrl},
     });
   },
-  deleteApp: async function ({args}) {
-    const id = args[0] || ((await this.apps()), (await question('Choose App to delete:')));
+  deleteApp: async function ({args, options}) {
+    const {platform} = options;
+    const id = args[0] || chooseApp(platform);
     if (!id) {
       console.log('Canceled');
     }
@@ -86,8 +88,8 @@ export const commands = {
     listApp(platform);
   },
   selectApp: async function({args, options}) {
-    const {platform} = options;
-    checkPlatform(platform);
+    const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
+    checkPlatform(platform || await question('Platform(ios/android):'));
     const id = args[0] || (await chooseApp(platform)).id;
 
     let updateInfo = {};
