@@ -361,8 +361,11 @@ RCT_EXPORT_METHOD(markSuccess)
                 callback(error);
                 return;
             }
+            
             NSDictionary *copies = json[@"copies"];
-            [_fileManager copyFiles:copies fromDir:sourceOrigin toDir:unzipDir completionHandler:^(NSError *error) {
+            NSDictionary *deletes = json[@"deletes"];
+
+            [_fileManager copyFiles:copies fromDir:sourceOrigin toDir:unzipDir deletes:deletes completionHandler:^(NSError *error) {
                 if (error) {
                     callback(error);
                 }
@@ -392,7 +395,7 @@ RCT_EXPORT_METHOD(markSuccess)
     
     for(NSString *fileName in list) {
         if (![fileName isEqualToString:curVersion]) {
-            [_fileManager removeFile:curVersion completionHandler:nil];
+            [_fileManager removeFile:[downloadDir stringByAppendingPathComponent:fileName] completionHandler:nil];
         }
     }
 }

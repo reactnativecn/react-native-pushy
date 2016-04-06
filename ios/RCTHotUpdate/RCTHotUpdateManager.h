@@ -26,6 +26,7 @@
 - (void)copyFiles:(NSDictionary *)filesDic
           fromDir:(NSString *)fromDir
             toDir:(NSString *)toDir
+          deletes:(NSDictionary *)deletes
        completionHandler:(void (^)(NSError *error))completionHandler;
 
 - (void)removeFile:(NSString *)filePath
