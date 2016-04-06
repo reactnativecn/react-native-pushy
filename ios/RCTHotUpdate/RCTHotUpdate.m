@@ -20,6 +20,7 @@ static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
 static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
+static NSString *const keyFirstLoadLoadMarked = @"REACTNATIVECN_HOTUPDATE_FIRSTLOADMARKED_KEY";
 static NSString *const keyRolledBackMarked = @"REACTNATIVECN_HOTUPDATE_ROLLEDBACKMARKED_KEY";
 static NSString *const KeyPackageUpdatedMarked = @"REACTNATIVECN_HOTUPDATE_ISPACKAGEUPDATEDMARKED_KEY";
 
@@ -40,6 +41,7 @@ static NSString * const ERROR_FILE_OPERATION = @"file operation error";
 // event def
 static NSString * const EVENT_PROGRESS_DOWNLOAD = @"RCTHotUpdateDownloadProgress";
 static NSString * const EVENT_PROGRESS_UNZIP = @"RCTHotUpdateUnzipProgress";
+static NSString * const PARAM_PROGRESS_HASHNAME = @"hashname";
 static NSString * const PARAM_PROGRESS_RECEIVED = @"received";
 static NSString * const PARAM_PROGRESS_TOTAL = @"total";
 
@@ -103,6 +105,13 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
                 [defaults synchronize];
                 // ...need clear files later
             }
+            else if (isFirstTime){
+                NSMutableDictionary *newInfo = [updateInfo mutableCopy];
+                newInfo[paramIsFirstTime] = @(NO);
+                [defaults setObject:newInfo forKey:keyUpdateInfo];
+                [defaults setObject:@(YES) forKey:keyFirstLoadLoadMarked];
+                [defaults synchronize];
+            }
             
             if (loadVersioin.length) {
                 NSString *downloadDir = [RCTHotUpdate downloadDir];
@@ -127,15 +136,13 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     ret[@"downloadRootDir"] = [RCTHotUpdate downloadDir];
     ret[@"packageVersion"] = [RCTHotUpdate packageVersion];
     ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
+    ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadLoadMarked];
     NSDictionary *updateInfo = [defaults dictionaryForKey:keyUpdateInfo];
     ret[@"currentVersion"] = [updateInfo objectForKey:paramCurrentVersion];
-    ret[@"isFirstTime"] = [updateInfo objectForKey:paramIsFirstTime];
     
     // clear isFirstTime
-    if (updateInfo) {
-        NSMutableDictionary *newInfo = [updateInfo mutableCopy];
-        newInfo[paramIsFirstTime] = @(NO);
-        [defaults setObject:newInfo forKey:keyUpdateInfo];
+    if ([[defaults objectForKey:keyFirstLoadLoadMarked] boolValue]) {
+        [defaults setObject:nil forKey:keyFirstLoadLoadMarked];
     }
     
     // clear rolledbackmark
@@ -285,6 +292,7 @@ RCT_EXPORT_METHOD(markSuccuss)
     [RCTHotUpdateDownloader download:updateUrl savePath:zipFilePath progressHandler:^(long long receivedBytes, long long totalBytes) {
         [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_DOWNLOAD
                                                      body:@{
+                                                            PARAM_PROGRESS_HASHNAME:hashName,
                                                             PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLongLong:receivedBytes],
                                                             PARAM_PROGRESS_TOTAL:[NSNumber numberWithLongLong:totalBytes]
                                                             }];
@@ -298,6 +306,7 @@ RCT_EXPORT_METHOD(markSuccuss)
             [_fileManager unzipFileAtPath:zipFilePath toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
                 [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_UNZIP
                                                              body:@{
+                                                                    PARAM_PROGRESS_HASHNAME:hashName,
                                                                     PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLong:entryNumber],
                                                                     PARAM_PROGRESS_TOTAL:[NSNumber numberWithLong:total]
                                                                     }];

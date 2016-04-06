@@ -103,7 +103,7 @@ completionHandler:(void (^)(NSError *error))completionHandler
             NSString *toPath = [toDir stringByAppendingPathComponent:to];
             
             NSError *error = nil;
-            [[NSFileManager defaultManager] moveItemAtPath:fromPath toPath:toPath error:&error];
+            [[NSFileManager defaultManager] copyItemAtPath:fromPath toPath:toPath error:&error];
             if (error) {
                 if (completionHandler) {
                     completionHandler(error);
