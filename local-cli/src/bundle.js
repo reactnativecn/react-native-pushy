@@ -4,6 +4,7 @@
 
 import * as path from 'path';
 import { mkdir as mkdirRecurisve } from 'mkdir-recursive';
+import rmdirRecursive from 'rimraf';
 import {
   getRNVersion,
   translateOptions,
@@ -19,6 +20,18 @@ import crypto from 'crypto';
 function mkdir(dir){
   return new Promise((resolve, reject) => {
     mkdirRecurisve(dir, err => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+function rmdir(dir) {
+  return new Promise((resolve, reject) => {
+    rmdirRecursive(dir, err => {
       if (err) {
         reject(err);
       } else {
@@ -199,6 +212,7 @@ async function diffWithPPK(origin, next, output) {
 
   for (var k in originEntries) {
     if (!newEntries[k]) {
+      console.log('Delete '+k);
       deletes[k] = 1;
     }
   }
@@ -332,12 +346,11 @@ export const commands = {
       throw new Error('Platform must be specified.');
     }
 
-    await mkdir(intermediaDir);
-
     const { version, major, minor } = getRNVersion();
 
     console.log('Bundling with React Native version: ', version);
 
+    await rmdir(intermediaDir);
     await mkdir(intermediaDir);
 
     require(path.resolve('node_modules/react-native/packager/babelRegisterOnly'))([
