@@ -249,7 +249,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
     }
 }
 
-RCT_EXPORT_METHOD(markSuccuss)
+RCT_EXPORT_METHOD(markSuccess)
 {
     // update package info
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
