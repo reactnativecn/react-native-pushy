@@ -249,7 +249,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
     }
 }
 
-RCT_EXPORT_METHOD(markSuccuss)
+RCT_EXPORT_METHOD(markSuccess)
 {
     // update package info
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -322,7 +322,7 @@ RCT_EXPORT_METHOD(markSuccuss)
                             {
                                 NSString *sourceOrigin = [[NSBundle mainBundle] resourcePath];
                                 NSString *bundleOrigin = [[RCTHotUpdate binaryBundleURL] path];
-                                [self patch:hashName romBundle:bundleOrigin source:sourceOrigin callback:callback];
+                                [self patch:hashName fromBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
                             case HotUpdateTypePatchFromPpk:
@@ -331,7 +331,7 @@ RCT_EXPORT_METHOD(markSuccuss)
                                 
                                 NSString *sourceOrigin = lastVertionDir;
                                 NSString *bundleOrigin = [lastVertionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-                                [self patch:hashName romBundle:bundleOrigin source:sourceOrigin callback:callback];
+                                [self patch:hashName fromBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
                             default:
@@ -345,7 +345,7 @@ RCT_EXPORT_METHOD(markSuccuss)
     }];
 }
 
-- (void)patch:(NSString *)hashName romBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
+- (void)patch:(NSString *)hashName fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
 {
     NSString *unzipDir = [[RCTHotUpdate downloadDir] stringByAppendingPathComponent:hashName];
     NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
@@ -361,8 +361,11 @@ RCT_EXPORT_METHOD(markSuccuss)
                 callback(error);
                 return;
             }
+            
             NSDictionary *copies = json[@"copies"];
-            [_fileManager copyFiles:copies fromDir:sourceOrigin toDir:unzipDir completionHandler:^(NSError *error) {
+            NSDictionary *deletes = json[@"deletes"];
+
+            [_fileManager copyFiles:copies fromDir:sourceOrigin toDir:unzipDir deletes:deletes completionHandler:^(NSError *error) {
                 if (error) {
                     callback(error);
                 }
@@ -392,7 +395,7 @@ RCT_EXPORT_METHOD(markSuccuss)
     
     for(NSString *fileName in list) {
         if (![fileName isEqualToString:curVersion]) {
-            [_fileManager removeFile:curVersion completionHandler:nil];
+            [_fileManager removeFile:[downloadDir stringByAppendingPathComponent:fileName] completionHandler:nil];
         }
     }
 }

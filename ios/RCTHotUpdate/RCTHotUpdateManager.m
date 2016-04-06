@@ -91,9 +91,27 @@
 - (void)copyFiles:(NSDictionary *)filesDic
           fromDir:(NSString *)fromDir
             toDir:(NSString *)toDir
+          deletes:(NSDictionary *)deletes
 completionHandler:(void (^)(NSError *error))completionHandler
 {
     dispatch_async(_opQueue, ^{
+        NSFileManager *fm = [NSFileManager defaultManager];
+
+        // merge old files
+        if (deletes!= nil) {
+            NSError *error = nil;
+            NSString *srcDir = [fromDir stringByAppendingPathComponent:@"assets"];
+            NSString *desDir = [toDir stringByAppendingPathComponent:@"assets"];
+            [self _mergeContentsOfPath:srcDir intoPath:desDir deletes:deletes error:&error];
+            if (error) {
+                if (completionHandler) {
+                    completionHandler(error);
+                }
+                return;
+            }
+        }
+        
+        // copy files
         for (NSString *to in filesDic.allKeys) {
             NSString *from = filesDic[to];
             if (from.length <=0) {
@@ -102,8 +120,11 @@ completionHandler:(void (^)(NSError *error))completionHandler
             NSString *fromPath = [fromDir stringByAppendingPathComponent:from];
             NSString *toPath = [toDir stringByAppendingPathComponent:to];
             
+            if ([fm fileExistsAtPath:toPath]) {
+                [fm removeItemAtPath:toPath error:nil];
+            }
             NSError *error = nil;
-            [[NSFileManager defaultManager] copyItemAtPath:fromPath toPath:toPath error:&error];
+            [fm copyItemAtPath:fromPath toPath:toPath error:&error];
             if (error) {
                 if (completionHandler) {
                     completionHandler(error);
@@ -127,6 +148,46 @@ completionHandler:(void (^)(NSError *error))completionHandler
             completionHandler(error);
         }
     });
+}
+
+- (void)_mergeContentsOfPath:(NSString *)srcDir intoPath:(NSString *)dstDir deletes:(NSDictionary *)deletes error:(NSError**)err
+{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSDirectoryEnumerator *srcDirEnum = [fm enumeratorAtPath:srcDir];
+    NSString *subPath;
+    while ((subPath = [srcDirEnum nextObject])) {
+        
+        NSString *srcFullPath =  [srcDir stringByAppendingPathComponent:subPath];
+        NSString *potentialDstPath = [dstDir stringByAppendingPathComponent:subPath];
+        
+        BOOL isDirectory = ([fm fileExistsAtPath:srcFullPath isDirectory:&isDirectory] && isDirectory);
+        if (isDirectory) {
+            if (![fm fileExistsAtPath:potentialDstPath isDirectory:nil]) {
+                [fm createDirectoryAtPath:potentialDstPath withIntermediateDirectories:YES attributes:nil error:err];
+                if (err && *err) {
+                    return;
+                }
+            }
+        }
+        else {
+            BOOL inDeletes = NO;
+            if (deletes) {
+                NSString *path = [@"assets" stringByAppendingPathComponent:subPath];
+                for (NSString *del in deletes) {
+                    if ([subPath isEqualToString:path]) {
+                        inDeletes = YES;
+                        break;
+                    }
+                }
+            }
+            if (!inDeletes && ![fm fileExistsAtPath:potentialDstPath]) {
+                [fm copyItemAtPath:srcFullPath toPath:potentialDstPath error:err];
+                if (err && *err) {
+                    return;
+                }
+            }
+        }
+    }
 }
 
 @end
