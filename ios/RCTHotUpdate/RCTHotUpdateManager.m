@@ -160,30 +160,30 @@ completionHandler:(void (^)(NSError *error))completionHandler
         NSString *srcFullPath =  [srcDir stringByAppendingPathComponent:subPath];
         NSString *potentialDstPath = [dstDir stringByAppendingPathComponent:subPath];
         
-        BOOL isDirectory = ([fm fileExistsAtPath:srcFullPath isDirectory:&isDirectory] && isDirectory);
-        if (isDirectory) {
-            if (![fm fileExistsAtPath:potentialDstPath isDirectory:nil]) {
-                [fm createDirectoryAtPath:potentialDstPath withIntermediateDirectories:YES attributes:nil error:err];
-                if (err && *err) {
-                    return;
-                }
+        BOOL inDeletes = NO;
+        if (deletes) {
+            NSString *path = [@"assets" stringByAppendingPathComponent:subPath];
+            if (deletes[path]) {
+                inDeletes = YES;
             }
         }
-        else {
-            BOOL inDeletes = NO;
-            if (deletes) {
-                NSString *path = [@"assets" stringByAppendingPathComponent:subPath];
-                for (NSString *del in deletes) {
-                    if ([subPath isEqualToString:path]) {
-                        inDeletes = YES;
-                        break;
+        if (!inDeletes) {
+            BOOL isDirectory = ([fm fileExistsAtPath:srcFullPath isDirectory:&isDirectory] && isDirectory);
+            if (isDirectory) {
+                if (![fm fileExistsAtPath:potentialDstPath isDirectory:nil]) {
+                    [fm createDirectoryAtPath:potentialDstPath withIntermediateDirectories:YES attributes:nil error:err];
+                    if (err && *err) {
+                        return;
                     }
                 }
             }
-            if (!inDeletes && ![fm fileExistsAtPath:potentialDstPath]) {
-                [fm copyItemAtPath:srcFullPath toPath:potentialDstPath error:err];
-                if (err && *err) {
-                    return;
+            else {
+                
+                if (![fm fileExistsAtPath:potentialDstPath]) {
+                    [fm copyItemAtPath:srcFullPath toPath:potentialDstPath error:err];
+                    if (err && *err) {
+                        return;
+                    }
                 }
             }
         }
