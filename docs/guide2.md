@@ -9,7 +9,7 @@ import React, {
   Platform,
 } from 'react-native';
 
-import _updateConfig from '../update.json';
+import _updateConfig from './update.json';
 const {appKey} = _updateConfig[Platform.OS];
 ```
 
@@ -122,7 +122,7 @@ class MyProject extends Component {
     }).catch(err => { 
       Alert.alert('提示', '更新失败.');
     });
-  }
+  };
   render() {
     return (
       <View style={styles.container}>
