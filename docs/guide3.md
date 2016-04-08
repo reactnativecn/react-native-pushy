@@ -67,12 +67,12 @@ Would you like to bind packages to this version?(Y/N)
 Offset 0
 1) FvXnROJ1 1.0.1 (no package)
 2) FiWYm9lB 1.0 [1.0]
-Enter versionId or page Up/page Down/Begin(U/D/B) <输入序号,U/D翻页,B回到开始>
+Enter versionId or page Up/page Down/Begin(U/D/B) <输入序号,U/D翻页,B回到开始，序号就是上面列表中)前面的数字>
 
 1) 1.0(normal) - 3 FiWYm9lB (未命名)
 
 Total 1 packages.
-Enter packageId: <输入包版本序号>
+Enter packageId: <输入包版本序号，序号就是上面列表中)前面的数字>
 ```
 
 版本绑定完毕后，客户端就应当可以检查到更新并进行更新了。
