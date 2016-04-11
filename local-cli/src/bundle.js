@@ -340,6 +340,8 @@ export const commands = {
       verbose
     } = translateOptions({...options, platform});
 
+    const realIntermedia = path.resolve(intermediaDir);
+
     const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
 
     if (!platform) {
@@ -350,8 +352,8 @@ export const commands = {
 
     console.log('Bundling with React Native version: ', version);
 
-    await rmdir(intermediaDir);
-    await mkdir(intermediaDir);
+    await rmdir(realIntermedia);
+    await mkdir(realIntermedia);
 
     require(path.resolve('node_modules/react-native/packager/babelRegisterOnly'))([
       /private-cli\/src/,
@@ -370,16 +372,16 @@ export const commands = {
       '--dev',
       '' + !!dev,
       '--bundle-output',
-      `${intermediaDir}/index.bundlejs`,
+      `${realIntermedia}${path.sep}index.bundlejs`,
       '--assets-dest',
-      `${intermediaDir}`,
+      `${realIntermedia}`,
       '--verbose',
       '' + !!verbose,
     ], Config.get(path.resolve('node_modules/react-native/local-cli'), defaultConfig));
 
     console.log('Packing');
 
-    await pack(intermediaDir, realOutput);
+    await pack(realIntermedia, realOutput);
 
     const v = await question('Would you like to publish it?(Y/N)');
     if (v.toLowerCase() === 'y') {
