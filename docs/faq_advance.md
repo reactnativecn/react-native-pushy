@@ -2,7 +2,7 @@
 
 #### 报错 NDK not configured.
 
-你需要下载并安装NDK，然后设置到环境变量`ANDROID_NDK`中_
+你需要下载并安装NDK，然后设置到环境变量`ANDROID_NDK_HOME`中。
 
 #### 过期的版本
 
