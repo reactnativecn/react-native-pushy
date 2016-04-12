@@ -1,9 +1,5 @@
 ## 高级指南
 
-#### 报错 NDK not configured.
-
-你需要下载并安装NDK，然后设置到环境变量`ANDROID_NDK_HOME`中。
-
 #### 过期的版本
 
 你可以删除掉过期很久的版本。在一段时间后，版本会被真正清理。
@@ -41,6 +37,14 @@
 如果匹配成功，我们就进行静默更新，否则则按照一般的更新流程提示用户。
 
 ## 常见问题
+
+#### 报错 NDK not configured.
+
+你需要下载并安装NDK，然后设置到环境变量`ANDROID_NDK_HOME`中。
+
+#### XCode报错 "_BZ2_bzRead", referenced from 等
+
+在工程target的Build Phases->Link Binary with Libraries中加入libz.tbd、libbz2.1.0.tbd
 
 #### 这个热更新服务收费吗？
 
