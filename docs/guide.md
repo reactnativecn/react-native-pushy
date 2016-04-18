@@ -36,9 +36,13 @@ $ rnpm link react-native-update
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-	
-	jsCodeLocation = [RCTHotUpdate bundleURL];
-    // ... 其它代码
+#if DEBUG
+  // 原来的jsCodeLocation
+  jsCodeLocation = [NSURL URLWithString:@"http://localhost:8081/index.ios.bundle?platform=ios&dev=true"];
+#else
+  jsCodeLocation=[RCTHotUpdate bundleURL];
+#endif
+  // ... 其它代码
 }
 ```
 
