@@ -2,7 +2,7 @@
 
 首先你应该有一个基于React Native开发的应用，我们把具有package.json的目录叫做你的"应用根目录"。
 
-如果你还没有初始化应用，请参阅[开始使用React Native](http://reactnative.cn/docs/0.22/getting-started.html#content)。
+如果你还没有初始化应用，请参阅[开始使用React Native](http://reactnative.cn/docs/getting-started.html#content)。
 
 所以我们也假设你已经拥有了开发React Native应用的一切环境，包括`Node.js`、`npm`、`XCode`、`Android SDK`等等。
 
