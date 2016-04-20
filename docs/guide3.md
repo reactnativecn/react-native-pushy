@@ -7,7 +7,7 @@
 
 ## 发布iOS应用
 
-首先参考[文档-在设备上运行](http://reactnative.cn/docs/0.22/running-on-device-ios.html#content)，
+首先参考[文档-在设备上运行](http://reactnative.cn/docs/running-on-device-ios.html#content)，
 确定你正在使用离线包。然后点击菜单。
 
 按照正常的发布流程打包`.ipa`文件(Product-Achieve)，然后运行如下命令
@@ -22,7 +22,7 @@ $ pushy uploadIpa <your-package.ipa>
 
 ## 发布安卓应用
 
-首先参考[文档-生成已签名的APK](http://reactnative.cn/docs/0.22/signed-apk-android.html#content)设置签名，
+首先参考[文档-生成已签名的APK](http://reactnative.cn/docs/signed-apk-android.html#content)设置签名，
 然后在android文件夹下运行`./gradlew assembleRelease`，你就可以在`android/app/build/outputs/apk/app-release.apk`中找到你的应用包。
 
 然后运行如下命令
