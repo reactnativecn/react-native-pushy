@@ -18,6 +18,13 @@ $ npm install --save react-native-update
 $ rnpm link react-native-update
 ```
 
+> * 注意 *
+> 如果访问极慢或者显示网络失败，请使用淘宝镜像并执行`npm config set disturl https://npm.taobao.org/dist`
+
+> * Windows平台请注意 *
+> 1、你必须安装python 2.7以及一套C++环境（推荐VS2013或VS2015，VS2010及以前版本不可用）
+> 2、如果使用VS2015，你需要设置`npm config set msvs_version 2015 --global`
+
 > 其中第一句，在每一台电脑上仅需运行一次。
 
 ## 配置Bundle URL(iOS)
