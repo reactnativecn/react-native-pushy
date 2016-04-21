@@ -11,16 +11,21 @@
 ## 安装
 
 在你的项目根目录下运行以下命令(不要输入开头的美元符号)：
-
 ```bash
 $ npm install -g react-native-update-cli rnpm
 $ npm install --save react-native-update
 $ rnpm link react-native-update
-```
+```  
+
+`npm install -g react-native-update-cli rnpm`这一句在每一台电脑上仅需运行一次。
 
 > * 注意 *
 
-> 如果访问极慢或者显示网络失败，请使用淘宝镜像并执行`npm config set disturl https://npm.taobao.org/dist`
+> 如果访问极慢或者显示网络失败，请使用淘宝镜像：  
+```bash
+npm config set registry https://registry.npm.taobao.org
+npm config set disturl https://npm.taobao.org/dist
+```
 
 > * Windows平台请注意 *
 
@@ -28,7 +33,7 @@ $ rnpm link react-native-update
 
 > 2、如果使用VS2015，你需要设置`npm config set msvs_version 2015 --global`
 
-> 其中第一句，在每一台电脑上仅需运行一次。
+
 
 ## 配置Bundle URL(iOS)
 
