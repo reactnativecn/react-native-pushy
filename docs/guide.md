@@ -23,8 +23,8 @@ $ rnpm link react-native-update
 
 如果访问极慢或者显示网络失败，请使用淘宝镜像：  
 ```bash
-npm config set registry https://registry.npm.taobao.org
-npm config set disturl https://npm.taobao.org/dist
+npm config set registry https://registry.npm.taobao.org --global
+npm config set disturl https://npm.taobao.org/dist --global
 ```
 
 * Windows平台请注意 *
