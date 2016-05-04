@@ -132,7 +132,7 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     
-    NSMutableDictionary *ret = [@{} mutableCopy];
+    NSMutableDictionary *ret = [NSMutableDictionary new];
     ret[@"downloadRootDir"] = [RCTHotUpdate downloadDir];
     ret[@"packageVersion"] = [RCTHotUpdate packageVersion];
     ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
