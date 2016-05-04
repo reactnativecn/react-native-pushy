@@ -106,7 +106,7 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
                 // ...need clear files later
             }
             else if (isFirstTime){
-                NSMutableDictionary *newInfo = [updateInfo mutableCopy];
+                NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] initWithDictionary:updateInfo];
                 newInfo[paramIsFirstTime] = @(NO);
                 [defaults setObject:newInfo forKey:keyUpdateInfo];
                 [defaults setObject:@(YES) forKey:keyFirstLoadLoadMarked];
@@ -176,7 +176,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
 {
     [self hotUpdate:HotUpdateTypeFullDownload options:options callback:^(NSError *error) {
         if (error) {
-            [self reject:reject error:error];
+            [reject error];
         }
         else {
             resolve(nil);
@@ -190,7 +190,7 @@ RCT_EXPORT_METHOD(downloadPatchFromPackage:(NSDictionary *)options
 {
     [self hotUpdate:HotUpdateTypePatchFromPackage options:options callback:^(NSError *error) {
         if (error) {
-            [self reject:reject error:error];
+            [reject error];
         }
         else {
             resolve(nil);
@@ -204,7 +204,7 @@ RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
 {
     [self hotUpdate:HotUpdateTypePatchFromPpk options:options callback:^(NSError *error) {
         if (error) {
-            [self reject:reject error:error];
+            [reject error];
         }
         else {
             resolve(nil);
@@ -223,7 +223,7 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
             lastVersion = updateInfo[paramCurrentVersion];
         }
         
-        NSMutableDictionary *newInfo = [@{} mutableCopy];
+        NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] init];
         newInfo[paramCurrentVersion] = hashName;
         newInfo[paramLastVersion] = lastVersion;
         newInfo[paramIsFirstTime] = @(YES);
@@ -253,7 +253,7 @@ RCT_EXPORT_METHOD(markSuccess)
 {
     // update package info
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableDictionary *packageInfo = [[defaults objectForKey:keyUpdateInfo] mutableCopy];
+    NSMutableDictionary *packageInfo = [[NSMutableDictionary alloc] initWithDictionary:[defaults objectForKey:keyUpdateInfo]];
     [packageInfo setObject:@(NO) forKey:paramIsFirstTime];
     [packageInfo setObject:@(YES) forKey:paramIsFirstLoadOk];
     [defaults setObject:packageInfo forKey:keyUpdateInfo];
@@ -412,11 +412,6 @@ RCT_EXPORT_METHOD(markSuccess)
         default:
             break;
     }
-}
-
-- (void)reject:(RCTPromiseRejectBlock)reject error:(NSError *)error
-{
-    reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
 }
 
 - (NSError *)errorWithMessage:(NSString *)errorMessage
