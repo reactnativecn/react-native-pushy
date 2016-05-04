@@ -28,7 +28,7 @@ $ npm install --save react-native-update
 
 #### pushy diffFromApk <apkFile> <next>
 
-提供一个apk文件和一个ppk文件，生成从ipa文件到next版本的差异更新包。
+提供一个apk文件和一个ppk文件，生成从apk文件到next版本的差异更新包。
 
 如果使用热更新开放平台，你不需要自己执行此命令。
 

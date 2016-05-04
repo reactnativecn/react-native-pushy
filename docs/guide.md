@@ -2,7 +2,7 @@
 
 首先你应该有一个基于React Native开发的应用，我们把具有package.json的目录叫做你的"应用根目录"。
 
-如果你还没有初始化应用，请参阅[开始使用React Native](http://reactnative.cn/docs/0.22/getting-started.html#content)。
+如果你还没有初始化应用，请参阅[开始使用React Native](http://reactnative.cn/docs/getting-started.html#content)。
 
 所以我们也假设你已经拥有了开发React Native应用的一切环境，包括`Node.js`、`npm`、`XCode`、`Android SDK`等等。
 
@@ -11,14 +11,29 @@
 ## 安装
 
 在你的项目根目录下运行以下命令(不要输入开头的美元符号)：
-
 ```bash
 $ npm install -g react-native-update-cli rnpm
 $ npm install --save react-native-update
 $ rnpm link react-native-update
+```  
+
+`npm install -g react-native-update-cli rnpm`这一句在每一台电脑上仅需运行一次。
+
+* 注意 *
+
+如果访问极慢或者显示网络失败，请使用淘宝镜像：  
+```bash
+npm config set registry https://registry.npm.taobao.org --global
+npm config set disturl https://npm.taobao.org/dist --global
 ```
 
-> 其中第一句，在每一台电脑上仅需运行一次。
+* Windows平台请注意 *
+
+1、你必须安装python 2.7以及一套C++环境（推荐VS2013或VS2015，VS2010及以前版本不可用）
+
+2、如果使用VS2015，你需要设置`npm config set msvs_version 2015 --global`
+
+
 
 ## 配置Bundle URL(iOS)
 
@@ -36,9 +51,13 @@ $ rnpm link react-native-update
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-	
-	jsCodeLocation = [RCTHotUpdate bundleURL];
-    // ... 其它代码
+#if DEBUG
+  // 原来的jsCodeLocation
+  jsCodeLocation = [NSURL URLWithString:@"http://localhost:8081/index.ios.bundle?platform=ios&dev=true"];
+#else
+  jsCodeLocation=[RCTHotUpdate bundleURL];
+#endif
+  // ... 其它代码
 }
 ```
 
