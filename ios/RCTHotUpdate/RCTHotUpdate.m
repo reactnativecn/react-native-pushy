@@ -176,7 +176,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
 {
     [self hotUpdate:HotUpdateTypeFullDownload options:options callback:^(NSError *error) {
         if (error) {
-            [reject error];
+            reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
         }
         else {
             resolve(nil);
@@ -190,7 +190,7 @@ RCT_EXPORT_METHOD(downloadPatchFromPackage:(NSDictionary *)options
 {
     [self hotUpdate:HotUpdateTypePatchFromPackage options:options callback:^(NSError *error) {
         if (error) {
-            [reject error];
+            reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
         }
         else {
             resolve(nil);
@@ -204,7 +204,7 @@ RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
 {
     [self hotUpdate:HotUpdateTypePatchFromPpk options:options callback:^(NSError *error) {
         if (error) {
-            [reject error];
+            reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
         }
         else {
             resolve(nil);
