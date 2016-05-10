@@ -10,7 +10,7 @@
 首先参考[文档-在设备上运行](http://reactnative.cn/docs/running-on-device-ios.html#content)，
 确定你正在使用离线包。然后点击菜单。
 
-按照正常的发布流程打包`.ipa`文件(Product-Achieve)，然后运行如下命令
+按照正常的发布流程打包`.ipa`文件(Xcode中运行设备选真机或Generic iOS Device，然后菜单中选择Product-Archive)，然后运行如下命令
 
 ```bash
 $ pushy uploadIpa <your-package.ipa>
