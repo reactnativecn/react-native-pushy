@@ -57,8 +57,11 @@ downloadUpdate的返回值是一个hash字符串，它是当前版本的唯一�
 
 ```javascript
 import React, {
-  AppRegistry,
   Component,
+} from 'react';
+
+import {
+  AppRegistry,
   StyleSheet,
   Platform,
   Text,
