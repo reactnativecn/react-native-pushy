@@ -360,6 +360,9 @@ export const commands = {
       /local-cli/,
     ]);
 
+    // This line fix issue #11
+    require(path.resolve('node_modules/react-native/local-cli/cli'));
+
     const Config = require(path.resolve('node_modules/react-native/local-cli/util/Config'));
     const bundle = require(path.resolve('node_modules/react-native/local-cli/bundle/bundle'));
     const defaultConfig = require(path.resolve('node_modules/react-native/local-cli/default.config'));
