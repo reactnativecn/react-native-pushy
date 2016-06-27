@@ -21,6 +21,14 @@ $ rnpm link react-native-update
 
 * 注意 *
 
+如果你的react-native版本小于或等于0.26，第二句请修改为
+
+```bash
+$ npm install --save react-native-update@1.0.x
+```
+
+* 注意 *
+
 如果访问极慢或者显示网络失败，请使用淘宝镜像：  
 ```bash
 npm config set registry https://registry.npm.taobao.org --global

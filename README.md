@@ -2,6 +2,10 @@
 
 本组件是面向React Native提供热更新功能的组件，建议结合[Update服务](http://update.reactnative.cn/)使用。
 
+### 公告
+
+因为React Native调整了okhttp的依赖，对于0.27以上版本的React Native，请安装1.1.x版本，对于0.26及以前版本，请安装1.0.x版本。
+
 ### 优势
 
 1. 命令行工具&网页双端管理，版本发布过程简单便捷，完全可以集成CI。
