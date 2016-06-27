@@ -20,7 +20,7 @@ static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
 static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
-static NSString *const keyFirstLoadLoadMarked = @"REACTNATIVECN_HOTUPDATE_FIRSTLOADMARKED_KEY";
+static NSString *const keyFirstLoadMarked = @"REACTNATIVECN_HOTUPDATE_FIRSTLOADMARKED_KEY";
 static NSString *const keyRolledBackMarked = @"REACTNATIVECN_HOTUPDATE_ROLLEDBACKMARKED_KEY";
 static NSString *const KeyPackageUpdatedMarked = @"REACTNATIVECN_HOTUPDATE_ISPACKAGEUPDATEDMARKED_KEY";
 
@@ -85,7 +85,7 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
             BOOL isFirstLoadOK = [updateInfo[paramIsFirstLoadOk] boolValue];
             
             NSString *loadVersioin = curVersion;
-            BOOL needRollback = (isFirstTime == NO && isFirstLoadOK == NO) || (loadVersioin.length<=0 && lastVersion.length>0);
+            BOOL needRollback = (isFirstTime == NO && isFirstLoadOK == NO) || loadVersioin.length<=0;
             if (needRollback) {
                 loadVersioin = lastVersion;
                 
@@ -109,7 +109,7 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
                 NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] initWithDictionary:updateInfo];
                 newInfo[paramIsFirstTime] = @(NO);
                 [defaults setObject:newInfo forKey:keyUpdateInfo];
-                [defaults setObject:@(YES) forKey:keyFirstLoadLoadMarked];
+                [defaults setObject:@(YES) forKey:keyFirstLoadMarked];
                 [defaults synchronize];
             }
             
@@ -136,13 +136,13 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     ret[@"downloadRootDir"] = [RCTHotUpdate downloadDir];
     ret[@"packageVersion"] = [RCTHotUpdate packageVersion];
     ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
-    ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadLoadMarked];
+    ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadMarked];
     NSDictionary *updateInfo = [defaults dictionaryForKey:keyUpdateInfo];
     ret[@"currentVersion"] = [updateInfo objectForKey:paramCurrentVersion];
     
-    // clear isFirstTime
-    if ([[defaults objectForKey:keyFirstLoadLoadMarked] boolValue]) {
-        [defaults setObject:nil forKey:keyFirstLoadLoadMarked];
+    // clear isFirstTimemarked
+    if ([[defaults objectForKey:keyFirstLoadMarked] boolValue]) {
+        [defaults setObject:nil forKey:keyFirstLoadMarked];
     }
     
     // clear rolledbackmark
