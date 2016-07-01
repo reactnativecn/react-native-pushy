@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "react-native hot update",
   "main": "lib/index.js",
   "scripts": {
@@ -39,7 +39,7 @@
     "request": "^2.69.0",
     "rimraf": "^2.5.2",
     "yauzl": "^2.4.1",
-    "yazl": "^2.3.0"
+    "yazl": "2.3.0"
   },
   "devDependencies": {
     "babel-cli": "^6.5.1",
