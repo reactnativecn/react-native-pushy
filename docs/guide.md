@@ -71,7 +71,7 @@ npm config set disturl https://npm.taobao.org/dist --global
 
 ## 配置Bundle URL(Android)
 
-`0.29及以后版本`：在你的MainApplication中增加一下代码：
+`0.29及以后版本`：在你的MainApplication中增加如下代码：
 
 ```java
 // ... 其它代码
