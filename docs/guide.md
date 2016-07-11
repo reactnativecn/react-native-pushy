@@ -82,7 +82,7 @@ public class MainApplication extends Application implements ReactApplication {
   private final ReactNativeHost mReactNativeHost = new ReactNativeHost(this) {
     @Override
     protected String getJSBundleFile() {
-        return UpdateContext.getBundleUrl(this);
+        return UpdateContext.getBundleUrl(MainApplication.this);
     }
     // ... 其它代码
   }
