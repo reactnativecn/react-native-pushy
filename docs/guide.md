@@ -71,7 +71,25 @@ npm config set disturl https://npm.taobao.org/dist --global
 
 ## 配置Bundle URL(Android)
 
-在你的ReactActivity中增加如下代码：
+`0.29及以后版本`：在你的MainApplication中增加一下代码：
+
+```java
+// ... 其它代码
+
+import cn.reactnative.modules.update.UpdateContext;
+public class MainApplication extends Application implements ReactApplication {
+
+  private final ReactNativeHost mReactNativeHost = new ReactNativeHost(this) {
+    @Override
+    protected String getJSBundleFile() {
+        return UpdateContext.getBundleUrl(this);
+    }
+    // ... 其它代码
+  }
+}
+```
+
+`0.28及以前版本`：在你的MainActivity中增加如下代码：
 
 ```java
 // ... 其它代码
