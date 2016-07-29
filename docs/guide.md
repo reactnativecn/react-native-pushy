@@ -24,7 +24,7 @@ $ rnpm link react-native-update
 如果你的react-native版本小于或等于0.26，第二句请修改为
 
 ```bash
-$ npm install --save react-native-update@1.0.x
+$ npm install --save --save-exact react-native-update@1.0.x
 ```
 
 * 注意 *
@@ -71,7 +71,25 @@ npm config set disturl https://npm.taobao.org/dist --global
 
 ## 配置Bundle URL(Android)
 
-在你的ReactActivity中增加如下代码：
+`0.29及以后版本`：在你的MainApplication中增加如下代码：
+
+```java
+// ... 其它代码
+
+import cn.reactnative.modules.update.UpdateContext;
+public class MainApplication extends Application implements ReactApplication {
+
+  private final ReactNativeHost mReactNativeHost = new ReactNativeHost(this) {
+    @Override
+    protected String getJSBundleFile() {
+        return UpdateContext.getBundleUrl(MainApplication.this);
+    }
+    // ... 其它代码
+  }
+}
+```
+
+`0.28及以前版本`：在你的MainActivity中增加如下代码：
 
 ```java
 // ... 其它代码
