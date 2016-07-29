@@ -5,7 +5,7 @@
 检查更新时必须提供你的`appKey`，这个值保存在`update.json`中，并且根据平台不同而不同。你可以用如下的代码获取：
 
 ```javascript
-import React, {
+import {
   Platform,
 } from 'react-native';
 
