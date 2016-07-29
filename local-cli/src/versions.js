@@ -86,7 +86,7 @@ export const commands = {
       description: description || await question('Enter description:'),
       metaInfo: metaInfo || await question('Enter meta info:'),
     });
-    console.log('Ok.');
+    console.log(`Version published: ${id}`);
 
     const v = await question('Would you like to bind packages to this version?(Y/N)');
     if (v.toLowerCase() === 'y') {

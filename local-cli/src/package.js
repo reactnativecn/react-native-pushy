@@ -52,11 +52,11 @@ export const commands = {
 
     const {hash} = await uploadFile(fn);
 
-    await post(`/app/${appId}/package/create`, {
+    const {id} = await post(`/app/${appId}/package/create`, {
       name,
       hash,
     });
-    console.log('Ok.');
+    console.log('Ipa uploaded: id');
   },
   uploadApk: async function({args}) {
     const fn = args[0];
@@ -68,11 +68,11 @@ export const commands = {
 
     const {hash} = await uploadFile(fn);
 
-    await post(`/app/${appId}/package/create`, {
+    const {id} = await post(`/app/${appId}/package/create`, {
       name,
       hash,
     });
-    console.log('Ok.');
+    console.log('Apk uploaded: id');
   },
   packages: async function({options}) {
     const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));

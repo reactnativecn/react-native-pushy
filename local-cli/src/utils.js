@@ -10,6 +10,9 @@ import ipaMetadata from 'ipa-metadata';
 var read = require('read');
 
 export function question(query, password) {
+  if (NO_INTERACTIVE){
+    return Promise.resolve('');
+  }
   return new Promise((resolve, reject)=>read({
     prompt: query,
     silent: password,

@@ -89,7 +89,6 @@ export const commands = {
   },
   selectApp: async function({args, options}) {
     const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
-    checkPlatform(platform || await question('Platform(ios/android):'));
     const id = args[0] || (await chooseApp(platform)).id;
 
     let updateInfo = {};

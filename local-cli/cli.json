@@ -150,6 +150,8 @@
     }
   },
   "globalOptions":{
-
+    "no-interactive": {
+      "default": false
+    }
   }
 }
