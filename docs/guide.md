@@ -24,7 +24,7 @@ $ rnpm link react-native-update
 如果你的react-native版本小于或等于0.26，第二句请修改为
 
 ```bash
-$ npm install --save react-native-update@1.0.x
+$ npm install --save --save-exact react-native-update@1.0.x
 ```
 
 * 注意 *
