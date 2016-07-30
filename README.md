@@ -4,7 +4,7 @@
 
 ### 公告
 
-因为React Native调整了okhttp的依赖，对于0.27以上版本的React Native，请安装1.1.x版本，对于0.26及以前版本，请安装1.0.x版本。
+因为React Native调整了okhttp的依赖，对于0.26及以前版本，请指定安装1.0.x版本。
 
 ### 优势
 
