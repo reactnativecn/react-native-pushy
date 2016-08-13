@@ -33,7 +33,7 @@ exports.run = function () {
         console.log('Not loggined.\nRun `pushy login` at your project directory to login.');
         return;
       }
-      console.error(err.message);
+      console.error(err.stack);
       process.exit(-1);
     });
 };

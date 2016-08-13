@@ -365,22 +365,40 @@ export const commands = {
 
     const Config = require(path.resolve('node_modules/react-native/local-cli/util/Config'));
     const bundle = require(path.resolve('node_modules/react-native/local-cli/bundle/bundle'));
-    const defaultConfig = require(path.resolve('node_modules/react-native/local-cli/default.config'));
+    const defaultConfig =
+      Config.get(path.resolve('node_modules/react-native/local-cli'),
+        require(path.resolve('node_modules/react-native/local-cli/default.config'))
+      );
 
-    await bundle([
-      '--entry-file',
-      entryFile,
-      '--platform',
-      platform,
-      '--dev',
-      '' + !!dev,
-      '--bundle-output',
-      `${realIntermedia}${path.sep}index.bundlejs`,
-      '--assets-dest',
-      `${realIntermedia}`,
-      '--verbose',
-      '' + !!verbose,
-    ], Config.get(path.resolve('node_modules/react-native/local-cli'), defaultConfig));
+    if (bundle.func) {
+      // React native after 0.31.0
+      await bundle.func([], defaultConfig, {
+        entryFile : entryFile,
+        platform: platform,
+        dev: !!dev,
+        bundleOutput: `${realIntermedia}${path.sep}index.bundlejs`,
+        assetsDest: `${realIntermedia}`,
+        verbose: !!verbose,
+        transformer: require.resolve('react-native/packager/transformer'),
+        bundleEncoding: 'utf8',
+      });
+    } else {
+      // React native before 0.30.0
+      await bundle([
+        '--entry-file',
+        entryFile,
+        '--platform',
+        platform,
+        '--dev',
+        '' + !!dev,
+        '--bundle-output',
+        `${realIntermedia}${path.sep}index.bundlejs`,
+        '--assets-dest',
+        `${realIntermedia}`,
+        '--verbose',
+        '' + !!verbose,
+      ], defaultConfig);
+    }
 
     console.log('Packing');
 
