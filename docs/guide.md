@@ -11,21 +11,36 @@
 ## 安装
 
 在你的项目根目录下运行以下命令(不要输入开头的美元符号)：
+
+RN 0.29及以上:
+
+```bash
+$ npm install -g react-native-update-cli
+$ npm install --save react-native-update
+$ react-native link react-native-update
+```  
+
+`npm install -g react-native-update-cli`这一句在每一台电脑上仅需运行一次。
+
+RN 0.27-0.28:
+
 ```bash
 $ npm install -g react-native-update-cli rnpm
-$ npm install --save react-native-update
+$ npm install --save react-native-update@2.x
 $ rnpm link react-native-update
-```  
+```
 
 `npm install -g react-native-update-cli rnpm`这一句在每一台电脑上仅需运行一次。
 
-* 注意 *
-
-如果你的react-native版本小于或等于0.26，第二句请修改为
+RN 0.26及以下:
 
 ```bash
+$ npm install -g react-native-update-cli rnpm
 $ npm install --save --save-exact react-native-update@1.0.x
+$ rnpm link react-native-update
 ```
+
+`npm install -g react-native-update-cli rnpm`这一句在每一台电脑上仅需运行一次。
 
 * 注意 *
 
@@ -41,7 +56,31 @@ npm config set disturl https://npm.taobao.org/dist --global
 
 2、如果使用VS2015，你需要设置`npm config set msvs_version 2015 --global`
 
+## 手动安装
 
+如果第一步已成功(iOS工程和安卓工程均能看到依赖),可以跳过此步骤
+
+#### iOS
+
+1. 在XCode中的Project Navigator里,右键点击`Libraries` ➜ `Add Files to [你的工程名]`
+2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTHotUpdate.xcodeproj`
+3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTHotUpdate.a` 
+4. Run your project (`Cmd+R`)<
+
+#### Android
+
+1. 在`android/settings.gradle`中添加如下代码:
+  	```
+  	include ':react-native-update'
+  	project(':react-native-update').projectDir = new File(rootProject.projectDir, 	'../node_modules/react-native-update/android')
+  	```
+2. 在`android/app/build.gradle`的 dependencies 部分增加如下代码:
+  	```
+      compile project(':react-native-update')
+    ```
+3. 检查你的RN版本,如果是0.29及以上, 打开`android/app/src/main/java/[...]/MainApplication.java`,否则打开`android/app/src/main/java/[...]/MainActivity.java`
+  - 在文件开头增加 `import cn.reactnative.modules.update.UpdatePackage;`
+  - 在`getPackages()` 方法中增加 `new UpdatePackage()`(注意上一行可能要增加一个逗号)
 
 ## 配置Bundle URL(iOS)
 

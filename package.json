@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "2.1.0",
+  "version": "3.0.1",
   "description": "react-native hot update",
   "main": "lib/index.js",
   "scripts": {
@@ -38,7 +38,7 @@
     "read": "^1.0.7",
     "request": "^2.69.0",
     "rimraf": "^2.5.2",
-    "yauzl": "^2.4.1",
+    "yauzl": "2.4.1",
     "yazl": "2.3.0"
   },
   "devDependencies": {

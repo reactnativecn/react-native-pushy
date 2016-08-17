@@ -56,7 +56,7 @@ export const commands = {
       name,
       hash,
     });
-    console.log('Ipa uploaded: id');
+    console.log(`Ipa uploaded: ${id}`);
   },
   uploadApk: async function({args}) {
     const fn = args[0];
@@ -72,7 +72,7 @@ export const commands = {
       name,
       hash,
     });
-    console.log('Apk uploaded: id');
+    console.log(`Apk uploaded: ${id}`);
   },
   packages: async function({options}) {
     const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
