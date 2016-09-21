@@ -50,11 +50,6 @@ npm config set registry https://registry.npm.taobao.org --global
 npm config set disturl https://npm.taobao.org/dist --global
 ```
 
-* Windows平台请注意 *
-
-1、你必须安装python 2.7以及一套C++环境（推荐VS2013或VS2015，VS2010及以前版本不可用）
-
-2、如果使用VS2015，你需要设置`npm config set msvs_version 2015 --global`
 
 ## 手动安装
 
@@ -64,8 +59,8 @@ npm config set disturl https://npm.taobao.org/dist --global
 
 1. 在XCode中的Project Navigator里,右键点击`Libraries` ➜ `Add Files to [你的工程名]`
 2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTHotUpdate.xcodeproj`
-3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTHotUpdate.a` 
-4. Run your project (`Cmd+R`)<
+3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTHotUpdate.a`
+4. Run your project (`Cmd+R`)
 
 #### Android
 
@@ -83,8 +78,6 @@ npm config set disturl https://npm.taobao.org/dist --global
   - 在`getPackages()` 方法中增加 `new UpdatePackage()`(注意上一行可能要增加一个逗号)
 
 ## 配置Bundle URL(iOS)
-
-// 文档建设中 
 
 在工程target的Build Phases->Link Binary with Libraries中加入libz.tbd、libbz2.1.0.tbd
 
@@ -144,6 +137,23 @@ public class MainActivity extends ReactActivity {
     // ... 其它代码
 }
 ```
+
+## iOS的ATS例外配置
+从iOS9开始，苹果要求以白名单的形式在Info.plist中列出外部的非https接口，以督促开发者部署https协议。在我们的服务部署https协议之前，请在Info.plist中添加如下例外（右键点击Info.plist，选择open as - source code）：
+```xml
+<key>NSAppTransportSecurity</key>
+<dict>
+    <key>NSExceptionDomains</key>
+    <dict>
+        <key>reactnative.cn</key>
+        <dict>
+            <key>NSIncludesSubdomains</key>
+            <true/>
+        </dict>
+   </dict>
+</dict>
+```
+
 
 ## 登录与创建应用
 

@@ -12,10 +12,20 @@ import {
 import * as fs from 'fs';
 import {ZipFile} from 'yazl';
 import {open as openZipFile} from 'yauzl';
-import {diff} from 'node-bsdiff';
+// import {diff} from 'node-bsdiff';
 import { question } from './utils';
 import {checkPlatform} from './app';
 import crypto from 'crypto';
+
+var diff;
+try {
+  diff = require('node-bsdiff');
+} catch(e) {
+  diff = function() {
+    console.warn('This function needs "node-bsdiff". Please run "npm i node-bsdiff -S" from your project directory first!');
+    throw new Error('This function needs module "node-bsdiff". Please install it first.')
+  }
+}
 
 function mkdir(dir){
   return new Promise((resolve, reject) => {
@@ -106,7 +116,7 @@ function basename(fn) {
   return m && m[1];
 }
 
-async function diffWithPPK(origin, next, output) {
+async function diffFromPPK(origin, next, output) {
   await mkdir(path.dirname(output));
 
   const originEntries = {};
@@ -223,7 +233,7 @@ async function diffWithPPK(origin, next, output) {
   await writePromise;
 }
 
-async function diffWithPackage(origin, next, output, originBundleName, transformPackagePath = v=>v) {
+async function diffFromPackage(origin, next, output, originBundleName, transformPackagePath = v=>v) {
   await mkdir(path.dirname(output));
 
   const originEntries = {};
@@ -425,11 +435,11 @@ export const commands = {
     const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
 
     if (!origin || !next) {
-      console.error('pushy diffWithApk <origin> <next>');
+      console.error('pushy diff <origin> <next>');
       process.exit(1);
     }
 
-    await diffWithPPK(origin, next, realOutput, 'index.bundlejs');
+    await diffFromPPK(origin, next, realOutput, 'index.bundlejs');
     console.log(`${realOutput} generated.`);
   },
 
@@ -440,11 +450,11 @@ export const commands = {
     const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
 
     if (!origin || !next) {
-      console.error('pushy diffWithApk <origin> <next>');
+      console.error('pushy diffFromApk <origin> <next>');
       process.exit(1);
     }
 
-    await diffWithPackage(origin, next, realOutput, 'assets/index.android.bundle');
+    await diffFromPackage(origin, next, realOutput, 'assets/index.android.bundle');
     console.log(`${realOutput} generated.`);
   },
 
@@ -455,11 +465,11 @@ export const commands = {
     const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
 
     if (!origin || !next) {
-      console.error('pushy diffWithIpa <origin> <next>');
+      console.error('pushy diffFromIpa <origin> <next>');
       process.exit(1);
     }
 
-    await diffWithPackage(origin, next, realOutput, 'main.jsbundle', v=>{
+    await diffFromPackage(origin, next, realOutput, 'main.jsbundle', v=>{
       const m = /^Payload\/[^/]+\/(.+)$/.exec(v);
       return m && m[1];
     });

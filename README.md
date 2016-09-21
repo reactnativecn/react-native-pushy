@@ -6,7 +6,7 @@
 
 因为React Native调整了okhttp的依赖，对于0.26及以前版本，请指定安装1.0.x版本。
 
-0.31开始React Native调整了bundle的传参,因此需要更新本插件到2.1.0
+0.31开始React Native调整了bundle的传参,因此需要更新本插件到2.1.0或更高版本。
 
 ### 优势
 
