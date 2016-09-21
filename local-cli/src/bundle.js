@@ -365,10 +365,16 @@ export const commands = {
 
     const Config = require(path.resolve('node_modules/react-native/local-cli/util/Config'));
     const bundle = require(path.resolve('node_modules/react-native/local-cli/bundle/bundle'));
-    const defaultConfig =
-      Config.get(path.resolve('node_modules/react-native/local-cli'),
-        require(path.resolve('node_modules/react-native/local-cli/default.config'))
-      );
+    let defaultConfig;
+
+    if (major >= 0 && minor >= 33) {
+      defaultConfig= Config.get(
+        path.resolve('node_modules/react-native/local-cli'),
+        require(path.resolve('node_modules/react-native/local-cli/default.config')),
+        path.resolve('node_modules/react-native/packager/rn-cli.config.js'));
+    } else {
+      defaultConfig= Config.get(path.resolve('node_modules/react-native/local-cli'), require(path.resolve('node_modules/react-native/local-cli/default.config')));
+    }
 
     if (bundle.func) {
       // React native after 0.31.0
