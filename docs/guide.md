@@ -149,7 +149,7 @@ public class MainActivity extends ReactActivity {
         <dict>
             <key>NSIncludesSubdomains</key>
             <true/>
-            <key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
+            <key>NSExceptionAllowsInsecureHTTPLoads</key>
             <true/>
         </dict>
    </dict>
