@@ -100,6 +100,9 @@ function readEntire(entry, zipFile) {
         end() {
           resolve(Buffer.concat(buffers));
         },
+        prependListener() {
+
+        },
         on() {
         },
         once() {
@@ -155,7 +158,7 @@ async function diffFromPPK(origin, next, output) {
 
   function addEntry(fn) {
     //console.log(fn);
-    if (addedEntry[fn]) {
+    if (!fn || addedEntry[fn]) {
       return;
     }
     const base = basename(fn);
