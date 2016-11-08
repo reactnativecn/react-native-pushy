@@ -34,6 +34,10 @@ static int bz2_read(const struct bspatch_stream* stream, void* buffer, int lengt
     int bz2err;
     bz_stream* zip;
 
+    if (length == 0) {
+      return 0;
+    }
+
     zip = (bz_stream*)stream->opaque;
     zip->next_out = (char*)buffer;
     zip->avail_out = length;
