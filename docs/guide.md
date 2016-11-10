@@ -159,7 +159,7 @@ public class MainActivity extends ReactActivity {
 
 ## 登录与创建应用
 
-在你的项目根目录下运行以下命令：
+首先请在<http://update.reactnative.cn>注册帐号，然后在你的项目根目录下运行以下命令：
 
 ```bash
 $ pushy login
