@@ -19,7 +19,8 @@ import crypto from 'crypto';
 
 var diff;
 try {
-  diff = require('node-bsdiff');
+  var bsdiff = require('node-bsdiff');
+  diff = typeof bsdiff != 'function' ? bsdiff.diff : bsdiff;
 } catch(e) {
   diff = function() {
     console.warn('This function needs "node-bsdiff". Please run "npm i node-bsdiff -S" from your project directory first!');
