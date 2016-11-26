@@ -10,50 +10,44 @@
 
 ## 安装
 
-在你的项目根目录下运行以下命令(不要输入开头的美元符号)：
-
-RN 0.29及以上:
+在你的项目根目录下运行以下命令：
 
 ```bash
-$ npm install -g react-native-update-cli
-$ npm install --save react-native-update
-$ react-native link react-native-update
+npm install -g react-native-update-cli rnpm
+npm install --save react-native-update@具体版本请看下面的表格
+react-native link react-native-update
 ```  
 
-`npm install -g react-native-update-cli`这一句在每一台电脑上仅需运行一次。
-
-RN 0.27-0.28:
-
-```bash
-$ npm install -g react-native-update-cli rnpm
-$ npm install --save react-native-update@2.x
-$ rnpm link react-native-update
-```
-
-`npm install -g react-native-update-cli rnpm`这一句在每一台电脑上仅需运行一次。
-
-RN 0.26及以下:
-
-```bash
-$ npm install -g react-native-update-cli rnpm
-$ npm install --save --save-exact react-native-update@1.0.x
-$ rnpm link react-native-update
-```
-
-`npm install -g react-native-update-cli rnpm`这一句在每一台电脑上仅需运行一次。
+`npm install -g react-native-update-cli rnpm`这一句在每一台电脑上仅需运行一次。  
+如果RN版本低于0.29，请使用`rnpm link`代替`react-native link`命令。
 
 * 注意 *
 
-如果访问极慢或者显示网络失败，请使用淘宝镜像：  
+如果访问极慢或者显示网络失败，请设置使用淘宝镜像（也仅需设置一次）：  
 ```bash
 npm config set registry https://registry.npm.taobao.org --global
 npm config set disturl https://npm.taobao.org/dist --global
 ```
 
+### 版本
 
-## 手动安装
+因为React Native不同版本代码结构不同，因而请按下面表格对号入座：
 
-如果第一步已成功(iOS工程和安卓工程均能看到依赖),可以跳过此步骤
+React Native版本  | react-native-update版本
+------------- | -------------
+<= 0.26       |   1.0.x
+0.27 - 0.28   |   2.x
+0.29 - 0.33   |   3.x
+>= 0.34       |   4.x
+
+安装命令示例：
+```
+npm install --save react-native-update@3.x
+```
+
+## 手动link
+
+如果第一步的`react-native link`已成功(iOS工程和安卓工程均能看到依赖)，可以跳过此步骤
 
 #### iOS
 
