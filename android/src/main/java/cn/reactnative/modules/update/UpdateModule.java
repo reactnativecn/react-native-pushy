@@ -125,7 +125,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
                     ReactInstanceManager instanceManager = ((ReactApplication) application).getReactNativeHost().getReactInstanceManager();
 
                     if (instanceManager.getClass().getSimpleName().equals("XReactInstanceManagerImpl")) {
-                        JSBundleLoader loader = JSBundleLoader.createFileLoader(application, UpdateContext.getBundleUrl(application));
+                        JSBundleLoader loader = JSBundleLoader.createFileLoader(UpdateContext.getBundleUrl(application));
                         Field jsBundleField = instanceManager.getClass().getDeclaredField("mBundleLoader");
                         jsBundleField.setAccessible(true);
                         jsBundleField.set(instanceManager, loader);

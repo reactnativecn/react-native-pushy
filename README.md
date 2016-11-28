@@ -2,11 +2,17 @@
 
 本组件是面向React Native提供热更新功能的组件，建议结合[Update服务](http://update.reactnative.cn/)使用。
 
-### 公告
+### 版本
 
-因为React Native调整了okhttp的依赖，对于0.26及以前版本，请指定安装1.0.x版本。
+因为React Native不同版本代码结构不同，因而请按下面表格对号入座：
 
-0.31开始React Native调整了bundle的传参,因此需要更新本插件到2.1.0或更高版本。
+React Native版本  | react-native-update版本
+------------- | -------------
+<= 0.26       |   1.0.x
+0.27 - 0.28   |   2.x
+0.29 - 0.33   |   3.x
+>= 0.34       |   4.x
+
 
 ### 优势
 
