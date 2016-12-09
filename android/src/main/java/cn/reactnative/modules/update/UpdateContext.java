@@ -105,7 +105,7 @@ public class UpdateContext {
         SharedPreferences.Editor editor = sp.edit();
         editor.putString("currentVersion", hashName);
         if (lastVersion != null) {
-            editor.putString("lastVersion", hashName);
+            editor.putString("lastVersion", lastVersion);
         }
         editor.putBoolean("firstTime", true);
         editor.putBoolean("firstTimeOk", false);
