@@ -55,7 +55,8 @@ npm install --save react-native-update@3.x
 1. 在XCode中的Project Navigator里,右键点击`Libraries` ➜ `Add Files to [你的工程名]`
 2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTHotUpdate.xcodeproj`
 3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTHotUpdate.a`
-4. Run your project (`Cmd+R`)
+4.
+5. Run your project (`Cmd+R`)
 
 #### Android
 
