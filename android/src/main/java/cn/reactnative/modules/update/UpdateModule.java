@@ -124,15 +124,15 @@ public class UpdateModule extends ReactContextBaseJavaModule{
                     Application application = activity.getApplication();
                     ReactInstanceManager instanceManager = ((ReactApplication) application).getReactNativeHost().getReactInstanceManager();
 
-                    if (instanceManager.getClass().getSimpleName().equals("XReactInstanceManagerImpl")) {
-                        JSBundleLoader loader = JSBundleLoader.createFileLoader(UpdateContext.getBundleUrl(application));
-                        Field jsBundleField = instanceManager.getClass().getDeclaredField("mBundleLoader");
-                        jsBundleField.setAccessible(true);
-                        jsBundleField.set(instanceManager, loader);
-                    } else {
+                    try {
                         Field jsBundleField = instanceManager.getClass().getDeclaredField("mJSBundleFile");
                         jsBundleField.setAccessible(true);
                         jsBundleField.set(instanceManager, UpdateContext.getBundleUrl(application));
+                    } catch (Throwable err) {
+                        JSBundleLoader loader = JSBundleLoader.createFileLoader(UpdateContext.getBundleUrl(application));
+                        Field loadField = instanceManager.getClass().getDeclaredField("mBundleLoader");
+                        loadField.setAccessible(true);
+                        loadField.set(instanceManager, loader);
                     }
 
                     final Method recreateMethod = instanceManager.getClass().getMethod("recreateReactContextInBackground");
