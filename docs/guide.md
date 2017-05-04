@@ -38,8 +38,7 @@ React Native版本  | react-native-update版本
 <= 0.26       |   1.0.x
 0.27 - 0.28   |   2.x
 0.29 - 0.33   |   3.x
-0.34 - 0.39   |   4.x
-0.40          |   暂不支持 
+0.34 - 当前   |   4.x
 
 安装命令示例：
 ```
@@ -55,7 +54,8 @@ npm install --save react-native-update@3.x
 1. 在XCode中的Project Navigator里,右键点击`Libraries` ➜ `Add Files to [你的工程名]`
 2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTHotUpdate.xcodeproj`
 3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTHotUpdate.a`
-4. Run your project (`Cmd+R`)
+4. 继续在`Build Settings`里搜索`Header Search Path`，添加$(SRCROOT)/../node_modules/react-native-update/ios
+5. Run your project (`Cmd+R`)
 
 #### Android
 

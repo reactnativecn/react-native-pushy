@@ -6,22 +6,18 @@
 //  Copyright © 2016 erica. All rights reserved.
 //
 
-#if __has_include(<React/RCTBridge.h>)
-#import <React/RCTHotUpdate.h>
-#import <React/RCTHotUpdateDownloader.h>
-#import "React/RCTEventDispatcher.h"
-#import <React/RCTConvert.h>
-#import <React/RCTHotUpdateManager.h>
-#import <React/RCTLog.h>
-#else
-
 #import "RCTHotUpdate.h"
 #import "RCTHotUpdateDownloader.h"
+#import "RCTHotUpdateManager.h"
+
+#if __has_include(<React/RCTBridge.h>)
+#import "React/RCTEventDispatcher.h"
+#import <React/RCTConvert.h>
+#import <React/RCTLog.h>
+#else
 #import "RCTEventDispatcher.h"
 #import "RCTConvert.h"
-#import "RCTHotUpdateManager.h"
 #import "RCTLog.h"
-
 #endif
 
 //
