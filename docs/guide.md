@@ -6,20 +6,19 @@
 
 所以我们也假设你已经拥有了开发React Native应用的一切环境，包括`Node.js`、`npm`、`XCode`、`Android SDK`等等。
 
-如果你之前没安装过，你还必须安装[Android NDK](http://androiddevtools.cn)，并设置环境变量`ANDROID_NDK_HOME`，指向你的NDK根目录(例如`/Users/tdzl2003/Downloads/android-ndk-r10e`)。
+如果你之前没安装过，你还必须安装[Android NDK](http://androiddevtools.cn)，版本最好选用r10e，并设置环境变量`ANDROID_NDK_HOME`，指向你的NDK根目录(例如`/Users/tdzl2003/Downloads/android-ndk-r10e`)。
 
 ## 安装
 
 在你的项目根目录下运行以下命令：
 
 ```bash
-npm install -g react-native-update-cli rnpm
+npm install -g react-native-update-cli
 npm install --save react-native-update@具体版本请看下面的表格
 react-native link react-native-update
 ```  
 
-`npm install -g react-native-update-cli rnpm`这一句在每一台电脑上仅需运行一次。  
-如果RN版本低于0.29，请使用`rnpm link`代替`react-native link`命令。
+`npm install -g react-native-update-cli`这一句在每一台电脑上仅需运行一次。  
 
 * 注意 *
 
@@ -38,8 +37,9 @@ React Native版本  | react-native-update版本
 <= 0.26       |   1.0.x
 0.27 - 0.28   |   2.x
 0.29 - 0.33   |   3.x
-0.34 - 当前   |   4.x
-
+0.34 - 0.44   |   4.x
+0.45          |   尚不支持
+ 
 安装命令示例：
 ```
 npm install --save react-native-update@3.x
