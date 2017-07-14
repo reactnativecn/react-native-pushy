@@ -37,9 +37,10 @@ React Native版本  | react-native-update版本
 <= 0.26       |   1.0.x
 0.27 - 0.28   |   2.x
 0.29 - 0.33   |   3.x
-0.34 - 0.44   |   4.x
-0.45          |   尚不支持
- 
+0.34 - 0.44   |  4.x
+0.45          |  尚不支持
+
+
 安装命令示例：
 ```
 npm install --save react-native-update@3.x
