@@ -1,6 +1,6 @@
 {
   "name": "@cqingwang/react-native-update",
-  "version": "14.0.5",
+  "version": "14.0.6",
   "description": "react-native hot update",
   "main": "lib/index.js",
   "scripts": {

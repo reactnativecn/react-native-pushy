@@ -4,7 +4,7 @@ version = JSON.parse(File.read('package.json'))["version"]
 
 Pod::Spec.new do |s|
 
-  s.name           = "react-native-pushy"
+  s.name           = "pushy"
   s.version        = version
   s.summary        = "React Native Hot Update"
   s.homepage       = "https://github.com/cqingwang/react-native-pushy"
