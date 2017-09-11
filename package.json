@@ -1,5 +1,5 @@
 {
-  "name": "react-native-update",
+  "name": "@cqingwang/react-native-update",
   "version": "14.0.5",
   "description": "react-native hot update",
   "main": "lib/index.js",
