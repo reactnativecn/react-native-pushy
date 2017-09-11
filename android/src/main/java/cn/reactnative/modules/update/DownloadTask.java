@@ -68,6 +68,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
     private void downloadFile(String url, File writePath) throws IOException {
         OkHttpClient client = new OkHttpClient();
         Request request = new Request.Builder().url(url)
+                .addHeader("Accept-Encoding", "identity")
                 .build();
         Response response = client.newCall(request).execute();
         if (response.code() > 299) {

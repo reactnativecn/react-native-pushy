@@ -431,12 +431,12 @@ export const commands = {
 
     await pack(realIntermedia, realOutput);
 
-    const v = await question('Would you like to publish it?(Y/N)');
-    if (v.toLowerCase() === 'y') {
-      await this.publish({args: [realOutput], options: {
-        platform,
-      }})
-    }
+    // const v = await question('Would you like to publish it?(Y/N)');
+    // if (v.toLowerCase() === 'y') {
+    //   await this.publish({args: [realOutput], options: {
+    //     platform,
+    //   }})
+    // }
   },
 
   async diff({args, options}) {
