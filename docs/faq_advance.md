@@ -1,8 +1,19 @@
 ## 常见问题
 
-#### 0.27以上版本RN报错问题
+#### 报错 NDK not configured.
 
-升级到1.1.x即可解决。
+你需要下载并安装NDK，然后设置到环境变量`ANDROID_NDK_HOME`中。
+
+#### 报错 Execution failed for task ':react-native-update:compileReleaseNdk'
+参看 https://github.com/reactnativecn/react-native-pushy/issues/64#issuecomment-287967742
+ 
+#### iOS报错 Unable to execute JS call: __fbBatchedBridge is undefined
+
+如果直接修改了jsCodeLocation，将不能在iOS模拟器上运行。可以使用真机测试。要在发布之前测试热更新功能，可以用adhoc方式发布测试包并进行测试。adhoc发布的包可以用于uploadIpa和生成差异包。
+
+#### XCode报错 "_BZ2_bzRead", referenced from 等
+
+在工程target的Build Phases->Link Binary with Libraries中加入libz.tbd、libbz2.1.0.tbd
 
 ## 高级指南
 
@@ -41,20 +52,6 @@
 
 这时候,我们可以在元信息中包含有问题的版本的列表，而在客户端检查更新时，将从元信息里取到的列表与当前版本(currentVersion)比对，
 如果匹配成功，我们就进行静默更新，否则则按照一般的更新流程提示用户。
-
-## 常见问题
-
-#### 报错 NDK not configured.
-
-你需要下载并安装NDK，然后设置到环境变量`ANDROID_NDK_HOME`中。
-
-#### iOS报错 Unable to execute JS call: __fbBatchedBridge is undefined
-
-如果直接修改了jsCodeLocation，将不能在iOS模拟器上运行。可以使用真机测试。要在发布之前测试热更新功能，可以用adhoc方式发布测试包并进行测试。adhoc发布的包可以用于uploadIpa和生成差异包。
-
-#### XCode报错 "_BZ2_bzRead", referenced from 等
-
-在工程target的Build Phases->Link Binary with Libraries中加入libz.tbd、libbz2.1.0.tbd
 
 #### 这个热更新服务收费吗？
 
