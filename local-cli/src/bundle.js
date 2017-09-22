@@ -369,10 +369,14 @@ export const commands = {
     await rmdir(realIntermedia);
     await mkdir(realIntermedia);
 
-    require(path.resolve('node_modules/react-native/packager/babelRegisterOnly'))([
-      /private-cli\/src/,
-      /local-cli/,
-    ]);
+    try {
+      require(path.resolve('node_modules/react-native/packager/babelRegisterOnly'))([
+        /private-cli\/src/,
+        /local-cli/,
+      ]);
+    } catch (err) {
+      require('metro-bundler/src/babelRegisterOnly');
+    }
 
     // This line fix issue #11
     require(path.resolve('node_modules/react-native/local-cli/cli'));
@@ -382,7 +386,9 @@ export const commands = {
     let defaultConfig;
 
     if (major >= 0 && minor >= 33) {
-      if (minor >= 42) {
+      if (minor >= 45) {
+        defaultConfig = Config.find(path.resolve('.'));
+      } else if (minor >= 42) {
         defaultConfig= Config.get(
           path.resolve('node_modules/react-native/local-cli'),
           require(path.resolve('node_modules/react-native/local-cli/core/default.config')),
@@ -406,7 +412,6 @@ export const commands = {
         bundleOutput: `${realIntermedia}${path.sep}index.bundlejs`,
         assetsDest: `${realIntermedia}`,
         verbose: !!verbose,
-        transformer: require.resolve('react-native/packager/transformer'),
         bundleEncoding: 'utf8',
       });
     } else {
