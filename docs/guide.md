@@ -34,16 +34,15 @@ npm config set disturl https://npm.taobao.org/dist --global
 
 React Native版本  | react-native-update版本
 ------------- | -------------
-<= 0.26       |   1.0.x
+0.26及以下     |   1.0.x
 0.27 - 0.28   |   2.x
 0.29 - 0.33   |   3.x
-0.34 - 0.44   |  4.x
-0.45          |  尚不支持
+0.34及以上     |  4.x
 
 
 安装命令示例：
 ```
-npm install --save react-native-update@3.x
+npm install --save react-native-update@4.x
 ```
 
 ## 手动link
@@ -75,7 +74,7 @@ npm install --save react-native-update@3.x
 
 ## 配置Bundle URL(iOS)
 
-在工程target的Build Phases->Link Binary with Libraries中加入libz.tbd、libbz2.1.0.tbd
+在工程target的Build Phases->Link Binary with Libraries中加入`libz.tbd`、`libbz2.1.0.tbd`
 
 
 在你的AppDelegate.m文件中增加如下代码：
