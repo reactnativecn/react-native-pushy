@@ -13,7 +13,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.UiThreadUtil;
-import com.facebook.react.cxxbridge.JSBundleLoader;
+import com.facebook.react.bridge.JSBundleLoader;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
