@@ -11,7 +11,8 @@ React Native版本  | react-native-update版本
 0.26及以下     |   1.0.x
 0.27 - 0.28   |   2.x
 0.29 - 0.33   |   3.x
-0.34及以上     |  4.x
+0.34 - 0.45   |  4.x
+0.46及以上     |  5.x
 
  
 ### 优势
@@ -32,7 +33,7 @@ React Native版本  | react-native-update版本
 
 * [文档-快速入门-发布版本](docs/guide3.md)。
 
-* [文档-常见问题与高级指南](docs/faq_advance.md)。 
+* [文档-常见问题与高级指南](docs/faq_advance.md)。
 
 ### 命令行工具
 

@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "4.0.6",
+  "version": "5.0.0",
   "description": "react-native hot update",
   "main": "lib/index.js",
   "scripts": {
@@ -11,12 +11,7 @@
     "type": "git",
     "url": "git+https://github.com/reactnativecn/react-native-pushy.git"
   },
-  "keywords": [
-    "react-native",
-    "ios",
-    "android",
-    "update"
-  ],
+  "keywords": ["react-native", "ios", "android", "update"],
   "author": "reactnativecn",
   "license": "BSD-3-Clause",
   "bugs": {
