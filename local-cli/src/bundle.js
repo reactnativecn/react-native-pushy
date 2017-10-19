@@ -346,7 +346,7 @@ export const commands = {
   bundle: async function({options}){
     const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
 
-    const {
+    let {
       entryFile,
       intermediaDir,
       output,
@@ -385,22 +385,32 @@ export const commands = {
     const bundle = require(path.resolve('node_modules/react-native/local-cli/bundle/bundle'));
     let defaultConfig;
 
-    if (major >= 0 && minor >= 33) {
+    if (major === 0) {
+      if (minor >= 49) {
+        entryFile = entryFile || `index.js`;
+      } else {
+        entryFile = entryFile || `index.${platform}.js`;
+      }
+    }
+
+    if (major === 0) {
       if (minor >= 45) {
-        defaultConfig = Config.find(path.resolve('.'));
+        defaultConfig = Config.findOptional(path.resolve('.'));
       } else if (minor >= 42) {
         defaultConfig= Config.get(
           path.resolve('node_modules/react-native/local-cli'),
           require(path.resolve('node_modules/react-native/local-cli/core/default.config')),
           path.resolve('node_modules/react-native/packager/rn-cli.config.js'));
-      } else {
+      } else if (minor >= 33) {
         defaultConfig= Config.get(
           path.resolve('node_modules/react-native/local-cli'),
           require(path.resolve('node_modules/react-native/local-cli/default.config')),
           path.resolve('node_modules/react-native/packager/rn-cli.config.js'));
+      } else {
+        defaultConfig= Config.get(path.resolve('node_modules/react-native/local-cli'), require(path.resolve('node_modules/react-native/local-cli/default.config')));
       }
     } else {
-      defaultConfig= Config.get(path.resolve('node_modules/react-native/local-cli'), require(path.resolve('node_modules/react-native/local-cli/default.config')));
+      defaultConfig = Config.findOptional(path.resolve('.'));
     }
 
     if (bundle.func) {
