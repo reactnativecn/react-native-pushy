@@ -89,10 +89,11 @@ npm install --save react-native-update@5.x
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
 #if DEBUG
-  // 原来的jsCodeLocation
-  jsCodeLocation = [NSURL URLWithString:@"http://localhost:8081/index.ios.bundle?platform=ios&dev=true"];
+  // 原来的jsCodeLocation保留在这里
+  jsCodeLocation = ..........
 #else
-  jsCodeLocation=[RCTHotUpdate bundleURL];
+  // 非DEBUG情况下启用热更新
+  jsCodeLocation=[RCTHotUpdate bundleURL];
 #endif
   // ... 其它代码
 }
