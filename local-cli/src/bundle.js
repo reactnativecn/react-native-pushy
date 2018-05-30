@@ -368,14 +368,22 @@ export const commands = {
 
     await rmdir(realIntermedia);
     await mkdir(realIntermedia);
-
-    try {
-      require(path.resolve('node_modules/react-native/packager/babelRegisterOnly'))([
-        /private-cli\/src/,
-        /local-cli/,
-      ]);
-    } catch (err) {
-      require('metro-bundler/src/babelRegisterOnly');
+    
+    // ref: https://github.com/ds300/react-native-typescript-transformer/blob/master/index.js#L20
+    if (major === 0) {
+      if (minor >= 52) {
+        require('metro/src/babelRegisterOnly');
+      } else if (minor >= 47) {
+        require('metro-bundler/src/babelRegisterOnly');
+      } else if (minor === 46) {
+        require('metro-bundler/build/babelRegisterOnly');
+      } else {
+        // handle RN <= 0.45
+        require(path.resolve('node_modules/react-native/packager/babelRegisterOnly'))([
+          /private-cli\/src/,
+          /local-cli/,
+        ]);
+      }
     }
 
     // This line fix issue #11
