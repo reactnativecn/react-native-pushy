@@ -368,15 +368,6 @@ export const commands = {
 
     await rmdir(realIntermedia);
     await mkdir(realIntermedia);
-
-    try {
-      require(path.resolve('node_modules/react-native/packager/babelRegisterOnly'))([
-        /private-cli\/src/,
-        /local-cli/,
-      ]);
-    } catch (err) {
-      require('metro-bundler/src/babelRegisterOnly');
-    }
     
     // ref: https://github.com/ds300/react-native-typescript-transformer/blob/master/index.js#L20
     if (major === 0) {
