@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "5.0.0",
+  "version": "5.0.2",
   "description": "react-native hot update",
   "main": "lib/index.js",
   "scripts": {
@@ -48,5 +48,8 @@
     "babel-plugin-transform-es2015-spread": "^6.5.2",
     "babel-plugin-transform-object-rest-spread": "^6.5.0",
     "babel-plugin-transform-strict-mode": "^6.5.2"
+  },
+  "resolutions": {
+    "cert-downloader": "0.2.1"
   }
 }

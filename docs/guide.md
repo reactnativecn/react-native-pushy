@@ -13,45 +13,45 @@
 在你的项目根目录下运行以下命令：
 
 ```bash
-npm install -g react-native-update-cli
-npm install --save react-native-update@具体版本请看下面的表格
+npm install -g react-native-update-cli yarn
+yarn add react-native-update@具体版本请看下面的表格
 react-native link react-native-update
 ```  
 
-`npm install -g react-native-update-cli`这一句在每一台电脑上仅需运行一次。  
+`npm install -g react-native-update-cli yarn`这一句在每一台电脑上仅需运行一次。  
 
 * 注意 *
 
 如果访问极慢或者显示网络失败，请设置使用淘宝镜像（也仅需设置一次）：  
 ```bash
-npm config set registry https://registry.npm.taobao.org --global
-npm config set disturl https://npm.taobao.org/dist --global
+npm install -g nrm
+nrm use taobao
 ```
 
 ### 版本
 
 因为React Native不同版本代码结构不同，因而请按下面表格对号入座：
 
-React Native版本  | react-native-update版本
-------------- | -------------
-0.26及以下     |   1.0.x
-0.27 - 0.28   |   2.x
-0.29 - 0.33   |   3.x
-0.34 - 0.45   |  4.x
-0.46及以上     |  5.x
+| React Native版本 | react-native-update版本 |
+| ---------------- | ----------------------- |
+| 0.26及以下       | 1.0.x                   |
+| 0.27 - 0.28      | 2.x                     |
+| 0.29 - 0.33      | 3.x                     |
+| 0.34 - 0.45      | 4.x                     |
+| 0.46及以上       | 5.x                     |
 
 
 
 安装命令示例：
 ```
-npm install --save react-native-update@5.x
+yarn add react-native-update@5.x
 ```
 
-## 手动link
+## 一、手动link
 
 如果第一步的`react-native link`已成功(iOS工程和安卓工程均能看到依赖)，可以跳过此步骤
 
-#### iOS
+### iOS
 
 1. 在XCode中的Project Navigator里,右键点击`Libraries` ➜ `Add Files to [你的工程名]`
 2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTHotUpdate.xcodeproj`
@@ -59,27 +59,31 @@ npm install --save react-native-update@5.x
 4. 继续在`Build Settings`里搜索`Header Search Path`，添加$(SRCROOT)/../node_modules/react-native-update/ios
 5. Run your project (`Cmd+R`)
 
-#### Android
+### Android
 
 1. 在`android/settings.gradle`中添加如下代码:
   	```
   	include ':react-native-update'
   	project(':react-native-update').projectDir = new File(rootProject.projectDir, 	'../node_modules/react-native-update/android')
   	```
+
 2. 在`android/app/build.gradle`的 dependencies 部分增加如下代码:
   	```
       compile project(':react-native-update')
     ```
+
 3. 检查你的RN版本,如果是0.29及以上, 打开`android/app/src/main/java/[...]/MainApplication.java`,否则打开`android/app/src/main/java/[...]/MainActivity.java`
   - 在文件开头增加 `import cn.reactnative.modules.update.UpdatePackage;`
   - 在`getPackages()` 方法中增加 `new UpdatePackage()`(注意上一行可能要增加一个逗号)
 
-## 配置Bundle URL(iOS)
+## 二、配置Bundle URL
 
-在工程target的Build Phases->Link Binary with Libraries中加入`libz.tbd`、`libbz2.1.0.tbd`
+### iOS
+
+首先在工程target的Build Phases->Link Binary with Libraries中加入`libz.tbd`、`libbz2.1.0.tbd`
 
 
-在你的AppDelegate.m文件中增加如下代码：
+然后在你的AppDelegate.m文件中增加如下代码：
 
 ```objective-c
 // ... 其它代码
@@ -99,13 +103,14 @@ npm install --save react-native-update@5.x
 }
 ```
 
-## 配置Bundle URL(Android)
+### Android
 
 `0.29及以后版本`：在你的MainApplication中增加如下代码：
 
 ```java
 // ... 其它代码
 
+// 请注意不要少了这句import
 import cn.reactnative.modules.update.UpdateContext;
 public class MainApplication extends Application implements ReactApplication {
 
@@ -124,6 +129,7 @@ public class MainApplication extends Application implements ReactApplication {
 ```java
 // ... 其它代码
 
+// 请注意不要少了这句import
 import cn.reactnative.modules.update.UpdateContext;
 
 public class MainActivity extends ReactActivity {
@@ -136,7 +142,7 @@ public class MainActivity extends ReactActivity {
 }
 ```
 
-## iOS的ATS例外配置
+## 三、iOS的ATS例外配置
 从iOS9开始，苹果要求以白名单的形式在Info.plist中列出外部的非https接口，以督促开发者部署https协议。在我们的服务部署https协议之前，请在Info.plist中添加如下例外（右键点击Info.plist，选择open as - source code）：
 ```xml
 <key>NSAppTransportSecurity</key>
@@ -155,7 +161,7 @@ public class MainActivity extends ReactActivity {
 ```
 
 
-## 登录与创建应用
+## 四、登录与创建应用
 
 首先请在<http://update.reactnative.cn>注册帐号，然后在你的项目根目录下运行以下命令：
 
