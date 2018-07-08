@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 import java.io.File;
 import java.net.URL;
@@ -14,11 +16,13 @@ import java.net.URL;
 public class UpdateContext {
     private Context context;
     private File rootDir;
+    private Executor executor;
 
     public static boolean DEBUG = false;
 
     public UpdateContext(Context context) {
         this.context = context;
+        this.executor = Executors.newSingleThreadExecutor();
 
         this.rootDir = new File(context.getFilesDir(), "_update");
 
@@ -68,7 +72,7 @@ public class UpdateContext {
         params.listener = listener;
         params.zipFilePath = new File(rootDir, hashName + ".ppk");
         params.unzipDirectory = new File(rootDir, hashName);
-        new DownloadTask(context).execute(params);
+        new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
     public void downloadPatchFromApk(String url, String hashName, DownloadFileListener listener) {
@@ -79,7 +83,7 @@ public class UpdateContext {
         params.listener = listener;
         params.zipFilePath = new File(rootDir, hashName + ".apk.patch");
         params.unzipDirectory = new File(rootDir, hashName);
-        new DownloadTask(context).execute(params);
+        new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
     public void downloadPatchFromPpk(String url, String hashName, String originHashName, DownloadFileListener listener) {
@@ -92,7 +96,7 @@ public class UpdateContext {
         params.zipFilePath = new File(rootDir, originHashName + "-" + hashName + ".ppk.patch");
         params.unzipDirectory = new File(rootDir, hashName);
         params.originDirectory = new File(rootDir, originHashName);
-        new DownloadTask(context).execute(params);
+        new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
     private SharedPreferences sp;
@@ -210,6 +214,6 @@ public class UpdateContext {
             public void onDownloadFailed(Throwable error) {
             }
         };
-        new DownloadTask(context).execute(params);
+        new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 }
