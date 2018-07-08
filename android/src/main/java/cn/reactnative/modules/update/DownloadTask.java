@@ -25,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.HashMap;
 
 import okio.BufferedSink;
 import okio.BufferedSource;
@@ -249,16 +250,17 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         }
     }
 
-    private void copyFromResource(String assets, File output) throws IOException {
+    private void copyFromResource(HashMap<String, File> map) throws IOException {
         ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(context.getPackageResourcePath())));
         ZipEntry ze;
         while ((ze = zis.getNextEntry()) != null) {
             String fn = ze.getName();
-            if (fn.equals(assets)) {
+            File target = map.get(fn);
+            if (target != null) {
                 if (UpdateContext.DEBUG) {
-                    Log.d("RNUpdate", "Copying from resource " + assets + " to " + output);
+                    Log.d("RNUpdate", "Copying from resource " + fn + " to " + target);
                 }
-                unzipToFile(zis, output);
+                unzipToFile(zis, target);
             }
         }
     }
@@ -273,6 +275,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
 
         removeDirectory(param.unzipDirectory);
         param.unzipDirectory.mkdirs();
+
+        HashMap<String, File> copyList = new HashMap<String, File>();
 
         while ((ze = zis.getNextEntry()) != null)
         {
@@ -292,7 +296,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
                     if (from.isEmpty()) {
                         from = to;
                     }
-                    copyFromResource(from, new File(param.unzipDirectory, to));
+                    copyList.put(from, new File(param.unzipDirectory, to));
+                    //copyFromResource(from, new File(param.unzipDirectory, to));
                 }
                 continue;
             }
@@ -320,6 +325,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         }
 
         zis.close();
+
+        copyFromResource(copyList);
 
         if (UpdateContext.DEBUG) {
             Log.d("RNUpdate", "Unzip finished");
