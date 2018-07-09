@@ -6,7 +6,7 @@
 
 所以我们也假设你已经拥有了开发React Native应用的一切环境，包括`Node.js`、`npm`、`XCode`、`Android SDK`等等。
 
-如果你之前没安装过，你还必须安装[Android NDK](http://androiddevtools.cn)，版本最好选用r10e，并设置环境变量`ANDROID_NDK_HOME`，指向你的NDK根目录(例如`/Users/tdzl2003/Downloads/android-ndk-r10e`)。
+如果React Native的版本是0.45以下，并且你之前没安装过，你还必须安装[Android NDK](http://androiddevtools.cn)，版本最好选用r10e，并设置环境变量`ANDROID_NDK_HOME`，指向你的NDK根目录(例如`/Users/tdzl2003/Downloads/android-ndk-r10e`)。0.46以上的React Native不需要这一步。
 
 ## 安装
 
