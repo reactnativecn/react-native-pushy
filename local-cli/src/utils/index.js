@@ -5,29 +5,34 @@
 import * as path from 'path';
 import * as fs from 'fs';
 import ApkReader from 'node-apk-parser';
-import ipaMetadata from 'ipa-metadata';
+import ipaReader from './ipaReader';
 
 var read = require('read');
 
 export function question(query, password) {
-  if (NO_INTERACTIVE){
+  if (NO_INTERACTIVE) {
     return Promise.resolve('');
   }
-  return new Promise((resolve, reject)=>read({
-    prompt: query,
-    silent: password,
-    replace: password ? '*' : undefined,
-  }, (err, result)=> err ? reject(err) : resolve(result)));
+  return new Promise((resolve, reject) =>
+    read(
+      {
+        prompt: query,
+        silent: password,
+        replace: password ? '*' : undefined
+      },
+      (err, result) => (err ? reject(err) : resolve(result))
+    )
+  );
 }
 
-export function translateOptions(options){
+export function translateOptions(options) {
   const ret = {};
   for (let key in options) {
     const v = options[key];
-    if (typeof(v) === 'string') {
-      ret[key] = v.replace(/\$\{(\w+)\}/g, function (v, n){
+    if (typeof v === 'string') {
+      ret[key] = v.replace(/\$\{(\w+)\}/g, function(v, n) {
         return options[n] || process.env[n] || v;
-      })
+      });
     } else {
       ret[key] = v;
     }
@@ -43,7 +48,7 @@ export function getRNVersion() {
   return {
     version,
     major: match[1] | 0,
-    minor: match[2] | 0,
+    minor: match[2] | 0
   };
 }
 
@@ -55,7 +60,7 @@ export function getApkVersion(fn) {
 
 export function getIPAVersion(fn) {
   return new Promise((resolve, reject) => {
-    ipaMetadata(fn, (err, data) => {
+    ipaReader(fn, (err, data) => {
       err ? reject(err) : resolve(data.metadata.CFBundleShortVersionString);
     });
   });

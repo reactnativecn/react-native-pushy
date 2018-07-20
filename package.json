@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "description": "react-native hot update",
   "main": "lib/index.js",
   "scripts": {
@@ -11,7 +11,12 @@
     "type": "git",
     "url": "git+https://github.com/reactnativecn/react-native-pushy.git"
   },
-  "keywords": ["react-native", "ios", "android", "update"],
+  "keywords": [
+    "react-native",
+    "ios",
+    "android",
+    "update"
+  ],
   "author": "reactnativecn",
   "license": "BSD-3-Clause",
   "bugs": {
@@ -23,15 +28,18 @@
   "homepage": "https://github.com/reactnativecn/react-native-pushy#readme",
   "dependencies": {
     "cli-arguments": "^0.2.1",
+    "decompress-zip": "^0.3.1",
     "fs-promise": "^0.4.1",
-    "ipa-metadata": "^1.4.0",
+    "glob": "^7.1.2",
     "isomorphic-fetch": "^2.2.1",
     "mkdir-recursive": "^0.2.1",
     "node-apk-parser": "^0.2.3",
     "progress": "^1.1.8",
     "read": "^1.0.7",
     "request": "^2.69.0",
-    "rimraf": "^2.5.2",
+    "rimraf": "^2.6.2",
+    "simple-plist": "^0.3.0",
+    "temporary": "^0.0.8",
     "yauzl": "2.4.1",
     "yazl": "2.3.0"
   },
@@ -48,8 +56,5 @@
     "babel-plugin-transform-es2015-spread": "^6.5.2",
     "babel-plugin-transform-object-rest-spread": "^6.5.0",
     "babel-plugin-transform-strict-mode": "^6.5.2"
-  },
-  "resolutions": {
-    "cert-downloader": "0.2.1"
   }
 }
