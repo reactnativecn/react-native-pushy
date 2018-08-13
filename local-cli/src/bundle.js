@@ -371,7 +371,9 @@ export const commands = {
     
     // ref: https://github.com/ds300/react-native-typescript-transformer/blob/master/index.js#L20
     if (major === 0) {
-      if (minor >= 52) {
+      if (minor >= 56) {
+        require('metro-babel-register');
+      } else if (minor >= 52) {
         require('metro/src/babelRegisterOnly');
       } else if (minor >= 47) {
         require('metro-bundler/src/babelRegisterOnly');
