@@ -369,7 +369,6 @@ export const commands = {
     await rmdir(realIntermedia);
     await mkdir(realIntermedia);
     
-    // ref: https://github.com/ds300/react-native-typescript-transformer/blob/master/index.js#L20
     if (major === 0) {
       if (minor >= 56) {
         require('metro-babel-register');
@@ -404,7 +403,10 @@ export const commands = {
     }
 
     if (major === 0) {
-      if (minor >= 45) {
+      if (minor >= 57) {
+        // https://github.com/facebook/react-native/commit/a32620dc3b7a0ebd53feeaf7794051705d80f49e#diff-75692fe55c8b1a7c05f4264301342167L101
+        defaultConfig = Config.load();
+      } else if (minor >= 45) {
         defaultConfig = Config.findOptional(path.resolve('.'));
       } else if (minor >= 42) {
         defaultConfig= Config.get(
