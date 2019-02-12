@@ -135,6 +135,10 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     return [RCTHotUpdate binaryBundleURL];
 }
 
++ (BOOL)requiresMainQueueSetup {
+	return YES;
+}
+
 - (NSDictionary *)constantsToExport
 {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
