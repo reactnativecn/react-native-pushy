@@ -22,6 +22,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -250,17 +251,19 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         }
     }
 
-    private void copyFromResource(HashMap<String, File> map) throws IOException {
+    private void copyFromResource(HashMap<String, ArrayList<File> > map) throws IOException {
         ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(context.getPackageResourcePath())));
         ZipEntry ze;
         while ((ze = zis.getNextEntry()) != null) {
             String fn = ze.getName();
-            File target = map.get(fn);
-            if (target != null) {
-                if (UpdateContext.DEBUG) {
-                    Log.d("RNUpdate", "Copying from resource " + fn + " to " + target);
+            ArrayList<File> targets = map.get(fn);
+            if (targets != null) {
+                for (File target: targets) {
+                    if (UpdateContext.DEBUG) {
+                        Log.d("RNUpdate", "Copying from resource " + fn + " to " + target);
+                    }
+                    unzipToFile(zis, target);
                 }
-                unzipToFile(zis, target);
             }
         }
     }
@@ -276,7 +279,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         removeDirectory(param.unzipDirectory);
         param.unzipDirectory.mkdirs();
 
-        HashMap<String, File> copyList = new HashMap<String, File>();
+        HashMap<String, ArrayList<File>> copyList = new HashMap<String, ArrayList<File>>();
 
         while ((ze = zis.getNextEntry()) != null)
         {
@@ -296,7 +299,14 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
                     if (from.isEmpty()) {
                         from = to;
                     }
-                    copyList.put(from, new File(param.unzipDirectory, to));
+                    ArrayList<File> target = null;
+                    if (!copyList.containsKey(from)) {
+                        target = new ArrayList<File>();
+                        copyList.put(from, target);
+                    } else {
+                        target = copyList.get((from));
+                    }
+                    target.add(new File(param.unzipDirectory, to));
                     //copyFromResource(from, new File(param.unzipDirectory, to));
                 }
                 continue;
