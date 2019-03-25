@@ -258,11 +258,17 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
             String fn = ze.getName();
             ArrayList<File> targets = map.get(fn);
             if (targets != null) {
+                File lastTarget = null;
                 for (File target: targets) {
                     if (UpdateContext.DEBUG) {
                         Log.d("RNUpdate", "Copying from resource " + fn + " to " + target);
                     }
-                    unzipToFile(zis, target);
+                    if (lastTarget != null) {
+                        copyFile(lastTarget, target);
+                    } else {
+                        unzipToFile(zis, target);
+                        lastTarget = target;
+                    }
                 }
             }
         }
