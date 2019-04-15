@@ -1,6 +1,6 @@
 # react-native-update [![npm version](https://badge.fury.io/js/react-native-update.svg)](http://badge.fury.io/js/react-native-update)
 
-本组件是面向 React Native 提供热更新功能的组件，建议结合[Update 服务](http://update.reactnative.cn/)使用。
+本组件是面向 React Native 提供热更新功能的组件，建议结合[Update 服务](https://update.reactnative.cn/)使用。
 
 ### 最新更新
 
@@ -22,11 +22,11 @@
 
 | React Native 版本 | react-native-update 版本 |
 | ----------------- | ------------------------ |
-| 0.26 及以下       | 1.0.x                    |
+| 0.26 及以下       | 1.0.x                    |
 | 0.27 - 0.28       | 2.x                      |
 | 0.29 - 0.33       | 3.x                      |
-| 0.34 - 0.45       | 4.x                      |
-| 0.46 及以上       | 5.x                      |
+| 0.34 - 0.45       | 4.x                      |
+| 0.46 及以上       | 5.x                      |
 
 ### 优势
 
@@ -58,6 +58,6 @@
 
 ### 关于我们
 
-本组件由[React Native 中文网](http://reactnative.cn/)独家发布，如有定制需求可以[联系我们](http://reactnative.cn/about.html#content)。
+本组件由[React Native 中文网](https://reactnative.cn/)独家发布，如有定制需求可以[联系我们](https://reactnative.cn/about.html#content)。
 
 关于此插件发现任何问题，可以前往[Issues](https://github.com/reactnativecn/react-native-pushy/issues)或者[中文社区](http://bbs.reactnative.cn/category/7)发帖提问。

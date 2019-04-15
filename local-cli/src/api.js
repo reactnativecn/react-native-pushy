@@ -3,7 +3,7 @@
  */
 
 const fetch = require('isomorphic-fetch');
-let host = process.env.PUSHY_REGISTRY || 'http://update.reactnative.cn/api';
+let host = process.env.PUSHY_REGISTRY || 'https://update.reactnative.cn/api';
 const fs = require('fs-promise');
 import * as fsOrigin from 'fs';
 import request from 'request';
@@ -22,17 +22,17 @@ exports.loadSession = async function() {
       throw e;
     }
   }
-}
+};
 
-exports.getSession = function(){
+exports.getSession = function() {
   return session;
-}
+};
 
 exports.replaceSession = function(newSession) {
   session = newSession;
-}
+};
 
-exports.saveSession = async function(){
+exports.saveSession = async function() {
   // Only save on change.
   if (session !== savedSession) {
     const current = session;
@@ -40,22 +40,22 @@ exports.saveSession = async function(){
     await fs.writeFile('.update', data, 'utf8');
     savedSession = current;
   }
-}
+};
 
-exports.closeSession = async function(){
+exports.closeSession = async function() {
   if (await fs.exists('.update')) {
     await fs.unlink('.update');
     savedSession = undefined;
   }
   session = undefined;
-  host = process.env.PUSHY_REGISTRY || 'http://update.reactnative.cn';
-}
+  host = process.env.PUSHY_REGISTRY || 'https://update.reactnative.cn';
+};
 
 async function query(url, options) {
   const resp = await fetch(url, options);
   const json = await resp.json();
   if (resp.status !== 200) {
-    throw Object.assign(new Error(json.message || json.error), {status: resp.status});
+    throw Object.assign(new Error(json.message || json.error), { status: resp.status });
   }
   return json;
 }
@@ -90,7 +90,7 @@ exports.put = queryWithBody('PUT');
 exports.doDelete = queryWithBody('DELETE');
 
 async function uploadFile(fn) {
-  const {url, fieldName, formData} = await exports.post('/upload', {});
+  const { url, fieldName, formData } = await exports.post('/upload', {});
   let realUrl = url;
 
   if (!/^https?\:\/\//.test(url)) {
@@ -110,18 +110,22 @@ async function uploadFile(fn) {
 
     formData.file.on('data', function(data) {
       bar.tick(data.length);
-    })
-    request.post(realUrl, {
-      formData,
-    }, (err, resp, body) => {
-      if (err) {
-        return reject(err);
-      }
-      if (resp.statusCode > 299) {
-        return reject(Object.assign(new Error(body), {status: resp.statusCode}));
-      }
-      resolve(JSON.parse(body));
-    })
+    });
+    request.post(
+      realUrl,
+      {
+        formData,
+      },
+      (err, resp, body) => {
+        if (err) {
+          return reject(err);
+        }
+        if (resp.statusCode > 299) {
+          return reject(Object.assign(new Error(body), { status: resp.statusCode }));
+        }
+        resolve(JSON.parse(body));
+      },
+    );
   });
   return info;
 }

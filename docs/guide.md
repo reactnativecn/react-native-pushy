@@ -2,7 +2,7 @@
 
 首先你应该有一个基于React Native开发的应用，我们把具有package.json的目录叫做你的"应用根目录"。
 
-如果你还没有初始化应用，请参阅[开始使用React Native](http://reactnative.cn/docs/getting-started.html#content)。
+如果你还没有初始化应用，请参阅[开始使用React Native](https://reactnative.cn/docs/getting-started.html#content)。
 
 所以我们也假设你已经拥有了开发React Native应用的一切环境，包括`Node.js`、`npm`、`XCode`、`Android SDK`等等。
 
@@ -142,28 +142,9 @@ public class MainActivity extends ReactActivity {
 }
 ```
 
-## 三、iOS的ATS例外配置
-从iOS9开始，苹果要求以白名单的形式在Info.plist中列出外部的非https接口，以督促开发者部署https协议。在我们的服务部署https协议之前，请在Info.plist中添加如下例外（右键点击Info.plist，选择open as - source code）：
-```xml
-<key>NSAppTransportSecurity</key>
-<dict>
-    <key>NSExceptionDomains</key>
-    <dict>
-        <key>reactnative.cn</key>
-        <dict>
-            <key>NSIncludesSubdomains</key>
-            <true/>
-            <key>NSExceptionAllowsInsecureHTTPLoads</key>
-            <true/>
-        </dict>
-   </dict>
-</dict>
-```
+## 三、登录与创建应用
 
-
-## 四、登录与创建应用
-
-首先请在<http://update.reactnative.cn>注册帐号，然后在你的项目根目录下运行以下命令：
+首先请在<https://update.reactnative.cn>注册帐号，然后在你的项目根目录下运行以下命令：
 
 ```bash
 $ pushy login
