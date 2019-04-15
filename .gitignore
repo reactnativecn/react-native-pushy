@@ -4,6 +4,7 @@
 /react-native-pushy-cli/node_modules
 /react-native-pushy-cli/lib
 /android/build
+/android/obj
 *.iml
 
 # OSX
