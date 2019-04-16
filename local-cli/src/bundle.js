@@ -394,7 +394,7 @@ export const commands = {
     }
 
     if (major === 0) {
-      if (minor >= 0.59) {
+      if (minor >= 59) {
         Config = require(path.resolve('node_modules/@react-native-community/cli/build/tools/loadMetroConfig'));
         bundle = require(path.resolve('node_modules/@react-native-community/cli/build/commands/bundle/bundle')).default;
       } else {
