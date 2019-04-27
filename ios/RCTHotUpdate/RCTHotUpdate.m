@@ -136,7 +136,8 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 }
 
 + (BOOL)requiresMainQueueSetup {
-	return YES;
+    // only set to YES if your module initialization relies on calling UIKit!
+	return NO;
 }
 
 - (NSDictionary *)constantsToExport
