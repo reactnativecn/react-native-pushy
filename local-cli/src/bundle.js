@@ -3,17 +3,14 @@
  */
 
 import * as path from 'path';
-import { mkdir as mkdirRecurisve } from 'mkdir-recursive';
-import rmdirRecursive from 'rimraf';
 import { getRNVersion, translateOptions } from './utils';
-import * as fs from 'fs';
+import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
 // import {diff} from 'node-bsdiff';
 import { question } from './utils';
 import { checkPlatform } from './app';
-import crypto from 'crypto';
-import minimist from 'minimist';
+const { spawn } = require('child_process');
 
 var diff;
 try {
@@ -28,32 +25,74 @@ try {
   };
 }
 
-function mkdir(dir) {
-  return new Promise((resolve, reject) => {
-    mkdirRecurisve(dir, err => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-}
+async function runReactNativeBundleCommand(
+  bundleName,
+  development,
+  entryFile,
+  outputFolder,
+  platform,
+  sourcemapOutput,
+  config,
+) {
+  let reactNativeBundleArgs = [];
 
-function rmdir(dir) {
-  return new Promise((resolve, reject) => {
-    rmdirRecursive(dir, err => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
+  let envArgs = process.env.PUSHY_ENV_ARGS;
+
+  if (envArgs) {
+    Array.prototype.push.apply(reactNativeBundleArgs, envArgs.trim().split(/\s+/));
+  }
+
+  fs.emptyDirSync(outputFolder);
+
+  Array.prototype.push.apply(reactNativeBundleArgs, [
+    path.join('node_modules', 'react-native', 'local-cli', 'cli.js'),
+    'bundle',
+    '--assets-dest',
+    outputFolder,
+    '--bundle-output',
+    path.join(outputFolder, bundleName),
+    '--dev',
+    development,
+    '--entry-file',
+    entryFile,
+    '--platform',
+    platform,
+  ]);
+
+  if (sourcemapOutput) {
+    reactNativeBundleArgs.push('--sourcemap-output', sourcemapOutput);
+  }
+
+  if (config) {
+    reactNativeBundleArgs.push('--config', config);
+  }
+
+  console.log(`Running "react-native bundle" command:\n`);
+  const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
+  console.log(`node ${reactNativeBundleArgs.join(' ')}`);
+
+  return new Promise((resolve, reject, notify) => {
+    reactNativeBundleProcess.stdout.on('data', data => {
+      console.log(data.toString().trim());
+    });
+
+    reactNativeBundleProcess.stderr.on('data', data => {
+      console.error(data.toString().trim());
+    });
+
+    reactNativeBundleProcess.on('close', exitCode => {
+      if (exitCode) {
+        reject(new Error(`"react-native bundle" command exited with code ${exitCode}.`));
       }
+
+      resolve(null);
     });
   });
 }
 
 async function pack(dir, output) {
-  await mkdir(path.dirname(output));
+  console.log('Packing');
+  fs.ensureDirSync(path.dirname(output));
   await new Promise((resolve, reject) => {
     var zipfile = new ZipFile();
 
@@ -115,7 +154,7 @@ function basename(fn) {
 }
 
 async function diffFromPPK(origin, next, output) {
-  await mkdir(path.dirname(output));
+  fs.ensureDirSync(path.dirname(output));
 
   const originEntries = {};
   const originMap = {};
@@ -233,7 +272,7 @@ async function diffFromPPK(origin, next, output) {
 }
 
 async function diffFromPackage(origin, next, output, originBundleName, transformPackagePath = v => v) {
-  await mkdir(path.dirname(output));
+  fs.ensureDirSync(path.dirname(output));
 
   const originEntries = {};
   const originMap = {};
@@ -342,12 +381,12 @@ export const commands = {
   bundle: async function({ options }) {
     const platform = checkPlatform(options.platform || (await question('Platform(ios/android):')));
 
-    let { entryFile, intermediaDir, output, dev, verbose } = translateOptions({
+    let { bundleName, entryFile, intermediaDir, output, dev, verbose } = translateOptions({
       ...options,
       platform,
     });
 
-    const realIntermedia = path.resolve(intermediaDir);
+    // const sourcemapOutput = path.join(intermediaDir, bundleName + ".map");
 
     const realOutput = output.replace(/\$\{time\}/g, '' + Date.now());
 
@@ -355,141 +394,14 @@ export const commands = {
       throw new Error('Platform must be specified.');
     }
 
-    const { version, major, minor } = getRNVersion();
+    // const { version, major, minor } = getRNVersion();
 
-    console.log('Bundling with React Native version: ', version);
+    // console.log('Bundling with React Native version: ', version);
 
-    await rmdir(realIntermedia);
-    await mkdir(realIntermedia);
 
-    if (major === 0) {
-      if (minor >= 56) {
-        require('metro-babel-register');
-      } else if (minor >= 52) {
-        require('metro/src/babelRegisterOnly');
-      } else if (minor >= 47) {
-        require('metro-bundler/src/babelRegisterOnly');
-      } else if (minor === 46) {
-        require('metro-bundler/build/babelRegisterOnly');
-      } else {
-        // handle RN <= 0.45
-        require(path.resolve('node_modules/react-native/packager/babelRegisterOnly'))([
-          /private-cli\/src/,
-          /local-cli/,
-        ]);
-      }
-    }
+    await runReactNativeBundleCommand(bundleName, dev, entryFile, intermediaDir, platform);
 
-    // This line fix issue #11
-    require(path.resolve('node_modules/react-native/local-cli/cli'));
-
-    let Config, defaultConfig, bundle;
-
-    if (major === 0) {
-      if (minor >= 49) {
-        entryFile = entryFile || `index.js`;
-      } else {
-        entryFile = entryFile || `index.${platform}.js`;
-      }
-    }
-
-    if (major === 0) {
-      if (minor >= 59) {
-        Config = require(path.resolve('node_modules/@react-native-community/cli/build/tools/loadMetroConfig'));
-        bundle = require(path.resolve('node_modules/@react-native-community/cli/build/commands/bundle/bundle')).default;
-      } else {
-        Config = require(path.resolve('node_modules/react-native/local-cli/util/Config'));
-        bundle = require(path.resolve('node_modules/react-native/local-cli/bundle/bundle'));
-      }
-      if (minor >= 59) {
-        // https://github.com/react-native-community/cli/blob/1.x/packages/cli/src/cliEntry.js#L170-L202
-        const options = minimist(process.argv.slice(2));
-
-        const root = options.projectRoot ? path.resolve(options.projectRoot) : process.cwd();
-
-        const reactNativePath = options.reactNativePath
-          ? path.resolve(options.reactNativePath)
-          : (() => {
-              try {
-                return path.dirname(
-                  require.resolve('react-native/package.json', {
-                    paths: [root],
-                  }),
-                );
-              } catch (_ignored) {
-                throw new Error('Unable to find React Native files. Please use --reactNativePath to specify the path.');
-              }
-            })();
-
-        defaultConfig = {
-          reactNativePath,
-          root,
-        };
-      } else if (minor >= 57) {
-        // https://github.com/facebook/react-native/commit/a32620dc3b7a0ebd53feeaf7794051705d80f49e#diff-75692fe55c8b1a7c05f4264301342167L101
-        // defaultConfig = Config.load();
-        const { configPromise } = require(path.resolve('node_modules/react-native/local-cli/core'));
-        defaultConfig = await configPromise;
-      } else if (minor >= 45) {
-        defaultConfig = Config.findOptional(path.resolve('.'));
-      } else if (minor >= 42) {
-        defaultConfig = Config.get(
-          path.resolve('node_modules/react-native/local-cli'),
-          require(path.resolve('node_modules/react-native/local-cli/core/default.config')),
-          path.resolve('node_modules/react-native/packager/rn-cli.config.js'),
-        );
-      } else if (minor >= 33) {
-        defaultConfig = Config.get(
-          path.resolve('node_modules/react-native/local-cli'),
-          require(path.resolve('node_modules/react-native/local-cli/default.config')),
-          path.resolve('node_modules/react-native/packager/rn-cli.config.js'),
-        );
-      } else {
-        defaultConfig = Config.get(
-          path.resolve('node_modules/react-native/local-cli'),
-          require(path.resolve('node_modules/react-native/local-cli/default.config')),
-        );
-      }
-    } else {
-      defaultConfig = Config.findOptional(path.resolve('.'));
-    }
-
-    console;
-    if (bundle.func) {
-      // React native >= 0.31.0
-      await bundle.func([], defaultConfig, {
-        entryFile: entryFile,
-        platform: platform,
-        dev: !!dev,
-        bundleOutput: `${realIntermedia}${path.sep}index.bundlejs`,
-        assetsDest: `${realIntermedia}`,
-        verbose: !!verbose,
-        bundleEncoding: 'utf8',
-      });
-    } else {
-      // React native < 0.31.0
-      await bundle(
-        [
-          '--entry-file',
-          entryFile,
-          '--platform',
-          platform,
-          '--dev',
-          '' + !!dev,
-          '--bundle-output',
-          `${realIntermedia}${path.sep}index.bundlejs`,
-          '--assets-dest',
-          `${realIntermedia}`,
-          '--verbose',
-          '' + !!verbose,
-        ],
-        defaultConfig,
-      );
-    }
-
-    console.log('Packing');
-
-    await pack(realIntermedia, realOutput);
+    await pack(path.resolve(intermediaDir), realOutput);
 
     const v = await question('Would you like to publish it?(Y/N)');
     if (v.toLowerCase() === 'y') {

@@ -4,7 +4,7 @@
  */
 
 import * as path from 'path';
-import * as fs from 'fs-promise';
+import * as fs from 'fs-extra';
 
 const CLI_MODULE_PATH = function() {
   return path.resolve(

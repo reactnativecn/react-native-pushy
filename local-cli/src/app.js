@@ -3,7 +3,7 @@
  */
 
 import {question} from './utils';
-import * as fs from 'fs-promise';
+import * as fs from 'fs-extra';
 
 const {
   post,
@@ -23,13 +23,13 @@ export function checkPlatform(platform) {
   return platform
 }
 
-export async function getSelectedApp(platform) {
+export function getSelectedApp(platform) {
   checkPlatform(platform);
 
-  if (!await fs.exists('update.json')){
+  if (!fs.existsSync('update.json')){
     throw new Error(`App not selected. run 'pushy selectApp --platform ${platform}' first!`);
   }
-  const updateInfo = JSON.parse(await fs.readFile('update.json', 'utf8'));
+  const updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));
   if (!updateInfo[platform]) {
     throw new Error(`App not selected. run 'pushy selectApp --platform ${platform}' first!`);
   }
@@ -92,9 +92,9 @@ export const commands = {
     const id = args[0] || (await chooseApp(platform)).id;
 
     let updateInfo = {};
-    if (await fs.exists('update.json')) {
+    if (fs.existsSync('update.json')) {
       try {
-        updateInfo = JSON.parse(await fs.readFile('update.json', 'utf8'));
+        updateInfo = JSON.parse(fs.readFileSync('update.json', 'utf8'));
       } catch (e) {
         console.error('Failed to parse file `update.json`. Try to remove it manually.');
         throw e;
@@ -105,6 +105,6 @@ export const commands = {
       appId: id,
       appKey,
     };
-    await fs.writeFile('update.json', JSON.stringify(updateInfo, null, 4), 'utf8');
+    fs.writeFileSync('update.json', JSON.stringify(updateInfo, null, 4), 'utf8');
   },
 }

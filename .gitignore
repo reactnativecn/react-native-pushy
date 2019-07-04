@@ -36,6 +36,9 @@ project.xcworkspace
 .idea
 .gradle
 local.properties
+**/.project
+**/.settings
+**/.classpath
 
 # node.js
 #
