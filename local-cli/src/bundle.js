@@ -3,16 +3,13 @@
  */
 
 import * as path from 'path';
-import { mkdir as mkdirRecurisve } from 'mkdir-recursive';
-import rmdirRecursive from 'rimraf';
 import { getRNVersion, translateOptions } from './utils';
-import * as fs from 'fs';
+import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
 // import {diff} from 'node-bsdiff';
 import { question } from './utils';
 import { checkPlatform } from './app';
-import crypto from 'crypto';
 import minimist from 'minimist';
 
 var diff;
@@ -26,30 +23,6 @@ try {
     );
     throw new Error('This function needs module "node-bsdiff". Please install it first.');
   };
-}
-
-function mkdir(dir) {
-  return new Promise((resolve, reject) => {
-    mkdirRecurisve(dir, err => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
-}
-
-function rmdir(dir) {
-  return new Promise((resolve, reject) => {
-    rmdirRecursive(dir, err => {
-      if (err) {
-        reject(err);
-      } else {
-        resolve();
-      }
-    });
-  });
 }
 
 async function pack(dir, output) {
@@ -359,8 +332,7 @@ export const commands = {
 
     console.log('Bundling with React Native version: ', version);
 
-    await rmdir(realIntermedia);
-    await mkdir(realIntermedia);
+    fs.emptyDirSync(realIntermedia);
 
     if (major === 0) {
       if (minor >= 56) {

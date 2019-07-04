@@ -4,8 +4,7 @@
 
 const fetch = require('isomorphic-fetch');
 let host = process.env.PUSHY_REGISTRY || 'https://update.reactnative.cn/api';
-const fs = require('fs-promise');
-import * as fsOrigin from 'fs';
+const fs = require('fs-extra');
 import request from 'request';
 import ProgressBar from 'progress';
 
@@ -13,9 +12,9 @@ let session = undefined;
 let savedSession = undefined;
 
 exports.loadSession = async function() {
-  if (await fs.exists('.update')) {
+  if (fs.existsSync('.update')) {
     try {
-      exports.replaceSession(JSON.parse(await fs.readFile('.update', 'utf8')));
+      exports.replaceSession(JSON.parse(fs.readFileSync('.update', 'utf8')));
       savedSession = session;
     } catch (e) {
       console.error('Failed to parse file `.update`. Try to remove it manually.');
@@ -32,19 +31,19 @@ exports.replaceSession = function(newSession) {
   session = newSession;
 };
 
-exports.saveSession = async function() {
+exports.saveSession = function() {
   // Only save on change.
   if (session !== savedSession) {
     const current = session;
     const data = JSON.stringify(current, null, 4);
-    await fs.writeFile('.update', data, 'utf8');
+    fs.writeFileSync('.update', data, 'utf8');
     savedSession = current;
   }
 };
 
-exports.closeSession = async function() {
-  if (await fs.exists('.update')) {
-    await fs.unlink('.update');
+exports.closeSession = function() {
+  if (fs.existsSync('.update')) {
+    fs.unlinkSync('.update');
     savedSession = undefined;
   }
   session = undefined;
@@ -97,7 +96,7 @@ async function uploadFile(fn) {
     realUrl = host + url;
   }
 
-  const fileSize = (await fs.stat(fn)).size;
+  const fileSize = fs.statSync(fn).size;
 
   const bar = new ProgressBar('  Uploading [:bar] :percent :etas', {
     complete: '=',
@@ -106,7 +105,7 @@ async function uploadFile(fn) {
   });
 
   const info = await new Promise((resolve, reject) => {
-    formData.file = fsOrigin.createReadStream(fn);
+    formData.file = fs.createReadStream(fn);
 
     formData.file.on('data', function(data) {
       bar.tick(data.length);

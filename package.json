@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "5.1.7",
+  "version": "5.1.8",
   "description": "react-native hot update",
   "main": "lib/index.js",
   "scripts": {
@@ -30,15 +30,13 @@
   "dependencies": {
     "cli-arguments": "^0.2.1",
     "decompress-zip": "^0.3.1",
-    "fs-promise": "^0.4.1",
+    "fs-extra": "^8.1.0",
     "glob": "^7.1.2",
     "isomorphic-fetch": "^2.2.1",
-    "mkdir-recursive": "^0.2.1",
     "node-apk-parser": "^0.2.3",
     "progress": "^1.1.8",
     "read": "^1.0.7",
     "request": "^2.69.0",
-    "rimraf": "^2.6.2",
     "simple-plist": "^0.3.0",
     "temporary": "^0.0.8",
     "yauzl": "2.4.1",

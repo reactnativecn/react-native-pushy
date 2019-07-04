@@ -3,7 +3,7 @@
  */
 
 import * as path from 'path';
-import * as fs from 'fs';
+import * as fs from 'fs-extra';
 import ApkReader from 'node-apk-parser';
 import ipaReader from './ipaReader';
 
