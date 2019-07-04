@@ -96,13 +96,18 @@
       "description": "Bundle javascript code only.",
       "options": {
         "dev": {
-          "default": false
+          "default": "false",
+          "hasValue": true
         },
         "platform": {
           "hasValue": true
         },
+        "bundleName":{
+          "default": "index.bundlejs",
+          "hasValue": true
+        },
         "entryFile": {
-          "default": "",
+          "default": "index.js",
           "hasValue": true
         },
         "intermediaDir": {
