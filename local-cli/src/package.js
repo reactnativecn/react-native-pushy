@@ -2,30 +2,33 @@
  * Created by tdzl2003 on 4/2/16.
  */
 
-const {
-  get,
-  post,
-  uploadFile,
-} = require('./api');
+const { get, post, uploadFile } = require('./api');
 import { question } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 
-import {getIPAVersion, getApkVersion} from './utils';
+import { getIPAVersion, getApkVersion } from './utils';
+const Table = require('tty-table');
 
-export async function listPackage(appId){
-  const {data} = await get(`/app/${appId}/package/list?limit=1000`);
+export async function listPackage(appId) {
+  const { data } = await get(`/app/${appId}/package/list?limit=1000`);
+
+  const header = [{ value: 'Package Id' }, { value: 'Version' }];
+  const rows = [];
   for (const pkg of data) {
-    const {version} = pkg;
+    const { version } = pkg;
     let versionInfo = '';
     if (version) {
       versionInfo = ` - ${version.id} ${version.hash.slice(0, 8)} ${version.name}`;
     } else {
       versionInfo = ' (newest)';
     }
-    console.log(`${pkg.id}) ${pkg.name}(${pkg.status})${versionInfo}`);
+
+    rows.push([pkg.id, `${pkg.name}(${pkg.status})${versionInfo}`]);
   }
-  console.log(`\nTotal ${data.length} packages.`);
+
+  console.log(Table(header, rows).render());
+  console.log(`\nTotal ${data.length} package(s).`);
   return data;
 }
 
@@ -33,8 +36,8 @@ export async function choosePackage(appId) {
   const list = await listPackage(appId);
 
   while (true) {
-    const id = await question('Enter packageId:');
-    const app = list.find(v=>v.id === (id|0));
+    const id = await question('Enter Package Id:');
+    const app = list.find(v => v.id === (id | 0));
     if (app) {
       return app;
     }
@@ -42,40 +45,40 @@ export async function choosePackage(appId) {
 }
 
 export const commands = {
-  uploadIpa: async function({args}) {
+  uploadIpa: async function({ args }) {
     const fn = args[0];
     if (!fn) {
       throw new Error('Usage: pushy uploadIpa <ipaFile>');
     }
     const name = await getIPAVersion(fn);
-    const {appId} = await getSelectedApp('ios');
+    const { appId } = await getSelectedApp('ios');
 
-    const {hash} = await uploadFile(fn);
+    const { hash } = await uploadFile(fn);
 
-    const {id} = await post(`/app/${appId}/package/create`, {
+    const { id } = await post(`/app/${appId}/package/create`, {
       name,
       hash,
     });
     console.log(`Ipa uploaded: ${id}`);
   },
-  uploadApk: async function({args}) {
+  uploadApk: async function({ args }) {
     const fn = args[0];
     if (!fn) {
       throw new Error('Usage: pushy uploadApk <apkFile>');
     }
     const name = await getApkVersion(fn);
-    const {appId} = await getSelectedApp('android');
+    const { appId } = await getSelectedApp('android');
 
-    const {hash} = await uploadFile(fn);
+    const { hash } = await uploadFile(fn);
 
-    const {id} = await post(`/app/${appId}/package/create`, {
+    const { id } = await post(`/app/${appId}/package/create`, {
       name,
       hash,
     });
     console.log(`Apk uploaded: ${id}`);
   },
-  packages: async function({options}) {
-    const platform = checkPlatform(options.platform || await question('Platform(ios/android):'));
+  packages: async function({ options }) {
+    const platform = checkPlatform(options.platform || (await question('Platform(ios/android):')));
     const { appId } = await getSelectedApp(platform);
     await listPackage(appId);
   },

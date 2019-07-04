@@ -39,6 +39,7 @@
     "request": "^2.69.0",
     "simple-plist": "^0.3.0",
     "temporary": "^0.0.8",
+    "tty-table": "^2.7.0",
     "yauzl": "2.4.1",
     "yazl": "2.3.0"
   },
