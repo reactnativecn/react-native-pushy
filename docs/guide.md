@@ -15,10 +15,13 @@
 ```bash
 npm i -g react-native-update-cli
 npm i react-native-update@具体版本请看下面的表格
-react-native link react-native-update
 ```  
 
-`npm install -g react-native-update-cli`这一句在每一台电脑上仅需运行一次。  
+如果你的RN版本 < 0.60，那么还需要运行
+
+```bash
+react-native link react-native-update
+```  
 
 * 注意 *
 
@@ -49,7 +52,7 @@ npm i react-native-update@5.x
 
 ## 一、手动link
 
-如果第一步的`react-native link`已成功(iOS工程和安卓工程均能看到依赖)，可以跳过此步骤
+如果RN版本 >= 0.60，或是`react-native link`执行成功(iOS工程和安卓工程均能看到依赖)，则可以跳过此步骤
 
 ### iOS
 
@@ -69,7 +72,7 @@ npm i react-native-update@5.x
 
 2. 在`android/app/build.gradle`的 dependencies 部分增加如下代码:
   	```
-      compile project(':react-native-update')
+      implementation project(':react-native-update')
     ```
 
 3. 检查你的RN版本,如果是0.29及以上, 打开`android/app/src/main/java/[...]/MainApplication.java`,否则打开`android/app/src/main/java/[...]/MainActivity.java`
@@ -78,12 +81,13 @@ npm i react-native-update@5.x
 
 ## 二、配置Bundle URL
 
+注意此步骤无论任何版本，目前都需要手动配置。
+
 ### iOS
 
-首先在工程target的Build Phases->Link Binary with Libraries中加入`libz.tbd`、`libbz2.1.0.tbd`
+1. 在工程target的Build Phases->Link Binary with Libraries中加入`libz.tbd`、`libbz2.1.0.tbd`
 
-
-然后在你的AppDelegate.m文件中增加如下代码：
+2. 在你的AppDelegate.m文件中增加如下代码：
 
 ```objective-c
 // ... 其它代码
