@@ -44,7 +44,6 @@ nrm use taobao
 | 0.46及以上       | 5.x                     |
 
 
-
 安装命令示例：
 ```
 npm i react-native-update@5.x
@@ -75,7 +74,7 @@ npm i react-native-update@5.x
       implementation project(':react-native-update')
     ```
 
-3. 检查你的RN版本,如果是0.29及以上, 打开`android/app/src/main/java/[...]/MainApplication.java`,否则打开`android/app/src/main/java/[...]/MainActivity.java`
+3. 打开`android/app/src/main/java/[...]/MainApplication.java`,
   - 在文件开头增加 `import cn.reactnative.modules.update.UpdatePackage;`
   - 在`getPackages()` 方法中增加 `new UpdatePackage()`(注意上一行可能要增加一个逗号)
 
@@ -85,7 +84,7 @@ npm i react-native-update@5.x
 
 ### iOS
 
-1. 在工程target的Build Phases->Link Binary with Libraries中加入`libz.tbd`、`libbz2.1.0.tbd`
+1. (RN >= 0.60或者使用CocoaPods集成此步可跳过)在工程target的Build Phases->Link Binary with Libraries中加入`libz.tbd`、`libbz2.1.0.tbd`
 
 2. 在你的AppDelegate.m文件中增加如下代码：
 
@@ -94,22 +93,35 @@ npm i react-native-update@5.x
 
 #import "RCTHotUpdate.h"
 
+// 如果RN版本 >= 0.59，修改sourceURLForBridge
+- (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
+{
+#if DEBUG
+  return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index" fallbackResource:nil];
+#else
+  // 非DEBUG情况下替换为热更新bundle
+  return [RCTHotUpdate bundleURL];
+#endif
+}
+
+// 如果RN版本 < 0.59，修改didFinishLaunchingWithOptions
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
 #if DEBUG
   // 原来的jsCodeLocation保留在这里
   jsCodeLocation = ..........
 #else
-  // 非DEBUG情况下启用热更新
-  jsCodeLocation=[RCTHotUpdate bundleURL];
+  // 非DEBUG情况下替换为热更新bundle
+  jsCodeLocation = [RCTHotUpdate bundleURL];
 #endif
   // ... 其它代码
 }
+
 ```
 
 ### Android
 
-`0.29及以后版本`：在你的MainApplication中增加如下代码：
+在MainApplication中增加如下代码：
 
 ```java
 // ... 其它代码
@@ -125,24 +137,6 @@ public class MainApplication extends Application implements ReactApplication {
     }
     // ... 其它代码
   }
-}
-```
-
-`0.28及以前版本`：在你的MainActivity中增加如下代码：
-
-```java
-// ... 其它代码
-
-// 请注意不要少了这句import
-import cn.reactnative.modules.update.UpdateContext;
-
-public class MainActivity extends ReactActivity {
-
-    @Override
-    protected String getJSBundleFile() {
-        return UpdateContext.getBundleUrl(this);
-    }
-    // ... 其它代码
 }
 ```
 
@@ -174,7 +168,7 @@ App Name: <输入应用名字>
 ```bash
 $ pushy selectApp --platform ios
 1) 鱼多多(ios)
-3) 招财旺(ios)
+2) 招财旺(ios)
 
 Total 2 ios apps
 Enter appId: <输入应用前面的编号>
