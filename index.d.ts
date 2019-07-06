@@ -24,7 +24,9 @@ export interface UpdateAvailableResult {
   diffUrl: string;
 }
 
-export function checkUpdate(appkey: string): Promise<ExpiredResult | UpTodateResult | UpdateAvailableResult>;
+export type CheckResult = Partial<ExpiredResult & UpTodateResult & UpdateAvailableResult>;
+
+export function checkUpdate(appkey: string): Promise<CheckResult>;
 
 export function downloadUpdate(options: UpdateAvailableResult): Promise<undefined | string>;
 
