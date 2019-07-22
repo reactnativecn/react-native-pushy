@@ -2,15 +2,16 @@
  * Created by tdzl2003 on 2/22/16.
  */
 
-import * as path from 'path';
+const path = require('path');
 import { getRNVersion, translateOptions } from './utils';
 import * as fs from 'fs-extra';
 import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
-// import {diff} from 'node-bsdiff';
 import { question } from './utils';
 import { checkPlatform } from './app';
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
+const g2js = require('gradle-to-js/lib/parser');
+const os = require('os');
 
 var diff;
 try {
@@ -19,10 +20,20 @@ try {
 } catch (e) {
   diff = function() {
     console.warn(
-      'This function needs "node-bsdiff". Please run "npm i node-bsdiff -S" from your project directory first!',
+      'This function needs "node-bsdiff". Please run "npm i node-bsdiff" from your project directory first!',
     );
     throw new Error('This function needs module "node-bsdiff". Please install it first.');
   };
+}
+
+function exec(command) {
+  const commandResult = spawnSync(command, {
+    shell: true,
+    stdio: 'inherit',
+  });
+  if (commandResult.error) {
+    throw commandResult.error;
+  }
 }
 
 async function runReactNativeBundleCommand(
@@ -45,8 +56,6 @@ async function runReactNativeBundleCommand(
   fs.emptyDirSync(outputFolder);
 
   Array.prototype.push.apply(reactNativeBundleArgs, [
-    path.join('node_modules', 'react-native', 'local-cli', 'cli.js'),
-    'bundle',
     '--assets-dest',
     outputFolder,
     '--bundle-output',
@@ -67,27 +76,45 @@ async function runReactNativeBundleCommand(
     reactNativeBundleArgs.push('--config', config);
   }
 
-  console.log(`Running "react-native bundle" command:\n`);
-  const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
-  console.log(`node ${reactNativeBundleArgs.join(' ')}`);
+  try {
+    exec(`
+    echo Running "react-native bundle" command:
+    react-native bundle ${reactNativeBundleArgs.join(' ')}
+    `);
+    if (platform === 'android') {
+      await compileHermesByteCode(bundleName, outputFolder);
+    }
+  } catch (e) {
+    console.log(e);
+    process.exit(1);
+  }
+}
 
-  return new Promise((resolve, reject, notify) => {
-    reactNativeBundleProcess.stdout.on('data', data => {
-      console.log(data.toString().trim());
-    });
+function getHermesOSBin() {
+  if (os.platform() === 'win32') return 'win64-bin';
+  if (os.platform() === 'darwin') return 'osx-bin';
+  if (os.platform() === 'linux') return 'linux64-bin';
+}
 
-    reactNativeBundleProcess.stderr.on('data', data => {
-      console.error(data.toString().trim());
-    });
-
-    reactNativeBundleProcess.on('close', exitCode => {
-      if (exitCode) {
-        reject(new Error(`"react-native bundle" command exited with code ${exitCode}.`));
+async function compileHermesByteCode(bundleName, outputFolder) {
+  let enableHermes = false;
+  try {
+    const gradleConfig = await g2js.parseFile('android/app/build.gradle');
+    const projectConfig = gradleConfig['project.ext.react'];
+    for (const packagerConfig of projectConfig) {
+      if (packagerConfig.includes('enableHermes') && packagerConfig.includes('true')) {
+        enableHermes = true;
+        break;
       }
-
-      resolve(null);
-    });
-  });
+    }
+  } catch (e) {}
+  if (enableHermes) {
+    console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
+    exec(`
+node_modules/hermesvm/${getHermesOSBin()}/hermes -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O
+echo Compiling done.
+`);
+  }
 }
 
 async function pack(dir, output) {
@@ -397,7 +424,6 @@ export const commands = {
     // const { version, major, minor } = getRNVersion();
 
     // console.log('Bundling with React Native version: ', version);
-
 
     await runReactNativeBundleCommand(bundleName, dev, entryFile, intermediaDir, platform);
 
