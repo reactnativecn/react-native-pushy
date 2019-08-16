@@ -59,6 +59,8 @@ typedef NS_ENUM(NSInteger, HotUpdateType) {
     HotUpdateTypePatchFromPpk = 3,
 };
 
+static BOOL ignoreRollback = false;
+
 @implementation RCTHotUpdate {
     RCTHotUpdateManager *_fileManager;
 }
@@ -92,7 +94,8 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
             BOOL isFirstLoadOK = [updateInfo[paramIsFirstLoadOk] boolValue];
             
             NSString *loadVersioin = curVersion;
-            BOOL needRollback = (isFirstTime == NO && isFirstLoadOK == NO) || loadVersioin.length<=0;
+            BOOL needRollback = (!ignoreRollback && isFirstTime == NO && isFirstLoadOK == NO) || loadVersioin.length<=0;
+            ignoreRollback = true;
             if (needRollback) {
                 loadVersioin = lastVersion;
                 
@@ -255,6 +258,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
         
         // reload
         dispatch_async(dispatch_get_main_queue(), ^{
+            ignoreRollback = false;
             [_bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
             [_bridge reload];
         });
