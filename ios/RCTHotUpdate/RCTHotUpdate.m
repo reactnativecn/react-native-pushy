@@ -95,7 +95,6 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
             
             NSString *loadVersioin = curVersion;
             BOOL needRollback = (!ignoreRollback && isFirstTime == NO && isFirstLoadOK == NO) || loadVersioin.length<=0;
-            ignoreRollback = true;
             if (needRollback) {
                 loadVersioin = lastVersion;
                 
@@ -115,7 +114,10 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
                 [defaults synchronize];
                 // ...need clear files later
             }
-            else if (isFirstTime){
+            else if (isFirstTime && !ignoreRollback){
+                // bundleURL may be called many times, ignore rollbacks before process restarted again.
+                ignoreRollback = true;
+
                 NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] initWithDictionary:updateInfo];
                 newInfo[paramIsFirstTime] = @(NO);
                 [defaults setObject:newInfo forKey:keyUpdateInfo];
@@ -141,6 +143,10 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 + (BOOL)requiresMainQueueSetup {
     // only set to YES if your module initialization relies on calling UIKit!
 	return NO;
+}
+
+- (void)init {
+
 }
 
 - (NSDictionary *)constantsToExport
@@ -258,7 +264,6 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
         
         // reload
         dispatch_async(dispatch_get_main_queue(), ^{
-            ignoreRollback = false;
             [_bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
             [_bridge reload];
         });
