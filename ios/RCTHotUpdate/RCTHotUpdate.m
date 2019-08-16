@@ -145,10 +145,6 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 	return NO;
 }
 
-- (void)init {
-
-}
-
 - (NSDictionary *)constantsToExport
 {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
