@@ -110,8 +110,9 @@ async function compileHermesByteCode(bundleName, outputFolder) {
   } catch (e) {}
   if (enableHermes) {
     console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
+    const hermesPath = fs.existsSync('node_modules/hermes-engine') ? 'node_modules/hermes-engine' : 'node_modules/hermesvm';
     exec(`
-node_modules/hermesvm/${getHermesOSBin()}/hermes -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O
+${hermesPath}/${getHermesOSBin()}/hermes -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O
 echo Compiling done.
 `);
   }
@@ -421,9 +422,9 @@ export const commands = {
       throw new Error('Platform must be specified.');
     }
 
-    // const { version, major, minor } = getRNVersion();
+    const { version, major, minor } = getRNVersion();
 
-    // console.log('Bundling with React Native version: ', version);
+    console.log('Bundling with React Native version: ', version);
 
     await runReactNativeBundleCommand(bundleName, dev, entryFile, intermediaDir, platform);
 
