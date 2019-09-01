@@ -18,15 +18,11 @@ Pod::Spec.new do |s|
   s.pod_target_xcconfig = { 'USER_HEADER_SEARCH_PATHS' => '"$(SRCROOT)/../node_modules/react-native-update/ios"' }
 
   s.dependency 'React'
+  s.dependency 'SSZipArchive'
 
   s.subspec 'RCTHotUpdate' do |ss|
     ss.source_files = 'ios/RCTHotUpdate/*.{h,m}'
     ss.public_header_files = ['ios/RCTHotUpdate/RCTHotUpdate.h']
-  end
-
-  s.subspec 'SSZipArchive' do |ss|
-    ss.source_files = 'ios/RCTHotUpdate/SSZipArchive/**/*.{h,m,c}'
-    ss.private_header_files = 'ios/RCTHotUpdate/SSZipArchive/**/*.h'
   end
 
   s.subspec 'BSDiff' do |ss|
