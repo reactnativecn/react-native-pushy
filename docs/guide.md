@@ -14,22 +14,20 @@
 
 ```bash
 npm i -g react-native-update-cli
-npm i react-native-update@具体版本请看下面的表格
+npm i react-native-update
 ```  
 
-如果你的RN版本 < 0.60，那么还需要运行
+> 如果下载极慢或者显示网络失败，请设置使用淘宝镜像`npx nrm use taobao`
+
+如果你的RN版本 >= 0.60，请在iOS目录下执行:
 
 ```bash
-react-native link react-native-update
-```  
-
-* 注意 *
-
-如果访问极慢或者显示网络失败，请设置使用淘宝镜像（也仅需设置一次）：  
-```bash
-npm install -g nrm
-nrm use taobao
+pod install
 ```
+
+如果你的RN版本 < 0.60，那么还需要[手动link](#一、手动link)
+
+请记得一定要重新编译（react-native run-ios或run-android命令编译，或在Xcode/Android Studio中重新编译）。
 
 ### 版本
 
@@ -51,15 +49,32 @@ npm i react-native-update@5.x
 
 ## 一、手动link
 
-如果RN版本 >= 0.60，或是`react-native link`执行成功(iOS工程和安卓工程均能看到依赖)，则可以跳过此步骤
+如果RN版本 >= 0.60则可以跳过此步骤
 
 ### iOS
+
+<detail>
+<summary>RN < 0.60且使用CocoaPods（推荐）</summary>
+
+1. 在ios/Podfile中添加
+```
+pod 'react-native-update', path: '../node_modules/react-native-update'
+```
+2. 在项目的ios目录下运行`pod install`
+3. 重新编译
+   
+</detail>
+
+<detail>
+<summary>RN < 0.60且不使用CocoaPods</summary>
 
 1. 在XCode中的Project Navigator里,右键点击`Libraries` ➜ `Add Files to [你的工程名]`
 2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTHotUpdate.xcodeproj`
 3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTHotUpdate.a`
 4. 继续在`Build Settings`里搜索`Header Search Path`，添加$(SRCROOT)/../node_modules/react-native-update/ios
-5. Run your project (`Cmd+R`)
+5. 重新编译
+
+</detail>
 
 ### Android
 
