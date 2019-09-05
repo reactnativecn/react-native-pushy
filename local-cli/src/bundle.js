@@ -9,7 +9,7 @@ import { ZipFile } from 'yazl';
 import { open as openZipFile } from 'yauzl';
 import { question } from './utils';
 import { checkPlatform } from './app';
-const { spawn, spawnSync } = require('child_process');
+const { spawn, spawnSync, execSync } = require('child_process');
 const g2js = require('gradle-to-js/lib/parser');
 const os = require('os');
 
@@ -56,6 +56,7 @@ async function runReactNativeBundleCommand(
   fs.emptyDirSync(outputFolder);
 
   Array.prototype.push.apply(reactNativeBundleArgs, [
+    'bundle',
     '--assets-dest',
     outputFolder,
     '--bundle-output',
@@ -76,18 +77,29 @@ async function runReactNativeBundleCommand(
     reactNativeBundleArgs.push('--config', config);
   }
 
-  try {
-    exec(`
-    echo Running "react-native bundle" command:
-    react-native bundle ${reactNativeBundleArgs.join(' ')}
-    `);
-    if (platform === 'android') {
-      await compileHermesByteCode(bundleName, outputFolder);
-    }
-  } catch (e) {
-    console.log(e);
-    process.exit(1);
-  }
+  const reactNativeBundleProcess = spawn('react-native', reactNativeBundleArgs);
+  console.log(`Running bundle command: react-native ${reactNativeBundleArgs.join(' ')}`);
+
+  return new Promise((resolve, reject) => {
+    reactNativeBundleProcess.stdout.on('data', data => {
+      console.log(data.toString().trim());
+    });
+
+    reactNativeBundleProcess.stderr.on('data', data => {
+      console.error(data.toString().trim());
+    });
+
+    reactNativeBundleProcess.on('close', async exitCode => {
+      if (exitCode) {
+        reject(new Error(`"react-native bundle" command exited with code ${exitCode}.`));
+      } else {
+        if (platform === 'android') {
+          await compileHermesByteCode(bundleName, outputFolder);
+        }
+        resolve(null);
+      }
+    });
+  });
 }
 
 function getHermesOSBin() {
@@ -110,11 +122,12 @@ async function compileHermesByteCode(bundleName, outputFolder) {
   } catch (e) {}
   if (enableHermes) {
     console.log(`Hermes enabled, now compiling to hermes bytecode:\n`);
-    const hermesPath = fs.existsSync('node_modules/hermes-engine') ? 'node_modules/hermes-engine' : 'node_modules/hermesvm';
-    exec(`
-${hermesPath}/${getHermesOSBin()}/hermes -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O
-echo Compiling done.
-`);
+    const hermesPath = fs.existsSync('node_modules/hermes-engine')
+      ? 'node_modules/hermes-engine'
+      : 'node_modules/hermesvm';
+    execSync(
+      `${hermesPath}/${getHermesOSBin()}/hermes -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O`,
+    );
   }
 }
 
