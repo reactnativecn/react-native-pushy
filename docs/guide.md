@@ -83,6 +83,9 @@ pod 'react-native-update', path: '../node_modules/react-native-update'
 
 ### Android
 
+
+<details>
+<summary>RN < 0.60</summary>
 1. 在`android/settings.gradle`中添加如下代码:
   	```
   	include ':react-native-update'
@@ -97,6 +100,7 @@ pod 'react-native-update', path: '../node_modules/react-native-update'
 3. 打开`android/app/src/main/java/[...]/MainApplication.java`,
   - 在文件开头增加 `import cn.reactnative.modules.update.UpdatePackage;`
   - 在`getPackages()` 方法中增加 `new UpdatePackage()`(注意上一行可能要增加一个逗号)
+</details>
 
 ## 二、配置Bundle URL
 
