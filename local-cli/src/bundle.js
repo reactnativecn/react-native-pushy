@@ -56,7 +56,8 @@ async function runReactNativeBundleCommand(
   fs.emptyDirSync(outputFolder);
 
   Array.prototype.push.apply(reactNativeBundleArgs, [
-    'bundle',
+    path.join("node_modules", "react-native", "local-cli", "cli.js"), 
+    "bundle",
     '--assets-dest',
     outputFolder,
     '--bundle-output',
@@ -77,8 +78,8 @@ async function runReactNativeBundleCommand(
     reactNativeBundleArgs.push('--config', config);
   }
 
-  const reactNativeBundleProcess = spawn('react-native', reactNativeBundleArgs);
-  console.log(`Running bundle command: react-native ${reactNativeBundleArgs.join(' ')}`);
+  const reactNativeBundleProcess = spawn('node', reactNativeBundleArgs);
+  console.log(`Running bundle command: node ${reactNativeBundleArgs.join(' ')}`);
 
   return new Promise((resolve, reject) => {
     reactNativeBundleProcess.stdout.on('data', data => {
