@@ -135,13 +135,12 @@ public class UpdateModule extends ReactContextBaseJavaModule{
                         loadField.set(instanceManager, loader);
                     }
 
-                    final Method recreateMethod = instanceManager.getClass().getMethod("recreateReactContextInBackground");
+                    try {
+                        instanceManager.recreateReactContextInBackground();
+                    } catch(Throwable err) {
+                        activity.recreate();
+                    }
 
-                    final ReactInstanceManager finalizedInstanceManager = instanceManager;
-
-                    recreateMethod.invoke(finalizedInstanceManager);
-
-                    activity.recreate();
                 } catch (Throwable err) {
                     Log.e("pushy", "Failed to restart application", err);
                 }
