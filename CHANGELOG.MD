@@ -1,43 +1,44 @@
+### 最近更新
 
-### 最新更新
+## 5.2.9 (2019-09-18)
+
+1. 添加 proguard 混淆规则以解决开启混淆后闪退的问题
 
 ## 5.2.8
 
-1. 解决某些情形下Android调用switchVersion不能重启的问题
+1. 解决某些情形下 Android 调用 switchVersion 不能重启的问题
 
 ## 5.2.7
 
-1. 改进windows端打更新包的兼容性（部分windows机器上会产生空ppk文件）
+1. 改进 windows 端打更新包的兼容性（部分 windows 机器上会产生空 ppk 文件）
 
 ## 5.2.4
 
-1. 支持RN 0.61的hermes（路径变化）
-2. iOS端使用第三方的SSZipArchive以减少重名冲突
+1. 支持 RN 0.61 的 hermes（路径变化）
+2. iOS 端使用第三方的 SSZipArchive 以减少重名冲突
 
 ## 5.2.2
 
-1. 修复一处导致iOS回滚的问题
+1. 修复一处导致 iOS 回滚的问题
 
 ## 5.2.1
 
-1. 检测如果开启了hermes，则自动编译为hermes字节码格式
+1. 检测如果开启了 hermes，则自动编译为 hermes 字节码格式
 
 ## 5.2.0
 
-1. 添加typescript声明
-2. 支持cocoapods
+1. 添加 typescript 声明
+2. 支持 cocoapods
 
 ## 5.1.9
 
-1. 重写bundle命令以提升版本兼容性
+1. 重写 bundle 命令以提升版本兼容性
 2. 改进命令行的输出样式
-
 
 ## 5.1.8
 
-1. 服务器迁移到https
-2. android支持64位
-
+1. 服务器迁移到 https
+2. android 支持 64 位
 
 ## 5.1.6
 

@@ -2,6 +2,10 @@
 
 本组件是面向 React Native 提供热更新功能的组件，建议结合[Update 服务](https://update.reactnative.cn/)使用。
 
+### 最近更新
+
+请查阅[最近更新文档](CHANGELOG.md)。
+
 ### 优势
 
 1. 命令行工具&网页双端管理，版本发布过程简单便捷，完全可以集成 CI。
