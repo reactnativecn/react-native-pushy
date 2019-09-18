@@ -4,7 +4,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs-extra';
-import ApkReader from 'node-apk-parser';
+const ApkReader = require('adbkit-apkreader');
 import ipaReader from './ipaReader';
 
 var read = require('read');
@@ -18,10 +18,10 @@ export function question(query, password) {
       {
         prompt: query,
         silent: password,
-        replace: password ? '*' : undefined
+        replace: password ? '*' : undefined,
       },
-      (err, result) => (err ? reject(err) : resolve(result))
-    )
+      (err, result) => (err ? reject(err) : resolve(result)),
+    ),
   );
 }
 
@@ -48,14 +48,14 @@ export function getRNVersion() {
   return {
     version,
     major: match[1] | 0,
-    minor: match[2] | 0
+    minor: match[2] | 0,
   };
 }
 
-export function getApkVersion(fn) {
-  const reader = ApkReader.readFile(fn);
-  const manifest = reader.readManifestSync();
-  return Promise.resolve(manifest.versionName);
+export async function getApkVersion(fn) {
+  const reader = await ApkReader.open(fn);
+  const manifest = await reader.readManifest();
+  return manifest.versionName;
 }
 
 export function getIPAVersion(fn) {

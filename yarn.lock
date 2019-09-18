@@ -14,9 +14,14 @@ acorn@^3.1.0:
   version "3.3.0"
   resolved "http://registry.npm.taobao.org/acorn/download/acorn-3.3.0.tgz#45e37fb39e8da3f25baee3ff5369e2bb5f22017a"
 
-adm-zip@~0.4.4:
-  version "0.4.7"
-  resolved "http://registry.npm.taobao.org/adm-zip/download/adm-zip-0.4.7.tgz#8606c2cbf1c426ce8c8ec00174447fd49b6eafc1"
+adbkit-apkreader@^3.1.2:
+  version "3.1.2"
+  resolved "https://registry.yarnpkg.com/adbkit-apkreader/-/adbkit-apkreader-3.1.2.tgz#86a0c676870aba2f16d0f0948d2c94af58417bd5"
+  integrity sha512-xFlRkjEuJ8+hEo6BfUWXyaxDm54RtLCBBC4TzYc1S0SQqrE7r31QWfYaUlJH+eJiPGTUzUCd+SUs1cJaCkATnQ==
+  dependencies:
+    bluebird "^3.4.7"
+    debug "~0.7.4"
+    yauzl "^2.7.0"
 
 align-text@^0.1.1, align-text@^0.1.3:
   version "0.1.4"
@@ -562,6 +567,11 @@ bluebird@^2.9.33:
   version "2.11.0"
   resolved "http://registry.npm.taobao.org/bluebird/download/bluebird-2.11.0.tgz#534b9033c022c9579c56ba3b3e5a5caafbb650e1"
 
+bluebird@^3.4.7:
+  version "3.5.5"
+  resolved "https://registry.yarnpkg.com/bluebird/-/bluebird-3.5.5.tgz#a8d0afd73251effbbd5fe384a77d73003c17a71f"
+  integrity sha512-5am6HnnfN+urzt4yfg7IgTbotDjIT/u8AJpEt0sIU9FtXfVeezXAPKswrG+xKUCOYAINpSdgZVDU6QFh+cuH3w==
+
 boom@2.x.x:
   version "2.10.1"
   resolved "http://registry.npm.taobao.org/boom/download/boom-2.10.1.tgz#39c8918ceff5799f83f9492a848f625add0c766f"
@@ -999,6 +1009,13 @@ extsprintf@1.0.2:
 fd-slicer@~1.0.1:
   version "1.0.1"
   resolved "http://registry.npm.taobao.org/fd-slicer/download/fd-slicer-1.0.1.tgz#8b5bcbd9ec327c5041bf9ab023fd6750f1177e65"
+  dependencies:
+    pend "~1.2.0"
+
+fd-slicer@~1.1.0:
+  version "1.1.0"
+  resolved "https://registry.yarnpkg.com/fd-slicer/-/fd-slicer-1.1.0.tgz#25c7c89cb1f9077f8891bbe61d8f390eae256f1e"
+  integrity sha1-JcfInLH5B3+IkbvmHY85Dq4lbx4=
   dependencies:
     pend "~1.2.0"
 
@@ -1750,13 +1767,6 @@ nice-try@^1.0.4:
   version "1.0.5"
   resolved "https://registry.npm.taobao.org/nice-try/download/nice-try-1.0.5.tgz#a3378a7696ce7d223e88fc9b764bd7ef1089e366"
   integrity sha1-ozeKdpbOfSI+iPybdkvX7xCJ42Y=
-
-node-apk-parser@^0.2.3:
-  version "0.2.3"
-  resolved "http://registry.npm.taobao.org/node-apk-parser/download/node-apk-parser-0.2.3.tgz#385a141a6da38de562e5d9f08961bf9724d35fc4"
-  dependencies:
-    adm-zip "~0.4.4"
-    debug "~0.7.4"
 
 node-fetch@^1.0.1:
   version "1.6.3"
@@ -2624,6 +2634,14 @@ yauzl@2.4.1:
   resolved "http://registry.npm.taobao.org/yauzl/download/yauzl-2.4.1.tgz#9528f442dab1b2284e58b4379bb194e22e0c4005"
   dependencies:
     fd-slicer "~1.0.1"
+
+yauzl@^2.7.0:
+  version "2.10.0"
+  resolved "https://registry.yarnpkg.com/yauzl/-/yauzl-2.10.0.tgz#c7eb17c93e112cb1086fa6d8e51fb0667b79a5f9"
+  integrity sha1-x+sXyT4RLLEIb6bY5R+wZnt5pfk=
+  dependencies:
+    buffer-crc32 "~0.2.3"
+    fd-slicer "~1.1.0"
 
 yazl@2.3.0:
   version "2.3.0"
