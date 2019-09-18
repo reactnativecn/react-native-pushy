@@ -1,0 +1,2 @@
+-keepnames class cn.reactnative.modules.update.DownloadTask { *; }
+-keepnames class com.facebook.react.ReactInstanceManager { *; }
