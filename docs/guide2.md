@@ -87,7 +87,7 @@ import _updateConfig from './update.json';
 const {appKey} = _updateConfig[Platform.OS];
 
 class MyProject extends Component {
-  componentWillMount(){
+  componentDidMount(){
     if (isFirstTime) {
       Alert.alert('提示', '这是当前版本第一次启动,是否要模拟启动失败?失败将回滚到上一版本', [
         {text: '是', onPress: ()=>{throw new Error('模拟启动失败,请重启应用')}},
@@ -109,6 +109,10 @@ class MyProject extends Component {
     });
   };
   checkUpdate = () => {
+    if (__DEV__) {
+      // 开发模式不支持热更新，跳过检查
+      return;
+    }
     checkUpdate(appKey).then(info => {
       if (info.expired) {
         Alert.alert('提示', '您的应用版本已更新,请前往应用商店下载新的版本', [
@@ -123,7 +127,7 @@ class MyProject extends Component {
         ]);
       }
     }).catch(err => { 
-      Alert.alert('提示', '更新失败.');
+      console.warn(err);
     });
   };
   render() {

@@ -49,6 +49,10 @@ export default class App extends Component {
   };
 
   checkUpdate = () => {
+    if (__DEV__) {
+      // 开发模式不支持热更新，跳过检查
+      return;
+    }
     checkUpdate(appKey).then(info => {
       if (info.expired) {
         Alert.alert('提示', '您的应用版本已更新,请前往应用商店下载新的版本', [
@@ -63,7 +67,7 @@ export default class App extends Component {
         ]);
       }
     }).catch(err => {
-      Alert.alert('提示', '检查更新失败.');
+      console.warn(err);
     });
   };
 
