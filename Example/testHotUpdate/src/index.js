@@ -1,10 +1,4 @@
-/**
- * Sample React Native App
- * https://github.com/facebook/react-native
- */
-'use strict';
 import React, {
-  AppRegistry,
   Component,
   StyleSheet,
   Platform,
@@ -31,8 +25,8 @@ import {
 import _updateConfig from '../update.json';
 const {appKey} = _updateConfig[Platform.OS];
 
-class MyProject extends Component {
-  componentWillMount(){
+export default class App extends Component {
+  componentDidMount(){
     if (isRolledBack) {
       Alert.alert('提示', '刚刚更新失败了,版本被回滚.');
     } else if (isFirstTime) {
@@ -120,4 +114,3 @@ const styles = StyleSheet.create({
   },
 });
 
-AppRegistry.registerComponent('testHotUpdate', () => MyProject);
