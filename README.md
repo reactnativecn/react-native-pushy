@@ -34,6 +34,18 @@
 
 请查阅[文档-API 接口](docs/api.md)。
 
+### 本地开发
+
+```
+$ git clone git@github.com:reactnativecn/react-native-pushy.git
+$ cd react-native-pushy/Example/testHotUpdate
+$ yarn
+$ yarn start
+```
+
+本地库文件使用yarn link链接，因此可直接在源文件中修改，在testHotUpdate项目中调试。
+
+
 ### 关于我们
 
 本组件由[React Native 中文网](https://reactnative.cn/)独家发布，如有定制需求可以[联系我们](https://reactnative.cn/about.html#content)。
