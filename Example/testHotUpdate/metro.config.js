@@ -2,10 +2,9 @@ const path = require('path');
 
 const extraNodeModules = {
   'react-native': path.resolve(__dirname, 'node_modules/react-native'),
+  'react-native-update': path.resolve(__dirname, '../..'),
+  '@babel/runtime': path.resolve(__dirname, 'node_modules/@babel/runtime'),
 };
-const blacklistRegexes = [
-  /react-native-update[\/\\]node_modules[\/\\]react-native[\/\\].*/,
-];
 const watchFolders = [path.resolve(__dirname, '../..')];
 
 module.exports = {
@@ -19,9 +18,6 @@ module.exports = {
   },
   resolver: {
     extraNodeModules,
-    blacklistRE: require('metro-config/src/defaults/blacklist')(
-      blacklistRegexes,
-    ),
   },
   watchFolders,
 };
