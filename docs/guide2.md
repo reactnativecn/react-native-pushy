@@ -94,7 +94,7 @@ class MyProject extends Component {
       Alert.alert('提示', '刚刚更新失败了,版本被回滚.');
     }
   }
-  doUpdate = async info => {
+  doUpdate = async (info) => {
     try {
       const hash = await downloadUpdate(info);
       Alert.alert('提示', '下载完毕,是否重启应用?', [
