@@ -20,10 +20,7 @@ const {appKey} = _updateConfig[Platform.OS];
 异步函数checkUpdate可以检查当前版本是否需要更新：
 
 ```javascript
-checkUpdate(appKey)
-    .then(info => {
-    })
-    
+const info = await checkUpdate(appKey)
 ```
 
 返回的info有三种情况：
@@ -97,38 +94,42 @@ class MyProject extends Component {
       Alert.alert('提示', '刚刚更新失败了,版本被回滚.');
     }
   }
-  doUpdate = info => {
-    downloadUpdate(info).then(hash => {
+  doUpdate = async info => {
+    try {
+      const hash = await downloadUpdate(info);
       Alert.alert('提示', '下载完毕,是否重启应用?', [
         {text: '是', onPress: ()=>{switchVersion(hash);}},
         {text: '否',},
         {text: '下次启动时', onPress: ()=>{switchVersionLater(hash);}},
       ]);
-    }).catch(err => { 
+    } catch(err) {
       Alert.alert('提示', '更新失败.');
-    });
+    }
   };
-  checkUpdate = () => {
+  checkUpdate = async () => {
     if (__DEV__) {
       // 开发模式不支持热更新，跳过检查
       return;
     }
-    checkUpdate(appKey).then(info => {
-      if (info.expired) {
-        Alert.alert('提示', '您的应用版本已更新,请前往应用商店下载新的版本', [
-          {text: '确定', onPress: ()=>{info.downloadUrl && Linking.openURL(info.downloadUrl)}},
-        ]);
-      } else if (info.upToDate) {
-        Alert.alert('提示', '您的应用版本已是最新.');
-      } else {
-        Alert.alert('提示', '检查到新的版本'+info.name+',是否下载?\n'+ info.description, [
-          {text: '是', onPress: ()=>{this.doUpdate(info)}},
-          {text: '否',},
-        ]);
-      }
-    }).catch(err => { 
+    let info;
+    try {
+      info = await checkUpdate(appKey);
+    } catch (err) {
       console.warn(err);
-    });
+      return;
+    }
+    if (info.expired) {
+      Alert.alert('提示', '您的应用版本已更新,请前往应用商店下载新的版本', [
+        {text: '确定', onPress: ()=>{info.downloadUrl && Linking.openURL(info.downloadUrl)}},
+      ]);
+    } else if (info.upToDate) {
+      Alert.alert('提示', '您的应用版本已是最新.');
+    } else {
+      Alert.alert('提示', '检查到新的版本'+info.name+',是否下载?\n'+ info.description, [
+        {text: '是', onPress: ()=>{this.doUpdate(info)}},
+        {text: '否',},
+      ]);
+    }
   };
   render() {
     return (
