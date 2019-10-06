@@ -59,6 +59,10 @@ public class UpdateContext {
         return null;
     }
 
+    public String getBuildTime() {
+        return BuildConfig.PUSHY_BUILD_TIME;
+    }
+
     public interface DownloadFileListener {
         void onDownloadCompleted();
         void onDownloadFailed(Throwable error);

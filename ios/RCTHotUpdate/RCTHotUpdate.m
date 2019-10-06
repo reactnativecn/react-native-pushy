@@ -152,6 +152,7 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     NSMutableDictionary *ret = [NSMutableDictionary new];
     ret[@"downloadRootDir"] = [RCTHotUpdate downloadDir];
     ret[@"packageVersion"] = [RCTHotUpdate packageVersion];
+    ret[@"buildTime"] = [RCTHotUpdate buildTime];
     ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
     ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadMarked];
     NSDictionary *updateInfo = [defaults dictionaryForKey:keyUpdateInfo];
@@ -462,6 +463,17 @@ RCT_EXPORT_METHOD(markSuccess)
         version = [infoDictionary objectForKey:@"CFBundleShortVersionString"];
     });
     return version;
+}
+
++ (NSString *)buildTime
+{
+#if DEBUG
+    return @"0";
+#else
+    // To be replaced by scripts/generateiOSBuildTime.sh
+    NSString *pushy_build_time = 1570370091
+    return pushy_build_time;
+#endif
 }
 
 @end

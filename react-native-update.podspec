@@ -17,6 +17,8 @@ Pod::Spec.new do |s|
   s.vendored_libraries = 'RCTHotUpdate/libRCTHotUpdate.a'
   s.pod_target_xcconfig = { 'USER_HEADER_SEARCH_PATHS' => '"$(SRCROOT)/../node_modules/react-native-update/ios"' }
 
+  s.script_phase = { :name => 'Generate build time', :script => '../../node_modules/react-native-update/scripts/generateiOSBuildTime.sh', :execution_position => :before_compile }
+
   s.dependency 'React'
   s.dependency 'SSZipArchive'
 

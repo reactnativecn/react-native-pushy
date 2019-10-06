@@ -41,6 +41,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
         constants.put("downloadRootDir", updateContext.getRootDir());
         constants.put("packageVersion", updateContext.getPackageVersion());
         constants.put("currentVersion", updateContext.getCurrentVersion());
+        constants.put("buildTime", updateContext.getBuildTime());
         boolean isFirstTime = updateContext.isFirstTime();
         constants.put("isFirstTime", isFirstTime);
         if (isFirstTime) {

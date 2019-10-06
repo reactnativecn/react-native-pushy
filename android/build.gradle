@@ -1,3 +1,5 @@
+int MILLIS_IN_MINUTE = 1000 * 60
+int minutesSinceEpoch = System.currentTimeMillis() / MILLIS_IN_MINUTE
 
 def safeExtGet(prop, fallback) {
     rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
@@ -20,6 +22,17 @@ android {
         main {
             // let gradle pack the shared library into apk
             jniLibs.srcDirs = ['./lib']
+        }
+    }
+
+    buildTypes {
+        release {
+            buildConfigField("String", "PUSHY_BUILD_TIME", "\"${minutesSinceEpoch}\"")
+            resValue("string", "pushy_build_time", "${minutesSinceEpoch}")
+        }
+        debug {
+            buildConfigField("String", "PUSHY_BUILD_TIME", "\"0\"")
+            resValue("string", "pushy_build_time", "0")
         }
     }
 }
