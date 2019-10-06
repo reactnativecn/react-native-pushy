@@ -470,9 +470,14 @@ RCT_EXPORT_METHOD(markSuccess)
 #if DEBUG
     return @"0";
 #else
-    // To be replaced by scripts/generateiOSBuildTime.sh
-    NSString *pushy_build_time = 1570370091
-    return pushy_build_time;
+    static NSString *buildTime;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+      NSString *buildTimePath = [[NSBundle mainBundle] pathForResource:@"pushy_build_time" ofType:@"txt"];
+      buildTime = [[NSString stringWithContentsOfFile:buildTimePath encoding:NSUTF8StringEncoding error:nil]
+                 stringByTrimmingCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+    });
+    return buildTime;
 #endif
 }
 
