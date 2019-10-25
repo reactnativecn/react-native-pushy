@@ -2,7 +2,7 @@
 
 本组件是面向 React Native 提供热更新功能的组件，建议结合[Update 服务](https://update.reactnative.cn/)使用。
 
-注意，在iOS上使用热更新有被拒的可能。可以按以下步骤屏蔽iOS端：  
+注意，在iOS上使用热更新有被拒的可能。可以按以下步骤屏蔽iOS端(`react-native-update`版本需 >= 5.3.1)：  
 
 1. 如果RN版本>=0.60，在项目根目录下编辑或创建react-native.config.js，添加如下内容
 ```js
