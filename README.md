@@ -2,9 +2,10 @@
 
 本组件是面向 React Native 提供热更新功能的组件，建议结合[Update 服务](https://update.reactnative.cn/)使用。
 
-注意，在iOS上使用热更新有被拒的可能。可以按以下步骤屏蔽iOS端(`react-native-update`版本需 >= 5.3.1)：  
+注意，在 iOS 上使用热更新有被拒的可能。可以按以下步骤屏蔽 iOS 端(`react-native-update`版本需 >= 5.3.1)：
 
-1. 如果RN版本>=0.60，在项目根目录下编辑或创建react-native.config.js，添加如下内容
+1. 如果 RN 版本>=0.60，在项目根目录下编辑或创建 react-native.config.js，添加如下内容
+
 ```js
 // react-native.config.js
 module.exports = {
@@ -17,11 +18,10 @@ module.exports = {
   },
 };
 ```
-2. 如果在原生代码端尚未配置，则跳过下面文档中的ios端的配置。如果已经配置，则按文档的步骤反向操作（添加的ios代码删去）。
-3. 如果是0.60以上版本或使用了cocoapods，在ios目录中再次运行pod install，确保Podfile和Podfile.lock中都没有'react-native-update'。如果RN版本<0.60，则运行`react-native unlink react-native-update`。
-4. 在js代码里调用checkUpdate()方法前，判断Platform.OS，如果是ios平台则直接return跳过。
-```
 
+2. 如果在原生代码端尚未配置，则跳过下面文档中的 ios 端的配置。如果已经配置，则按文档的步骤反向操作（添加的 ios 代码删去）。
+3. 如果是 0.60 以上版本或使用了 cocoapods，在 ios 目录中再次运行 pod install，确保 Podfile 和 Podfile.lock 中都没有'react-native-update'。如果 RN 版本<0.60，则运行`react-native unlink react-native-update`。
+4. 在 js 代码里调用 checkUpdate()方法前，判断 Platform.OS，如果是 ios 平台则直接 return 跳过。
 
 ### 最近更新
 
@@ -64,8 +64,7 @@ $ yarn
 $ yarn start
 ```
 
-本地库文件使用yarn link链接，因此可直接在源文件中修改，在testHotUpdate项目中调试。
-
+本地库文件使用 yarn link 链接，因此可直接在源文件中修改，在 testHotUpdate 项目中调试。
 
 ### 关于我们
 
