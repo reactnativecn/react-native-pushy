@@ -1,6 +1,6 @@
 //
-//  RCTHotUpdateManager.h
-//  RCTHotUpdate
+//  RCTPushyManager.h
+//  RCTPushy
 //
 //  Created by lvbingru on 16/4/1.
 //  Copyright © 2016年 erica. All rights reserved.
@@ -8,7 +8,7 @@
 
 #import <Foundation/Foundation.h>
 
-@interface RCTHotUpdateManager : NSObject
+@interface RCTPushyManager : NSObject
 
 
 - (BOOL)createDir:(NSString *)dir;

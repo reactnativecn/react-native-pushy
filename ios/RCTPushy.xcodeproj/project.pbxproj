@@ -7,12 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		91C5F0031C76ECA90037E727 /* RCTHotUpdate.h in CopyFiles */ = {isa = PBXBuildFile; fileRef = 91C5F0021C76ECA90037E727 /* RCTHotUpdate.h */; };
-		91C5F0051C76ECA90037E727 /* RCTHotUpdate.m in Sources */ = {isa = PBXBuildFile; fileRef = 91C5F0041C76ECA90037E727 /* RCTHotUpdate.m */; };
-		9F1BCB1D1CAE5937000EF2CB /* RCTHotUpdateManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB1C1CAE5937000EF2CB /* RCTHotUpdateManager.m */; };
+		91C5F0031C76ECA90037E727 /* RCTPushy.h in CopyFiles */ = {isa = PBXBuildFile; fileRef = 91C5F0021C76ECA90037E727 /* RCTPushy.h */; };
+		91C5F0051C76ECA90037E727 /* RCTPushy.m in Sources */ = {isa = PBXBuildFile; fileRef = 91C5F0041C76ECA90037E727 /* RCTPushy.m */; };
+		9F1BCB1D1CAE5937000EF2CB /* RCTPushyManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB1C1CAE5937000EF2CB /* RCTPushyManager.m */; };
 		9F1BCB461CAF6B3E000EF2CB /* bspatch.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB3B1CAF6B3E000EF2CB /* bspatch.c */; };
 		9F1BCB4F1CAF6B68000EF2CB /* BSDiff.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB4E1CAF6B68000EF2CB /* BSDiff.m */; };
-		9F292F7D1C7C44290095945D /* RCTHotUpdateDownloader.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F292F7C1C7C44290095945D /* RCTHotUpdateDownloader.m */; };
+		9F292F7D1C7C44290095945D /* RCTPushyDownloader.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F292F7C1C7C44290095945D /* RCTPushyDownloader.m */; };
 		9F394D7D1C7C25DC00C794C0 /* aescrypt.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F394D5B1C7C25DC00C794C0 /* aescrypt.c */; };
 		9F394D7E1C7C25DC00C794C0 /* aeskey.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F394D5C1C7C25DC00C794C0 /* aeskey.c */; };
 		9F394D7F1C7C25DC00C794C0 /* aestab.c in Sources */ = {isa = PBXBuildFile; fileRef = 9F394D5E1C7C25DC00C794C0 /* aestab.c */; };
@@ -36,24 +36,24 @@
 			dstPath = "include/$(PRODUCT_NAME)";
 			dstSubfolderSpec = 16;
 			files = (
-				91C5F0031C76ECA90037E727 /* RCTHotUpdate.h in CopyFiles */,
+				91C5F0031C76ECA90037E727 /* RCTPushy.h in CopyFiles */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		91C5EFFF1C76ECA90037E727 /* libRCTHotUpdate.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libRCTHotUpdate.a; sourceTree = BUILT_PRODUCTS_DIR; };
-		91C5F0021C76ECA90037E727 /* RCTHotUpdate.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTHotUpdate.h; sourceTree = "<group>"; };
-		91C5F0041C76ECA90037E727 /* RCTHotUpdate.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RCTHotUpdate.m; sourceTree = "<group>"; };
-		9F1BCB1B1CAE5937000EF2CB /* RCTHotUpdateManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RCTHotUpdateManager.h; sourceTree = "<group>"; };
-		9F1BCB1C1CAE5937000EF2CB /* RCTHotUpdateManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RCTHotUpdateManager.m; sourceTree = "<group>"; };
+		91C5EFFF1C76ECA90037E727 /* libRCTPushy.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libRCTPushy.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		91C5F0021C76ECA90037E727 /* RCTPushy.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTPushy.h; sourceTree = "<group>"; };
+		91C5F0041C76ECA90037E727 /* RCTPushy.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RCTPushy.m; sourceTree = "<group>"; };
+		9F1BCB1B1CAE5937000EF2CB /* RCTPushyManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RCTPushyManager.h; sourceTree = "<group>"; };
+		9F1BCB1C1CAE5937000EF2CB /* RCTPushyManager.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RCTPushyManager.m; sourceTree = "<group>"; };
 		9F1BCB3B1CAF6B3E000EF2CB /* bspatch.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = bspatch.c; sourceTree = "<group>"; };
 		9F1BCB3C1CAF6B3E000EF2CB /* bspatch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bspatch.h; sourceTree = "<group>"; };
 		9F1BCB4D1CAF6B68000EF2CB /* BSDiff.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = BSDiff.h; sourceTree = "<group>"; };
 		9F1BCB4E1CAF6B68000EF2CB /* BSDiff.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = BSDiff.m; sourceTree = "<group>"; };
-		9F292F7B1C7C44290095945D /* RCTHotUpdateDownloader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RCTHotUpdateDownloader.h; sourceTree = "<group>"; };
-		9F292F7C1C7C44290095945D /* RCTHotUpdateDownloader.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RCTHotUpdateDownloader.m; sourceTree = "<group>"; };
+		9F292F7B1C7C44290095945D /* RCTPushyDownloader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RCTPushyDownloader.h; sourceTree = "<group>"; };
+		9F292F7C1C7C44290095945D /* RCTPushyDownloader.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RCTPushyDownloader.m; sourceTree = "<group>"; };
 		9F394D591C7C25DC00C794C0 /* aes.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = aes.h; sourceTree = "<group>"; };
 		9F394D5A1C7C25DC00C794C0 /* aes_via_ace.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = aes_via_ace.h; sourceTree = "<group>"; };
 		9F394D5B1C7C25DC00C794C0 /* aescrypt.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = aescrypt.c; sourceTree = "<group>"; };
@@ -105,7 +105,7 @@
 		91C5EFF61C76ECA90037E727 = {
 			isa = PBXGroup;
 			children = (
-				91C5F0011C76ECA90037E727 /* RCTHotUpdate */,
+				91C5F0011C76ECA90037E727 /* RCTPushy */,
 				91C5F0001C76ECA90037E727 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -113,24 +113,24 @@
 		91C5F0001C76ECA90037E727 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				91C5EFFF1C76ECA90037E727 /* libRCTHotUpdate.a */,
+				91C5EFFF1C76ECA90037E727 /* libRCTPushy.a */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		91C5F0011C76ECA90037E727 /* RCTHotUpdate */ = {
+		91C5F0011C76ECA90037E727 /* RCTPushy */ = {
 			isa = PBXGroup;
 			children = (
 				9F1BCB381CAF6B3E000EF2CB /* BSDiff */,
 				9F394D571C7C25DC00C794C0 /* SSZipArchive */,
-				91C5F0021C76ECA90037E727 /* RCTHotUpdate.h */,
-				91C5F0041C76ECA90037E727 /* RCTHotUpdate.m */,
-				9F1BCB1B1CAE5937000EF2CB /* RCTHotUpdateManager.h */,
-				9F1BCB1C1CAE5937000EF2CB /* RCTHotUpdateManager.m */,
-				9F292F7B1C7C44290095945D /* RCTHotUpdateDownloader.h */,
-				9F292F7C1C7C44290095945D /* RCTHotUpdateDownloader.m */,
+				91C5F0021C76ECA90037E727 /* RCTPushy.h */,
+				91C5F0041C76ECA90037E727 /* RCTPushy.m */,
+				9F1BCB1B1CAE5937000EF2CB /* RCTPushyManager.h */,
+				9F1BCB1C1CAE5937000EF2CB /* RCTPushyManager.m */,
+				9F292F7B1C7C44290095945D /* RCTPushyDownloader.h */,
+				9F292F7C1C7C44290095945D /* RCTPushyDownloader.m */,
 			);
-			path = RCTHotUpdate;
+			path = RCTPushy;
 			sourceTree = "<group>";
 		};
 		9F1BCB381CAF6B3E000EF2CB /* BSDiff */ = {
@@ -213,9 +213,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		91C5EFFE1C76ECA90037E727 /* RCTHotUpdate */ = {
+		91C5EFFE1C76ECA90037E727 /* RCTPushy */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 91C5F0081C76ECA90037E727 /* Build configuration list for PBXNativeTarget "RCTHotUpdate" */;
+			buildConfigurationList = 91C5F0081C76ECA90037E727 /* Build configuration list for PBXNativeTarget "RCTPushy" */;
 			buildPhases = (
 				91C5EFFB1C76ECA90037E727 /* Sources */,
 				91C5EFFC1C76ECA90037E727 /* Frameworks */,
@@ -225,9 +225,9 @@
 			);
 			dependencies = (
 			);
-			name = RCTHotUpdate;
-			productName = RCTHotUpdate;
-			productReference = 91C5EFFF1C76ECA90037E727 /* libRCTHotUpdate.a */;
+			name = RCTPushy;
+			productName = RCTPushy;
+			productReference = 91C5EFFF1C76ECA90037E727 /* libRCTPushy.a */;
 			productType = "com.apple.product-type.library.static";
 		};
 /* End PBXNativeTarget section */
@@ -244,11 +244,12 @@
 					};
 				};
 			};
-			buildConfigurationList = 91C5EFFA1C76ECA90037E727 /* Build configuration list for PBXProject "RCTHotUpdate" */;
+			buildConfigurationList = 91C5EFFA1C76ECA90037E727 /* Build configuration list for PBXProject "RCTPushy" */;
 			compatibilityVersion = "Xcode 3.2";
 			developmentRegion = English;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				English,
 				en,
 			);
 			mainGroup = 91C5EFF61C76ECA90037E727;
@@ -256,7 +257,7 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				91C5EFFE1C76ECA90037E727 /* RCTHotUpdate */,
+				91C5EFFE1C76ECA90037E727 /* RCTPushy */,
 			);
 		};
 /* End PBXProject section */
@@ -271,20 +272,20 @@
 				9F394D871C7C25DC00C794C0 /* mztools.c in Sources */,
 				9F394D821C7C25DC00C794C0 /* hmac.c in Sources */,
 				9F394D881C7C25DC00C794C0 /* unzip.c in Sources */,
-				9F1BCB1D1CAE5937000EF2CB /* RCTHotUpdateManager.m in Sources */,
+				9F1BCB1D1CAE5937000EF2CB /* RCTPushyManager.m in Sources */,
 				9F1BCB4F1CAF6B68000EF2CB /* BSDiff.m in Sources */,
 				9F394D7E1C7C25DC00C794C0 /* aeskey.c in Sources */,
 				9F394D7F1C7C25DC00C794C0 /* aestab.c in Sources */,
 				9F394D7D1C7C25DC00C794C0 /* aescrypt.c in Sources */,
 				9F394D801C7C25DC00C794C0 /* entropy.c in Sources */,
-				9F292F7D1C7C44290095945D /* RCTHotUpdateDownloader.m in Sources */,
+				9F292F7D1C7C44290095945D /* RCTPushyDownloader.m in Sources */,
 				9F394D831C7C25DC00C794C0 /* prng.c in Sources */,
 				9F394D861C7C25DC00C794C0 /* ioapi.c in Sources */,
 				9F1BCB461CAF6B3E000EF2CB /* bspatch.c in Sources */,
 				9F394D8A1C7C25DC00C794C0 /* SSZipArchive.m in Sources */,
 				9F394D891C7C25DC00C794C0 /* zip.c in Sources */,
 				9F394D841C7C25DC00C794C0 /* pwd2key.c in Sources */,
-				91C5F0051C76ECA90037E727 /* RCTHotUpdate.m in Sources */,
+				91C5F0051C76ECA90037E727 /* RCTPushy.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -400,7 +401,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		91C5EFFA1C76ECA90037E727 /* Build configuration list for PBXProject "RCTHotUpdate" */ = {
+		91C5EFFA1C76ECA90037E727 /* Build configuration list for PBXProject "RCTPushy" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				91C5F0061C76ECA90037E727 /* Debug */,
@@ -409,7 +410,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		91C5F0081C76ECA90037E727 /* Build configuration list for PBXNativeTarget "RCTHotUpdate" */ = {
+		91C5F0081C76ECA90037E727 /* Build configuration list for PBXNativeTarget "RCTPushy" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				91C5F0091C76ECA90037E727 /* Debug */,

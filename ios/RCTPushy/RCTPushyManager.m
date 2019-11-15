@@ -1,17 +1,17 @@
 //
-//  RCTHotUpdateManager.m
-//  RCTHotUpdate
+//  RCTPushyManager.m
+//  RCTPushy
 //
 //  Created by lvbingru on 16/4/1.
 //  Copyright © 2016年 erica. All rights reserved.
 //
 
-#import "RCTHotUpdateManager.h"
+#import "RCTPushyManager.h"
 #import "ZipArchive.h"
 #import "BSDiff.h"
 #import "bspatch.h"
 
-@implementation RCTHotUpdateManager {
+@implementation RCTPushyManager {
     dispatch_queue_t _opQueue;
 }
 
@@ -19,7 +19,7 @@
 {
     self = [super init];
     if (self) {
-        _opQueue = dispatch_queue_create("cn.reactnative.hotupdate", DISPATCH_QUEUE_SERIAL);
+        _opQueue = dispatch_queue_create("cn.reactnative.pushy", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }

@@ -1,6 +1,6 @@
 //
-//  RCTHotUpdate.h
-//  RCTHotUpdate
+//  RCTPushy.h
+//  RCTPushy
 //
 //  Created by LvBingru on 2/19/16.
 //  Copyright © 2016 erica. All rights reserved.
@@ -12,7 +12,7 @@
 #import "RCTBridgeModule.h"
 #endif
 
-@interface RCTHotUpdate : NSObject<RCTBridgeModule>
+@interface RCTPushy : NSObject<RCTBridgeModule>
 
 + (NSURL *)bundleURL;
 

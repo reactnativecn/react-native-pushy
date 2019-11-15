@@ -11,10 +11,10 @@ Pod::Spec.new do |s|
   s.authors      = package['author']
   s.homepage     = package['homepage']
 
-  s.platform = :ios, "7.0"
+  s.platform = :ios, "8.0"
   s.source = { :git => 'https://github.com/reactnativecn/react-native-pushy.git', :tag => '#{s.version}' }
   s.libraries = 'bz2', 'z'
-  s.vendored_libraries = 'RCTHotUpdate/libRCTHotUpdate.a'
+  s.vendored_libraries = 'RCTPushy/libRCTPushy.a'
   s.pod_target_xcconfig = { 'USER_HEADER_SEARCH_PATHS' => '"$(SRCROOT)/../node_modules/react-native-update/ios"' }
   s.resource = 'ios/pushy_build_time.txt'
   s.script_phase = { :name => 'Generate build time', :script => '../../node_modules/react-native-update/scripts/generateiOSBuildTime.sh', :execution_position => :before_compile }
@@ -22,13 +22,13 @@ Pod::Spec.new do |s|
   s.dependency 'React'
   s.dependency 'SSZipArchive'
 
-  s.subspec 'RCTHotUpdate' do |ss|
-    ss.source_files = 'ios/RCTHotUpdate/*.{h,m}'
-    ss.public_header_files = ['ios/RCTHotUpdate/RCTHotUpdate.h']
+  s.subspec 'RCTPushy' do |ss|
+    ss.source_files = 'ios/RCTPushy/*.{h,m}'
+    ss.public_header_files = ['ios/RCTPushy/RCTPushy.h']
   end
 
   s.subspec 'BSDiff' do |ss|
-    ss.source_files = 'ios/RCTHotUpdate/BSDiff/**/*.{h,m,c}'
-    ss.private_header_files = 'ios/RCTHotUpdate/BSDiff/**/*.h'
+    ss.source_files = 'ios/RCTPushy/BSDiff/**/*.{h,m,c}'
+    ss.private_header_files = 'ios/RCTPushy/BSDiff/**/*.h'
   end
 end

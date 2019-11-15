@@ -57,7 +57,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
 
     @Override
     public String getName() {
-        return "RCTHotUpdate";
+        return "RCTPushy";
     }
 
     @ReactMethod

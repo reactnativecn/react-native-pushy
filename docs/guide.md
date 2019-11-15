@@ -74,8 +74,8 @@ pod 'react-native-update', path: '../node_modules/react-native-update'
 <summary>RN < 0.60且不使用CocoaPods</summary>
 
 1. 在XCode中的Project Navigator里,右键点击`Libraries` ➜ `Add Files to [你的工程名]`
-2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTHotUpdate.xcodeproj`
-3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTHotUpdate.a`
+2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTPushy.xcodeproj`
+3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTPushy.a`
 4. 继续在`Build Settings`里搜索`Header Search Path`，添加$(SRCROOT)/../node_modules/react-native-update/ios
 5. 重新编译
 
@@ -115,7 +115,7 @@ pod 'react-native-update', path: '../node_modules/react-native-update'
 ```objective-c
 // ... 其它代码
 
-#import "RCTHotUpdate.h"
+#import "RCTPushy.h"
 
 // 如果RN版本 >= 0.59，修改sourceURLForBridge
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
@@ -124,7 +124,7 @@ pod 'react-native-update', path: '../node_modules/react-native-update'
   return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index" fallbackResource:nil];
 #else
   // 非DEBUG情况下替换为热更新bundle
-  return [RCTHotUpdate bundleURL];
+  return [RCTPushy bundleURL];
 #endif
 }
 
@@ -136,7 +136,7 @@ pod 'react-native-update', path: '../node_modules/react-native-update'
   jsCodeLocation = ..........
 #else
   // 非DEBUG情况下替换为热更新bundle
-  jsCodeLocation = [RCTHotUpdate bundleURL];
+  jsCodeLocation = [RCTPushy bundleURL];
 #endif
   // ... 其它代码
 }

@@ -10,7 +10,7 @@
 #import <React/RCTBridge.h>
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTRootView.h>
-#import "RCTHotUpdate.h"
+#import "RCTPushy.h"
 
 @implementation AppDelegate
 
@@ -37,7 +37,7 @@
   return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index" fallbackResource:nil];
 #else
   // 非DEBUG情况下替换为热更新bundle
-  return [RCTHotUpdate bundleURL];
+  return [RCTPushy bundleURL];
 #endif
 }
 

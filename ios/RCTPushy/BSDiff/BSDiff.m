@@ -1,6 +1,6 @@
 //
 //  BSDiff.m
-//  RCTHotUpdate
+//  RCTPushy
 //
 //  Created by lvbingru on 16/4/2.
 //  Copyright © 2016年 erica. All rights reserved.

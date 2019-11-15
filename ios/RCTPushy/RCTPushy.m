@@ -1,14 +1,14 @@
 //
-//  RCTHotUpdate.m
-//  RCTHotUpdate
+//  RCTPushy.m
+//  RCTPushy
 //
 //  Created by LvBingru on 2/19/16.
 //  Copyright © 2016 erica. All rights reserved.
 //
 
-#import "RCTHotUpdate.h"
-#import "RCTHotUpdateDownloader.h"
-#import "RCTHotUpdateManager.h"
+#import "RCTPushy.h"
+#import "RCTPushyDownloader.h"
+#import "RCTPushyManager.h"
 
 #if __has_include(<React/RCTBridge.h>)
 #import "React/RCTEventDispatcher.h"
@@ -21,15 +21,15 @@
 #endif
 
 //
-static NSString *const keyUpdateInfo = @"REACTNATIVECN_HOTUPDATE_INFO_KEY";
+static NSString *const keyPushyInfo = @"REACTNATIVECN_PUSHY_INFO_KEY";
 static NSString *const paramPackageVersion = @"packageVersion";
 static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
 static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
-static NSString *const keyFirstLoadMarked = @"REACTNATIVECN_HOTUPDATE_FIRSTLOADMARKED_KEY";
-static NSString *const keyRolledBackMarked = @"REACTNATIVECN_HOTUPDATE_ROLLEDBACKMARKED_KEY";
-static NSString *const KeyPackageUpdatedMarked = @"REACTNATIVECN_HOTUPDATE_ISPACKAGEUPDATEDMARKED_KEY";
+static NSString *const keyFirstLoadMarked = @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY";
+static NSString *const keyRolledBackMarked = @"REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY";
+static NSString *const KeyPackageUpdatedMarked = @"REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY";
 
 // app info
 static NSString * const AppVersionKey = @"appVersion";
@@ -46,52 +46,52 @@ static NSString * const ERROR_BSDIFF = @"bsdiff error";
 static NSString * const ERROR_FILE_OPERATION = @"file operation error";
 
 // event def
-static NSString * const EVENT_PROGRESS_DOWNLOAD = @"RCTHotUpdateDownloadProgress";
-static NSString * const EVENT_PROGRESS_UNZIP = @"RCTHotUpdateUnzipProgress";
+static NSString * const EVENT_PROGRESS_DOWNLOAD = @"RCTPushyDownloadProgress";
+static NSString * const EVENT_PROGRESS_UNZIP = @"RCTPushyUnzipProgress";
 static NSString * const PARAM_PROGRESS_HASHNAME = @"hashname";
 static NSString * const PARAM_PROGRESS_RECEIVED = @"received";
 static NSString * const PARAM_PROGRESS_TOTAL = @"total";
 
 
-typedef NS_ENUM(NSInteger, HotUpdateType) {
-    HotUpdateTypeFullDownload = 1,
-    HotUpdateTypePatchFromPackage = 2,
-    HotUpdateTypePatchFromPpk = 3,
+typedef NS_ENUM(NSInteger, PushyType) {
+    PushyTypeFullDownload = 1,
+    PushyTypePatchFromPackage = 2,
+    PushyTypePatchFromPpk = 3,
 };
 
 static BOOL ignoreRollback = false;
 
-@implementation RCTHotUpdate {
-    RCTHotUpdateManager *_fileManager;
+@implementation RCTPushy {
+    RCTPushyManager *_fileManager;
 }
 
 @synthesize bridge = _bridge;
 @synthesize methodQueue = _methodQueue;
 
-RCT_EXPORT_MODULE(RCTHotUpdate);
+RCT_EXPORT_MODULE(RCTPushy);
 
 + (NSURL *)bundleURL
 {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     
-    NSDictionary *updateInfo = [defaults dictionaryForKey:keyUpdateInfo];
-    if (updateInfo) {
-        NSString *curPackageVersion = [RCTHotUpdate packageVersion];
-        NSString *packageVersion = [updateInfo objectForKey:paramPackageVersion];
+    NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
+    if (pushyInfo) {
+        NSString *curPackageVersion = [RCTPushy packageVersion];
+        NSString *packageVersion = [pushyInfo objectForKey:paramPackageVersion];
         
-        BOOL needClearUpdateInfo = ![curPackageVersion isEqualToString:packageVersion];
-        if (needClearUpdateInfo) {
-            [defaults setObject:nil forKey:keyUpdateInfo];
+        BOOL needClearPushyInfo = ![curPackageVersion isEqualToString:packageVersion];
+        if (needClearPushyInfo) {
+            [defaults setObject:nil forKey:keyPushyInfo];
             [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked];
             [defaults synchronize];
             // ...need clear files later
         }
         else {
-            NSString *curVersion = updateInfo[paramCurrentVersion];
-            NSString *lastVersion = updateInfo[paramLastVersion];
+            NSString *curVersion = pushyInfo[paramCurrentVersion];
+            NSString *lastVersion = pushyInfo[paramLastVersion];
             
-            BOOL isFirstTime = [updateInfo[paramIsFirstTime] boolValue];
-            BOOL isFirstLoadOK = [updateInfo[paramIsFirstLoadOk] boolValue];
+            BOOL isFirstTime = [pushyInfo[paramIsFirstTime] boolValue];
+            BOOL isFirstLoadOK = [pushyInfo[paramIsFirstLoadOk] boolValue];
             
             NSString *loadVersioin = curVersion;
             BOOL needRollback = (!ignoreRollback && isFirstTime == NO && isFirstLoadOK == NO) || loadVersioin.length<=0;
@@ -104,11 +104,11 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
                                           paramIsFirstTime:@(NO),
                                           paramIsFirstLoadOk:@(YES),
                                           paramPackageVersion:curPackageVersion}
-                                 forKey:keyUpdateInfo];
+                                 forKey:keyPushyInfo];
                 }
                 else {
                     // roll back to bundle
-                    [defaults setObject:nil forKey:keyUpdateInfo];
+                    [defaults setObject:nil forKey:keyPushyInfo];
                 }
                 [defaults setObject:@(YES) forKey:keyRolledBackMarked];
                 [defaults synchronize];
@@ -118,15 +118,15 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
                 // bundleURL may be called many times, ignore rollbacks before process restarted again.
                 ignoreRollback = true;
 
-                NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] initWithDictionary:updateInfo];
+                NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] initWithDictionary:pushyInfo];
                 newInfo[paramIsFirstTime] = @(NO);
-                [defaults setObject:newInfo forKey:keyUpdateInfo];
+                [defaults setObject:newInfo forKey:keyPushyInfo];
                 [defaults setObject:@(YES) forKey:keyFirstLoadMarked];
                 [defaults synchronize];
             }
             
             if (loadVersioin.length) {
-                NSString *downloadDir = [RCTHotUpdate downloadDir];
+                NSString *downloadDir = [RCTPushy downloadDir];
                 
                 NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:loadVersioin] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
                 if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
@@ -137,7 +137,7 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
         }
     }
     
-    return [RCTHotUpdate binaryBundleURL];
+    return [RCTPushy binaryBundleURL];
 }
 
 + (BOOL)requiresMainQueueSetup {
@@ -150,13 +150,13 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     
     NSMutableDictionary *ret = [NSMutableDictionary new];
-    ret[@"downloadRootDir"] = [RCTHotUpdate downloadDir];
-    ret[@"packageVersion"] = [RCTHotUpdate packageVersion];
-    ret[@"buildTime"] = [RCTHotUpdate buildTime];
+    ret[@"downloadRootDir"] = [RCTPushy downloadDir];
+    ret[@"packageVersion"] = [RCTPushy packageVersion];
+    ret[@"buildTime"] = [RCTPushy buildTime];
     ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
     ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadMarked];
-    NSDictionary *updateInfo = [defaults dictionaryForKey:keyUpdateInfo];
-    ret[@"currentVersion"] = [updateInfo objectForKey:paramCurrentVersion];
+    NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
+    ret[@"currentVersion"] = [pushyInfo objectForKey:paramCurrentVersion];
     
     // clear isFirstTimemarked
     if ([[defaults objectForKey:keyFirstLoadMarked] boolValue]) {
@@ -183,7 +183,7 @@ RCT_EXPORT_MODULE(RCTHotUpdate);
 {
     self = [super init];
     if (self) {
-        _fileManager = [RCTHotUpdateManager new];
+        _fileManager = [RCTPushyManager new];
     }
     return self;
 }
@@ -192,7 +192,7 @@ RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    [self hotUpdate:HotUpdateTypeFullDownload options:options callback:^(NSError *error) {
+    [self doPushy:PushyTypeFullDownload options:options callback:^(NSError *error) {
         if (error) {
             reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
         }
@@ -206,7 +206,7 @@ RCT_EXPORT_METHOD(downloadPatchFromPackage:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    [self hotUpdate:HotUpdateTypePatchFromPackage options:options callback:^(NSError *error) {
+    [self doPushy:PushyTypePatchFromPackage options:options callback:^(NSError *error) {
         if (error) {
             reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
         }
@@ -220,7 +220,7 @@ RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    [self hotUpdate:HotUpdateTypePatchFromPpk options:options callback:^(NSError *error) {
+    [self doPushy:PushyTypePatchFromPpk options:options callback:^(NSError *error) {
         if (error) {
             reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
         }
@@ -236,9 +236,9 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
     if (hashName.length) {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         NSString *lastVersion = nil;
-        if ([defaults objectForKey:keyUpdateInfo]) {
-            NSDictionary *updateInfo = [defaults objectForKey:keyUpdateInfo];
-            lastVersion = updateInfo[paramCurrentVersion];
+        if ([defaults objectForKey:keyPushyInfo]) {
+            NSDictionary *pushyInfo = [defaults objectForKey:keyPushyInfo];
+            lastVersion = pushyInfo[paramCurrentVersion];
         }
         
         NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] init];
@@ -246,8 +246,8 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
         newInfo[paramLastVersion] = lastVersion;
         newInfo[paramIsFirstTime] = @(YES);
         newInfo[paramIsFirstLoadOk] = @(NO);
-        newInfo[paramPackageVersion] = [RCTHotUpdate packageVersion];
-        [defaults setObject:newInfo forKey:keyUpdateInfo];
+        newInfo[paramPackageVersion] = [RCTPushy packageVersion];
+        [defaults setObject:newInfo forKey:keyPushyInfo];
         
         [defaults synchronize];
     }
@@ -269,12 +269,12 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 
 RCT_EXPORT_METHOD(markSuccess)
 {
-    // update package info
+    // up package info
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableDictionary *packageInfo = [[NSMutableDictionary alloc] initWithDictionary:[defaults objectForKey:keyUpdateInfo]];
+    NSMutableDictionary *packageInfo = [[NSMutableDictionary alloc] initWithDictionary:[defaults objectForKey:keyPushyInfo]];
     [packageInfo setObject:@(NO) forKey:paramIsFirstTime];
     [packageInfo setObject:@(YES) forKey:paramIsFirstLoadOk];
-    [defaults setObject:packageInfo forKey:keyUpdateInfo];
+    [defaults setObject:packageInfo forKey:keyPushyInfo];
     [defaults synchronize];
     
     // clear other package dir
@@ -282,7 +282,7 @@ RCT_EXPORT_METHOD(markSuccess)
 }
 
 #pragma mark - private
-- (void)hotUpdate:(HotUpdateType)type options:(NSDictionary *)options callback:(void (^)(NSError *error))callback
+- (void)doPushy:(PushyType)type options:(NSDictionary *)options callback:(void (^)(NSError *error))callback
 {
     NSString *updateUrl = [RCTConvert NSString:options[@"updateUrl"]];
     NSString *hashName = [RCTConvert NSString:options[@"hashName"]];
@@ -291,12 +291,12 @@ RCT_EXPORT_METHOD(markSuccess)
         return;
     }
     NSString *originHashName = [RCTConvert NSString:options[@"originHashName"]];
-    if (type == HotUpdateTypePatchFromPpk && originHashName<=0) {
+    if (type == PushyTypePatchFromPpk && originHashName<=0) {
         callback([self errorWithMessage:ERROR_OPTIONS]);
         return;
     }
     
-    NSString *dir = [RCTHotUpdate downloadDir];
+    NSString *dir = [RCTPushy downloadDir];
     BOOL success = [_fileManager createDir:dir];
     if (!success) {
         callback([self errorWithMessage:ERROR_FILE_OPERATION]);
@@ -306,8 +306,8 @@ RCT_EXPORT_METHOD(markSuccess)
     NSString *zipFilePath = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@",hashName, [self zipExtension:type]]];
     NSString *unzipDir = [dir stringByAppendingPathComponent:hashName];
 
-    RCTLogInfo(@"RNUpdate -- download file %@", updateUrl);
-    [RCTHotUpdateDownloader download:updateUrl savePath:zipFilePath progressHandler:^(long long receivedBytes, long long totalBytes) {
+    RCTLogInfo(@"RCTPushy -- download file %@", updateUrl);
+    [RCTPushyDownloader download:updateUrl savePath:zipFilePath progressHandler:^(long long receivedBytes, long long totalBytes) {
         [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_DOWNLOAD
                                                      body:@{
                                                             PARAM_PROGRESS_HASHNAME:hashName,
@@ -319,7 +319,7 @@ RCT_EXPORT_METHOD(markSuccess)
             callback(error);
         }
         else {
-            RCTLogInfo(@"RNUpdate -- unzip file %@", zipFilePath);
+            RCTLogInfo(@"RCTPushy -- unzip file %@", zipFilePath);
             NSString *unzipFilePath = [dir stringByAppendingPathComponent:hashName];
             [_fileManager unzipFileAtPath:zipFilePath toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
                 [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_UNZIP
@@ -336,14 +336,14 @@ RCT_EXPORT_METHOD(markSuccess)
                     }
                     else {
                         switch (type) {
-                            case HotUpdateTypePatchFromPackage:
+                            case PushyTypePatchFromPackage:
                             {
                                 NSString *sourceOrigin = [[NSBundle mainBundle] resourcePath];
-                                NSString *bundleOrigin = [[RCTHotUpdate binaryBundleURL] path];
+                                NSString *bundleOrigin = [[RCTPushy binaryBundleURL] path];
                                 [self patch:hashName fromBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
-                            case HotUpdateTypePatchFromPpk:
+                            case PushyTypePatchFromPpk:
                             {
                                 NSString *lastVertionDir = [dir stringByAppendingPathComponent:originHashName];
                                 
@@ -365,7 +365,7 @@ RCT_EXPORT_METHOD(markSuccess)
 
 - (void)patch:(NSString *)hashName fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
 {
-    NSString *unzipDir = [[RCTHotUpdate downloadDir] stringByAppendingPathComponent:hashName];
+    NSString *unzipDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hashName];
     NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
     NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME];
     
@@ -401,10 +401,10 @@ RCT_EXPORT_METHOD(markSuccess)
 - (void)clearInvalidFiles
 {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSDictionary *updateInfo = [defaults objectForKey:keyUpdateInfo];
-    NSString *curVersion = [updateInfo objectForKey:paramCurrentVersion];
+    NSDictionary *pushyInfo = [defaults objectForKey:keyPushyInfo];
+    NSString *curVersion = [pushyInfo objectForKey:paramCurrentVersion];
     
-    NSString *downloadDir = [RCTHotUpdate downloadDir];
+    NSString *downloadDir = [RCTPushy downloadDir];
     NSError *error = nil;
     NSArray *list = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:downloadDir error:&error];
     if (error) {
@@ -418,14 +418,14 @@ RCT_EXPORT_METHOD(markSuccess)
     }
 }
 
-- (NSString *)zipExtension:(HotUpdateType)type
+- (NSString *)zipExtension:(PushyType)type
 {
     switch (type) {
-        case HotUpdateTypeFullDownload:
+        case PushyTypeFullDownload:
             return @".ppk";
-        case HotUpdateTypePatchFromPackage:
+        case PushyTypePatchFromPackage:
             return @".apk.patch";
-        case HotUpdateTypePatchFromPpk:
+        case PushyTypePatchFromPpk:
             return @".ppk.patch";
         default:
             break;
@@ -434,7 +434,7 @@ RCT_EXPORT_METHOD(markSuccess)
 
 - (NSError *)errorWithMessage:(NSString *)errorMessage
 {
-    return [NSError errorWithDomain:@"cn.reactnative.hotupdate"
+    return [NSError errorWithDomain:@"cn.reactnative.pushy"
                                code:-1
                            userInfo:@{ NSLocalizedDescriptionKey: errorMessage}];
 }
@@ -442,7 +442,7 @@ RCT_EXPORT_METHOD(markSuccess)
 + (NSString *)downloadDir
 {
     NSString *directory = [NSSearchPathForDirectoriesInDomains(NSApplicationSupportDirectory, NSUserDomainMask, YES) firstObject];
-    NSString *downloadDir = [directory stringByAppendingPathComponent:@"reactnativecnhotupdate"];
+    NSString *downloadDir = [directory stringByAppendingPathComponent:@"rctpushy"];
     
     return downloadDir;
 }
