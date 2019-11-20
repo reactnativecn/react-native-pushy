@@ -27,11 +27,9 @@ android {
 
     buildTypes {
         release {
-            buildConfigField("String", "PUSHY_BUILD_TIME", "\"${minutesSinceEpoch}\"")
             resValue("string", "pushy_build_time", "${minutesSinceEpoch}")
         }
         debug {
-            buildConfigField("String", "PUSHY_BUILD_TIME", "\"0\"")
             resValue("string", "pushy_build_time", "0")
         }
     }

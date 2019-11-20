@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="cn.reactnative.modules.update">
-
+    <application>
+        <meta-data android:name="pushy_build_time" android:value="@string/pushy_build_time" />
+    </application>
 </manifest>

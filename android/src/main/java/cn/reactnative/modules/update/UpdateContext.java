@@ -60,7 +60,7 @@ public class UpdateContext {
     }
 
     public String getBuildTime() {
-        return BuildConfig.PUSHY_BUILD_TIME;
+        return context.getString(R.string.pushy_build_time);
     }
 
     public interface DownloadFileListener {
