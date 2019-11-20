@@ -174,10 +174,12 @@ public class UpdateModule extends ReactContextBaseJavaModule{
             }
         });
     }
-
-    /* �����¼� */
+	  /**
+    * 发送事件到js代码
+    * eventName：事件名
+    * params：要传递的参数
+    * */
     public static void sendEvent(String eventName,  WritableMap params) {
-        ((ReactContext) mContext).getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName,
-                params);
+        ((ReactContext) mContext).getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName, params);
     }
 }

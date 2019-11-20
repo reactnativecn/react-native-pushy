@@ -98,7 +98,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
             if (UpdateContext.DEBUG) {
                 Log.d("RNUpdate", "Progress " + totalRead + "/" + contentLength);
             }
-            int pro=(int)((totalRead*1.0 / (contentLength*1.0))*100);
+            int pro = (int)((totalRead*1.0 / (contentLength*1.0))*100);
             publishProgress(pro);
         }
         if (totalRead != contentLength) {
@@ -115,11 +115,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
     @Override
     protected void onProgressUpdate(Integer... values) {
         super.onProgressUpdate(values);
-        System.out.println("Progress values" +values[0]);
         WritableMap params = Arguments.createMap();
         params.putString("progress", values[0].toString());
         sendEvent("progress", params);
-
     }
     byte[] buffer = new byte[1024];
 
