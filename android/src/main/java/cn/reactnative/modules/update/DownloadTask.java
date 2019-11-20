@@ -4,6 +4,8 @@ import android.content.Context;
 import android.os.AsyncTask;
 import android.util.Log;
 
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.WritableMap;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -31,7 +33,7 @@ import java.util.HashMap;
 import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.Okio;
-
+import static cn.reactnative.modules.update.UpdateModule.sendEvent;
 /**
  * Created by tdzl2003 on 3/31/16.
  */
@@ -96,6 +98,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
             if (UpdateContext.DEBUG) {
                 Log.d("RNUpdate", "Progress " + totalRead + "/" + contentLength);
             }
+            int pro=(int)((totalRead*1.0 / (contentLength*1.0))*100);
+            publishProgress(pro);
         }
         if (totalRead != contentLength) {
             throw new Error("Unexpected eof while reading ppk");
@@ -108,6 +112,15 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         }
     }
 
+    @Override
+    protected void onProgressUpdate(Integer... values) {
+        super.onProgressUpdate(values);
+        System.out.println("Progress values" +values[0]);
+        WritableMap params = Arguments.createMap();
+        params.putString("progress", values[0].toString());
+        sendEvent("progress", params);
+
+    }
     byte[] buffer = new byte[1024];
 
     private static native byte[] bsdiffPatch(byte[] origin, byte[] patch);
