@@ -37,7 +37,7 @@ import static cn.reactnative.modules.update.UpdateModule.sendEvent;
 /**
  * Created by tdzl2003 on 3/31/16.
  */
-class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
+class DownloadTask extends AsyncTask<DownloadTaskParams, Double, Void> {
     final int DOWNLOAD_CHUNK_SIZE = 4096;
 
     Context context;
@@ -98,8 +98,10 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
             if (UpdateContext.DEBUG) {
                 Log.d("RNUpdate", "Progress " + totalRead + "/" + contentLength);
             }
-            int pro = (int)((totalRead*1.0 / (contentLength*1.0))*100);
-            publishProgress(pro);
+            //System.out.println("progress " +  totalRead + "/" + contentLength);
+            double progress = Math.round(((double)  totalRead* 100) / contentLength);
+            System.out.println("progress " + progress);
+            publishProgress(progress);
         }
         if (totalRead != contentLength) {
             throw new Error("Unexpected eof while reading ppk");
@@ -113,7 +115,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
     }
 
     @Override
-    protected void onProgressUpdate(Integer... values) {
+    protected void onProgressUpdate(Double... values) {
         super.onProgressUpdate(values);
         WritableMap params = Arguments.createMap();
         params.putString("progress", values[0].toString());
