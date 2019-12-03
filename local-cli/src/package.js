@@ -7,7 +7,7 @@ import { question } from './utils';
 
 import { checkPlatform, getSelectedApp } from './app';
 
-import { getIPAVersion, getApkVersion } from './utils';
+import { getApkInfo, getIpaInfo } from './utils';
 const Table = require('tty-table');
 
 export async function listPackage(appId) {
@@ -50,14 +50,15 @@ export const commands = {
     if (!fn) {
       throw new Error('Usage: pushy uploadIpa <ipaFile>');
     }
-    const name = await getIPAVersion(fn);
+    const { versionName, buildTime } = await getIpaInfo(fn);
     const { appId } = await getSelectedApp('ios');
 
     const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/package/create`, {
-      name,
+      name: versionName,
       hash,
+      buildTime,
     });
     console.log(`Ipa uploaded: ${id}`);
   },
@@ -66,14 +67,15 @@ export const commands = {
     if (!fn) {
       throw new Error('Usage: pushy uploadApk <apkFile>');
     }
-    const name = await getApkVersion(fn);
+    const { versionName, buildTime } = await getApkInfo(fn);
     const { appId } = await getSelectedApp('android');
 
     const { hash } = await uploadFile(fn);
 
     const { id } = await post(`/app/${appId}/package/create`, {
-      name,
+      name: versionName,
       hash,
+      buildTime,
     });
     console.log(`Apk uploaded: ${id}`);
   },

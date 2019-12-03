@@ -4,8 +4,7 @@
 
 import * as path from 'path';
 import * as fs from 'fs-extra';
-const ApkReader = require('adbkit-apkreader');
-import ipaReader from './ipaReader';
+const AppInfoParser = require('app-info-parser');
 
 var read = require('read');
 
@@ -52,16 +51,31 @@ export function getRNVersion() {
   };
 }
 
-export async function getApkVersion(fn) {
-  const reader = await ApkReader.open(fn);
-  const manifest = await reader.readManifest();
-  return manifest.versionName;
+export async function getApkInfo(fn) {
+  const appInfoParser = new AppInfoParser(fn);
+  const { versionName, application } = await appInfoParser.parse();
+  let buildTime = 0;
+  if (Array.isArray(application.metaData)) {
+    for (const meta of application.metaData) {
+      if (meta.name === 'pushy_build_time') {
+        buildTime = meta.value[0];
+      }
+    }
+  }
+  if (buildTime == 0) {
+    throw new Error('Can not get build time for this app.');
+  }
+  return { versionName, buildTime };
 }
 
-export function getIPAVersion(fn) {
-  return new Promise((resolve, reject) => {
-    ipaReader(fn, (err, data) => {
-      err ? reject(err) : resolve(data.metadata.CFBundleShortVersionString);
-    });
-  });
+export async function getIpaInfo(fn) {
+  const appInfoParser = new AppInfoParser(fn);
+  const { CFBundleShortVersionString: versionName } = await appInfoParser.parse();
+  try {
+    const buildTimeTxtBuffer = await appInfoParser.parser.getEntry(/payload\/.+?\.app\/pushy_build_time.txt/);
+    const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
+    return { versionName, buildTime };
+  } catch (e) {
+    throw new Error('Can not get build time for this app.');
+  }
 }
