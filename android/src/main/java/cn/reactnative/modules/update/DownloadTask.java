@@ -3,6 +3,8 @@ package cn.reactnative.modules.update;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.util.Log;
+import com.facebook.react.bridge.Arguments;
+import com.facebook.react.bridge.WritableMap;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -31,11 +33,11 @@ import java.util.HashMap;
 import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.Okio;
-
+import static cn.reactnative.modules.update.UpdateModule.sendEvent;
 /**
  * Created by tdzl2003 on 3/31/16.
  */
-class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
+class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     final int DOWNLOAD_CHUNK_SIZE = 4096;
 
     Context context;
@@ -91,10 +93,16 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
 
         long bytesRead = 0;
         long totalRead = 0;
+        double lastProgressValue=0;
         while ((bytesRead = source.read(sink.buffer(), DOWNLOAD_CHUNK_SIZE)) != -1) {
             totalRead += bytesRead;
             if (UpdateContext.DEBUG) {
                 Log.d("RNUpdate", "Progress " + totalRead + "/" + contentLength);
+            }
+            double progress = Math.round(((double) totalRead * 100) / contentLength);
+            if ((progress != lastProgressValue) || (totalRead == contentLength)) {
+                lastProgressValue = progress;
+                publishProgress(new long[]{(long)progress,totalRead, contentLength});
             }
         }
         if (totalRead != contentLength) {
@@ -106,6 +114,17 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, Void, Void> {
         if (UpdateContext.DEBUG) {
             Log.d("RNUpdate", "Download finished");
         }
+    }
+
+    @Override
+    protected void onProgressUpdate(long[]... values) {
+        super.onProgressUpdate(values);
+        WritableMap params = Arguments.createMap();
+        params.putDouble("progress", (values[0][0]));
+        params.putDouble("totalRead", (values[0][1]));
+        params.putDouble("contentLength", (values[0][2]));
+        sendEvent("progress", params);
+
     }
 
     byte[] buffer = new byte[1024];
