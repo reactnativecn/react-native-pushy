@@ -71,11 +71,14 @@ export async function getApkInfo(fn) {
 export async function getIpaInfo(fn) {
   const appInfoParser = new AppInfoParser(fn);
   const { CFBundleShortVersionString: versionName } = await appInfoParser.parse();
-  try {
-    const buildTimeTxtBuffer = await appInfoParser.parser.getEntry(/payload\/.+?\.app\/pushy_build_time.txt/);
-    const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
-    return { versionName, buildTime };
-  } catch (e) {
+  let buildTimeTxtBuffer = await appInfoParser.parser.getEntry(/payload\/.+?\.app\/pushy_build_time.txt/);
+  if (!buildTimeTxtBuffer) {
+    // Not in root bundle when use `use_frameworks`
+    buildTimeTxtBuffer = await appInfoParser.parser.getEntry(/payload\/.+?\.app\/frameworks\/react_native_update.framework\/pushy_build_time.txt/);
+  }
+  if (!buildTimeTxtBuffer) {
     throw new Error('Can not get build time for this app.');
   }
+  const buildTime = buildTimeTxtBuffer.toString().replace('\n', '');
+  return { versionName, buildTime };
 }

@@ -11,6 +11,7 @@ Pod::Spec.new do |s|
   s.authors      = package['author']
   s.homepage     = package['homepage']
 
+  s.cocoapods_version = '>= 1.6.0'
   s.platform = :ios, "8.0"
   s.source = { :git => 'https://github.com/reactnativecn/react-native-pushy.git', :tag => '#{s.version}' }
   s.libraries = 'bz2', 'z'
