@@ -37,7 +37,7 @@
     "read": "^1.0.7",
     "request": "^2.69.0",
     "tty-table": "^2.7.0",
-    "yauzl": "2.4.1",
+    "yauzl": "^2.10.0",
     "yazl": "2.3.0"
   },
   "devDependencies": {
