@@ -77,7 +77,16 @@ pod 'react-native-update', path: '../node_modules/react-native-update'
 2. 进入`node_modules` ➜ `react-native-update` ➜ `ios 并选中 `RCTPushy.xcodeproj`
 3. 在XCode中的project navigator里,选中你的工程,在 `Build Phases` ➜ `Link Binary With Libraries` 中添加 `libRCTPushy.a`
 4. 继续在`Build Settings`里搜索`Header Search Path`，添加$(SRCROOT)/../node_modules/react-native-update/ios
-5. 重新编译
+5. 在`Build Phases`添加一个`New Run Script Phase`运行脚本，内容如下
+```
+#!/bin/bash
+set -x
+DEST="../node_modules/react-native-update/ios/"
+date +%s > "$DEST/pushy_build_time.txt"
+```
+运行项目的时候就会在../node_modules/react-native-update/ios/文件夹下面生成一个`pushy_build_time.txt`文件。
+然后在`Copy Bundle Resources`里把生成的`pushy_build_time.txt`文件添加进去。  
+6. 重新编译
 
 </details>
 
