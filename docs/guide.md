@@ -84,8 +84,9 @@ set -x
 DEST="../node_modules/react-native-update/ios/"
 date +%s > "$DEST/pushy_build_time.txt"
 ```
-运行项目的时候就会在../node_modules/react-native-update/ios/文件夹下面生成一个`pushy_build_time.txt`文件。
+编译的时候就会在`../node_modules/react-native-update/ios/`文件夹下面生成一个`pushy_build_time.txt`文件。
 然后在`Copy Bundle Resources`里把生成的`pushy_build_time.txt`文件添加进去。  
+
 6. 重新编译
 
 </details>
