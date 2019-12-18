@@ -128,6 +128,7 @@ async function compileHermesByteCode(bundleName, outputFolder) {
       : 'node_modules/hermesvm';
     execSync(
       `${hermesPath}/${getHermesOSBin()}/hermes -emit-binary -out ${outputFolder}/${bundleName} ${outputFolder}/${bundleName} -O`,
+      { stdio: 'ignore' },
     );
   }
 }
