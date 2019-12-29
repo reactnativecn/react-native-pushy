@@ -4,7 +4,7 @@
 
 ### 快速开始
 
-请查看[文档](/docs)
+请查看[文档](https://reactnativecn.github.io/react-native-pushy)
 
 ### 优势
 
