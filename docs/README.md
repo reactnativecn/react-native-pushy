@@ -2,9 +2,30 @@
 
 本组件是面向 React Native 提供热更新功能的组件，请结合[Update 服务](https://update.reactnative.cn/)使用。
 
-### 快速开始
+<details>
+<summary>
+注意，在 iOS 上使用热更新有被拒的可能。被拒之后可以按此步骤单独屏蔽 iOS 端(`react-native-update`版本需 >= 5.3.2)：
+</summary>
 
-请查看[文档](/docs)
+1. 如果 RN 版本>=0.60，在项目根目录下编辑或创建 react-native.config.js，添加如下内容
+
+```js
+// react-native.config.js
+module.exports = {
+  dependencies: {
+    'react-native-update': {
+      platforms: {
+        ios: null, // 阻止ios模块自动链接
+      },
+    },
+  },
+};
+```
+
+2. 如果在原生代码端尚未配置，则跳过下面文档中的 ios 端的配置。如果已经配置，则按文档的步骤反向操作（添加的 ios 代码删去）。
+3. 如果是 0.60 以上版本或使用了 cocoapods，在 ios 目录中再次运行 pod install，确保 Podfile 和 Podfile.lock 中都没有'react-native-update'。如果 RN 版本<0.60，则运行`react-native unlink react-native-update`。
+4. 在 js 代码里调用 checkUpdate()方法前，判断 Platform.OS，如果是 ios 平台则直接 return 跳过。
+</details>
 
 ### 优势
 

@@ -52,7 +52,7 @@ npm i react-native-update@4.x
 请记得一定要重新编译（react-native run-ios或run-android命令编译，或在Xcode/Android Studio中重新编译）。
 
 
-## 一、手动link
+## 手动link
 
 如果RN版本 >= 0.60则可以跳过此步骤
 
@@ -112,7 +112,7 @@ date +%s > "$DEST/pushy_build_time.txt"
   - 在`getPackages()` 方法中增加 `new UpdatePackage()`(注意上一行可能要增加一个逗号)
 </details>
 
-## 二、配置Bundle URL
+## 配置Bundle URL
 
 注意此步骤无论任何版本，目前都需要手动配置。
 
@@ -174,7 +174,7 @@ public class MainApplication extends Application implements ReactApplication {
 }
 ```
 
-## 三、登录与创建应用
+## 登录与创建应用
 
 首先请在<https://update.reactnative.cn>注册帐号，然后在你的项目根目录下运行以下命令：
 
