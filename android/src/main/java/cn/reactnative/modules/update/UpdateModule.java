@@ -123,8 +123,8 @@ public class UpdateModule extends ReactContextBaseJavaModule{
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                updateContext.switchVersion(hash);
                 try {
+                    updateContext.switchVersion(hash);
                     Activity activity = getCurrentActivity();
                     Application application = activity.getApplication();
                     ReactInstanceManager instanceManager = ((ReactApplication) application).getReactNativeHost().getReactInstanceManager();
@@ -147,7 +147,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
                     }
 
                 } catch (Throwable err) {
-                    Log.e("pushy", "Failed to restart application", err);
+                    Log.e("pushy", "switchVersion failed", err);
                 }
             }
         });
@@ -160,7 +160,11 @@ public class UpdateModule extends ReactContextBaseJavaModule{
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                updateContext.switchVersion(hash);
+                try {
+                    updateContext.switchVersion(hash);
+                } catch (Throwable err) {
+                    Log.e("pushy", "switchVersionLater failed", err);
+                }
             }
         });
     }

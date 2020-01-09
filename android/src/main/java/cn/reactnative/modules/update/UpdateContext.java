@@ -106,8 +106,8 @@ public class UpdateContext {
     private SharedPreferences sp;
 
     public void switchVersion(String hashName) {
-        if (!new File(rootDir, hashName).exists()) {
-            throw new Error("Hash name not found, must download first.");
+        if (!new File(rootDir, hashName+"/index.bundlejs").exists()) {
+            throw new Error("Bundle version " + hashName + " not found.");
         }
         String lastVersion = getCurrentVersion();
         SharedPreferences.Editor editor = sp.edit();
