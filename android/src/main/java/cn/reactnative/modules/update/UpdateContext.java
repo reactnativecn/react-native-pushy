@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.util.Log;
+
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -182,10 +184,18 @@ public class UpdateContext {
                 currentVersion = this.rollBack();
             }
         }
-        if (currentVersion == null) {
-            return defaultAssetsUrl;
+
+        while (currentVersion != null) {
+            File bundleFile = new File(rootDir, currentVersion+"/index.bundlejs");
+            if (!bundleFile.exists()) {
+                Log.e("getBundleUrl", "Bundle version " + currentVersion + " not found.");
+                currentVersion = this.rollBack();
+                continue;
+            }
+            return bundleFile.toString();
         }
-        return (new File(rootDir, currentVersion+"/index.bundlejs").toString());
+
+        return defaultAssetsUrl;
     }
 
     private String rollBack() {
