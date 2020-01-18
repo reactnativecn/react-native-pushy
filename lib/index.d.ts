@@ -19,7 +19,6 @@ export interface UpdateAvailableResult {
   hash: string;
   description: string;
   metaInfo: string;
-  updateUrl: string;
   pdiffUrl: string;
   diffUrl: string;
 }
