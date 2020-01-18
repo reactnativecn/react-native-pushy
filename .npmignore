@@ -46,3 +46,5 @@ npm-debug.log
 Example
 yarn.lock
 android/jni
+
+domains.json
