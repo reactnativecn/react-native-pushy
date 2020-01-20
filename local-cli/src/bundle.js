@@ -68,6 +68,7 @@ async function runReactNativeBundleCommand(
     entryFile,
     '--platform',
     platform,
+    '--reset-cache',
   ]);
 
   if (sourcemapOutput) {
