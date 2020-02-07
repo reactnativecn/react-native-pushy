@@ -96,6 +96,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         double lastProgressValue=0;
         while ((bytesRead = source.read(sink.buffer(), DOWNLOAD_CHUNK_SIZE)) != -1) {
             totalRead += bytesRead;
+            sink.emit();
             if (UpdateContext.DEBUG) {
                 Log.d("RNUpdate", "Progress " + totalRead + "/" + contentLength);
             }
