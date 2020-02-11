@@ -71,7 +71,7 @@ export const commands = {
     const fn = args[0];
     const {name, description, metaInfo } = options;
 
-    if (!fn) {
+    if (!fn || !fn.endsWith('.ppk')) {
       throw new Error('Usage: pushy publish <ppkFile> --platform ios|android');
     }
 
