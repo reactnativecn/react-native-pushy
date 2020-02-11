@@ -6,11 +6,11 @@
 
 ### packageVersion
 
-当前应用包的版本名。
+当前应用原生包的版本。其中android取自`versionName`字段(位于`android/build.gralde`中)。ios取自`CFBundleShortVersionString`字段(位于`ios/项目名/Info.plist`中)。
 
 ### currentVersion
 
-当前版本的Hash号。
+当前热更新版本（jsbundle文件）的Hash号。
 
 ### isFirstTime
 
@@ -24,7 +24,7 @@
 
 检查更新，返回值有三种情形：
 
-1. `{expired: true}`：该应用包(原生部分)已过期，需要前往应用市场下载新的版本。
+1. `{expired: true}`：该应用原生包已过期，需要前往应用市场下载新的版本。
 ```
     {
         expired: true,
@@ -35,7 +35,7 @@
 
 3. `{update: true}`：当前有新版本可以更新。info的`name`、`description`字段可
 以用于提示用户，而`metaInfo`字段则可以根据你的需求自定义其它属性(如是否静默更新、
-是否强制更新等等)。另外还有几个字段，包含了完整更新包或补丁包的下载地址，
+是否强制更新等等)。另外还有几个字段，包含了热更新文件的下载地址，
 ```
     {
         update: true,
@@ -43,7 +43,6 @@
         hash: 'hash',
         description: '添加聊天功能\n修复商城页面BUG',
         metaInfo: '{"silent":true}',
-        updateUrl: 'http://update-packages.reactnative.cn/hash',
         pdiffUrl: 'http://update-packages.reactnative.cn/hash',
         diffUrl: 'http://update-packages.reactnative.cn/hash',
     }

@@ -25,7 +25,7 @@ const info = await checkUpdate(appKey)
 
 返回的info有三种情况：
 
-1. `{expired: true}`：该应用包(原生部分)已过期，需要前往应用市场下载新的版本。
+1. `{expired: true}`：该应用原生包已过期（已从pushy服务器中删除），开发者应该在pushy控制台添加一个更新下载链接，并自行提示用户下载。
 
 2. `{upToDate: true}`：当前已经更新到最新，无需进行更新。
 
@@ -36,7 +36,7 @@ react-native-update会首先尝试耗费流量更少的更新方式。将info对
 
 ## 切换版本
 
-downloadUpdate的返回值是一个hash字符串，它是当前版本的唯一标识。
+downloadUpdate的返回值是一个hash字符串，它是当前热更新版本的唯一标识。
 
 你可以使用`switchVersion`函数立即切换版本(此时应用会立即重新加载)，或者选择调用
 `switchVersionLater`，让应用在下一次启动的时候再加载新的版本。
@@ -139,8 +139,8 @@ class MyProject extends Component {
         </Text>
         <Text style={styles.instructions}>
           这是版本一 {'\n'}
-          当前包版本号: {packageVersion}{'\n'}
-          当前版本Hash: {currentVersion||'(空)'}{'\n'}
+          当前原生包版本号: {packageVersion}{'\n'}
+          当前热更新版本Hash: {currentVersion||'(空)'}{'\n'}
         </Text>
         <TouchableOpacity onPress={this.checkUpdate}>
           <Text style={styles.instructions}>

@@ -4,7 +4,7 @@
 
 ```
 $ npm install -g react-native-update-cli
-$ npm install --save react-native-update
+$ npm install react-native-update
 ```
 
 ## 使用
@@ -90,18 +90,18 @@ $ npm install --save react-native-update
 
 #### pushy packages
 
-查看已经上传的包。这项操作也可以在网页管理端进行。
+查看已经上传的原生包。这项操作也可以在网页管理端进行。
 
 - platform: ios|android 对应的平台
 
 #### pushy publish <ppkFile>
 
-发布新的更新版本。
+发布新的热更新版本（ppk文件）。
 
 - platform: ios|android 对应的平台
-- name: 当前版本的名字(版本号)
-- description: 当前版本的描述信息，可以对用户进行展示
-- metaInfo: 当前版本的元信息，可以用来保存一些额外信息
+- name: 当前热更新版本的名字(版本号)
+- description: 当前热更新版本的描述信息，可以对用户进行展示
+- metaInfo: 当前热更新版本的元信息，可以用来保存一些额外信息
 
 #### pushy versions
 
@@ -111,8 +111,8 @@ $ npm install --save react-native-update
 
 #### pushy update
 
-为一个包版本绑定一个更新版本。这项操作也可以在网页管理端进行。
+为一个原生包版本绑定一个热更新版本。这项操作也可以在网页管理端进行。
 
 - platform: ios|android 对应的平台
-- versionId: 要绑定的版本 ID
-- packageId: 要绑定的包 ID
+- versionId: 要绑定的热更新版本 ID
+- packageId: 要绑定的原生包 ID
