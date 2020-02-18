@@ -5,8 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build-lib": "$ANDROID_HOME/ndk-bundle/ndk-build NDK_PROJECT_PATH=android APP_BUILD_SCRIPT=android/jni/Android.mk NDK_LIBS_OUT=android/lib",
-    "prepare": "node_modules/.bin/babel local-cli/src --out-dir local-cli/lib"
+    "build-lib": "$ANDROID_HOME/ndk-bundle/ndk-build NDK_PROJECT_PATH=android APP_BUILD_SCRIPT=android/jni/Android.mk NDK_LIBS_OUT=android/lib"
   },
   "repository": {
     "type": "git",
@@ -27,31 +26,5 @@
     "react-native": ">=0.27.0"
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy#readme",
-  "dependencies": {
-    "app-info-parser": "^0.3.5",
-    "cli-arguments": "^0.2.1",
-    "fs-extra": "^8.1.0",
-    "gradle-to-js": "^2.0.0",
-    "isomorphic-fetch": "^2.2.1",
-    "progress": "^1.1.8",
-    "read": "^1.0.7",
-    "request": "^2.69.0",
-    "tty-table": "^2.7.0",
-    "yauzl": "^2.10.0",
-    "yazl": "2.3.0"
-  },
-  "devDependencies": {
-    "babel-cli": "^6.5.1",
-    "babel-eslint": "^4.1.6",
-    "babel-plugin-syntax-async-functions": "^6.5.0",
-    "babel-plugin-syntax-object-rest-spread": "^6.5.0",
-    "babel-plugin-transform-async-to-generator": "^6.3.13",
-    "babel-plugin-transform-es2015-arrow-functions": "^6.5.2",
-    "babel-plugin-transform-es2015-destructuring": "^6.3.15",
-    "babel-plugin-transform-es2015-modules-commonjs": "^6.3.16",
-    "babel-plugin-transform-es2015-parameters": "^6.5.0",
-    "babel-plugin-transform-es2015-spread": "^6.5.2",
-    "babel-plugin-transform-object-rest-spread": "^6.5.0",
-    "babel-plugin-transform-strict-mode": "^6.5.2"
-  }
+  "dependencies": {}
 }
