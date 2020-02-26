@@ -424,7 +424,7 @@ RCT_EXPORT_METHOD(markSuccess)
         case PushyTypeFullDownload:
             return @".ppk";
         case PushyTypePatchFromPackage:
-            return @".apk.patch";
+            return @".ipa.patch";
         case PushyTypePatchFromPpk:
             return @".ppk.patch";
         default:
