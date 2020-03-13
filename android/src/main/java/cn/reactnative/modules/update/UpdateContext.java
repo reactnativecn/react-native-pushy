@@ -20,7 +20,8 @@ public class UpdateContext {
     private File rootDir;
     private Executor executor;
 
-    public static boolean DEBUG = false;
+    public static boolean DEBUG = true;
+    private static ReactInstanceManager mReactInstanceManager;
 
     public UpdateContext(Context context) {
         this.context = context;
@@ -158,6 +159,15 @@ public class UpdateContext {
         editor.apply();
 
         this.clearUp();
+    }
+
+
+    public static void setCustomInstanceManager(ReactInstanceManager instanceManager) {
+        mReactInstanceManager = instanceManager;
+    }
+
+    public ReactInstanceManager getCustomReactInstanceManager() {
+        return mReactInstanceManager;
     }
 
     public static String getBundleUrl(Context context) {

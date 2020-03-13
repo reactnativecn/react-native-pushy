@@ -127,7 +127,11 @@ public class UpdateModule extends ReactContextBaseJavaModule{
                     updateContext.switchVersion(hash);
                     Activity activity = getCurrentActivity();
                     Application application = activity.getApplication();
-                    ReactInstanceManager instanceManager = ((ReactApplication) application).getReactNativeHost().getReactInstanceManager();
+                    ReactInstanceManager instanceManager = updateContext.getCustomReactInstanceManager();
+
+                    if (instanceManager == null) {
+                        instanceManager = ((ReactApplication) application).getReactNativeHost().getReactInstanceManager();
+                    }
 
                     try {
                         Field jsBundleField = instanceManager.getClass().getDeclaredField("mJSBundleFile");
