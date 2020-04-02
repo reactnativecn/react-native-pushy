@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.util.Log;
+import com.facebook.react.ReactInstanceManager;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
