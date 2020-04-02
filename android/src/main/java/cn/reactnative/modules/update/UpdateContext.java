@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.util.Log;
+import com.facebook.react.ReactInstanceManager;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -21,6 +22,7 @@ public class UpdateContext {
     private Executor executor;
 
     public static boolean DEBUG = false;
+    private static ReactInstanceManager mReactInstanceManager;
 
     public UpdateContext(Context context) {
         this.context = context;
@@ -158,6 +160,15 @@ public class UpdateContext {
         editor.apply();
 
         this.clearUp();
+    }
+
+
+    public static void setCustomInstanceManager(ReactInstanceManager instanceManager) {
+        mReactInstanceManager = instanceManager;
+    }
+
+    public ReactInstanceManager getCustomReactInstanceManager() {
+        return mReactInstanceManager;
     }
 
     public static String getBundleUrl(Context context) {
