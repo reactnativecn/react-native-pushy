@@ -1,6 +1,6 @@
 # react-native-update [![npm version](https://badge.fury.io/js/react-native-update.svg)](http://badge.fury.io/js/react-native-update)
 
-本组件是面向 React Native 提供热更新功能的组件，详情请访问我们的官方网站<https://pushy.reactnative.cn>。
+本组件是面向 React Native 提供热更新功能的组件，详情请访问我们的官方网站 <https://pushy.reactnative.cn>。
 
 ### 快速开始
 
