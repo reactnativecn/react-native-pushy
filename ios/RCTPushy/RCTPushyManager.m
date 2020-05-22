@@ -99,16 +99,9 @@ completionHandler:(void (^)(NSError *error))completionHandler
 
         // merge old files
         if (deletes!= nil) {
-            NSError *error = nil;
             NSString *srcDir = [fromDir stringByAppendingPathComponent:@"assets"];
             NSString *desDir = [toDir stringByAppendingPathComponent:@"assets"];
-            [self _mergeContentsOfPath:srcDir intoPath:desDir deletes:deletes error:&error];
-            if (error) {
-                if (completionHandler) {
-                    completionHandler(error);
-                }
-                return;
-            }
+            [self _mergeContentsOfPath:srcDir intoPath:desDir deletes:deletes];
         }
         
         // copy files
@@ -126,10 +119,11 @@ completionHandler:(void (^)(NSError *error))completionHandler
             NSError *error = nil;
             [fm copyItemAtPath:fromPath toPath:toPath error:&error];
             if (error) {
-                if (completionHandler) {
-                    completionHandler(error);
-                }
-                return;
+                NSLog(@"Pushy copy error: %@", error.localizedDescription);
+                // if (completionHandler) {
+                //     completionHandler(error);
+                // }
+                // return;
             }
         }
         if (completionHandler) {
@@ -150,7 +144,7 @@ completionHandler:(void (^)(NSError *error))completionHandler
     });
 }
 
-- (void)_mergeContentsOfPath:(NSString *)srcDir intoPath:(NSString *)dstDir deletes:(NSDictionary *)deletes error:(NSError**)err
+- (void)_mergeContentsOfPath:(NSString *)srcDir intoPath:(NSString *)dstDir deletes:(NSDictionary *)deletes
 {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSDirectoryEnumerator *srcDirEnum = [fm enumeratorAtPath:srcDir];
@@ -159,7 +153,9 @@ completionHandler:(void (^)(NSError *error))completionHandler
         
         NSString *srcFullPath =  [srcDir stringByAppendingPathComponent:subPath];
         NSString *potentialDstPath = [dstDir stringByAppendingPathComponent:subPath];
-        
+
+        NSError *error = nil;
+
         BOOL inDeletes = NO;
         if (deletes) {
             NSString *path = [@"assets" stringByAppendingPathComponent:subPath];
@@ -171,18 +167,19 @@ completionHandler:(void (^)(NSError *error))completionHandler
             BOOL isDirectory = ([fm fileExistsAtPath:srcFullPath isDirectory:&isDirectory] && isDirectory);
             if (isDirectory) {
                 if (![fm fileExistsAtPath:potentialDstPath isDirectory:nil]) {
-                    [fm createDirectoryAtPath:potentialDstPath withIntermediateDirectories:YES attributes:nil error:err];
-                    if (err && *err) {
-                        return;
+                    [fm createDirectoryAtPath:potentialDstPath withIntermediateDirectories:YES attributes:nil error:&error];
+                    if (error) {
+                        NSLog(@"Pushy merge error: %@", error.localizedDescription);
+                        // return;
                     }
                 }
             }
             else {
-                
                 if (![fm fileExistsAtPath:potentialDstPath]) {
-                    [fm copyItemAtPath:srcFullPath toPath:potentialDstPath error:err];
-                    if (err && *err) {
-                        return;
+                    [fm copyItemAtPath:srcFullPath toPath:potentialDstPath error:&error];
+                    if (error) {
+                        NSLog(@"Pushy merge error: %@", error.localizedDescription);
+                        // return;
                     }
                 }
             }
