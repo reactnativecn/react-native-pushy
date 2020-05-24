@@ -4,7 +4,7 @@
 
 ### 快速开始
 
-请查看[文档](https://pushy.reactnative.cn/docs/getting-started)
+请查看[文档](https://pushy.reactnative.cn/docs/getting-started.html)
 
 ### 优势
 
