@@ -345,10 +345,10 @@ RCT_EXPORT_METHOD(markSuccess)
                                 break;
                             case PushyTypePatchFromPpk:
                             {
-                                NSString *lastVertionDir = [dir stringByAppendingPathComponent:originHashName];
+                                NSString *lastVersionDir = [dir stringByAppendingPathComponent:originHashName];
                                 
-                                NSString *sourceOrigin = lastVertionDir;
-                                NSString *bundleOrigin = [lastVertionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+                                NSString *sourceOrigin = lastVersionDir;
+                                NSString *bundleOrigin = [lastVersionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
                                 [self patch:hashName fromBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
