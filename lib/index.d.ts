@@ -20,17 +20,27 @@ export interface UpdateAvailableResult {
   description: string;
   metaInfo: string;
   pdiffUrl: string;
-  diffUrl: string;
-}
+  diffUrl?: string;
+};
 
-export type CheckResult = Partial<ExpiredResult & UpTodateResult & UpdateAvailableResult>;
+export type CheckResult =
+  | ExpiredResult
+  | UpTodateResult
+  | UpdateAvailableResult;
 
 export function checkUpdate(appkey: string): Promise<CheckResult>;
 
-export function downloadUpdate(options: UpdateAvailableResult): Promise<undefined | string>;
+export function downloadUpdate(
+  options: UpdateAvailableResult,
+): Promise<undefined | string>;
 
 export function switchVersion(hash: string): void;
 
 export function switchVersionLater(hash: string): void;
 
 export function markSuccess(): void;
+
+export function setCustomEndpoints(
+  mainEndpoint: string,
+  backupEndpoints?: string[],
+): void;
