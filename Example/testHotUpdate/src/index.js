@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Linking,
   Image,
+  NativeModules,
 } from 'react-native';
 
 import {
@@ -70,6 +71,12 @@ export default class App extends Component {
   };
 
   checkUpdate = async () => {
+    return await this.doUpdate({
+      update: true,
+      pdiffUrl: 'http://localhost:8888/1.pdiff',
+      hash: 'test',
+    });
+
     let info;
     try {
       info = await checkUpdate(appKey);
@@ -108,17 +115,17 @@ export default class App extends Component {
   render() {
     return (
       <View style={styles.container}>
-        <Text style={styles.welcome}>欢迎使用热更新服务</Text>
+        <Text style={styles.welcome}>443欢迎使用热更新服务</Text>
         <Image
           resizeMode={'contain'}
-          source={require('./assets/shoucang.png')}
+          source={require('./assets/shezhi.png')}
           style={styles.image}
         />
         <Text style={styles.instructions}>
           这是版本一 {'\n'}
-          当前包版本号: {packageVersion}
+          当前原生包版本号: {packageVersion}
           {'\n'}
-          当前版本Hash: {currentVersion || '(空)'}
+          当前热更新版本Hash: {currentVersion || '(空)'}
           {'\n'}
         </Text>
         <TouchableOpacity onPress={this.checkUpdate}>

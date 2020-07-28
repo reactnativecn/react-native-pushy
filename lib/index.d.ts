@@ -21,7 +21,7 @@ export interface UpdateAvailableResult {
   metaInfo: string;
   pdiffUrl: string;
   diffUrl?: string;
-};
+}
 
 export type CheckResult =
   | ExpiredResult
@@ -40,7 +40,18 @@ export function switchVersionLater(hash: string): void;
 
 export function markSuccess(): void;
 
-export function setCustomEndpoints(
-  mainEndpoint: string,
-  backupEndpoints?: string[],
-): void;
+/**
+ * @param {string} main - The main api endpoint
+ * @param {string[]} [backups] - The back up endpoints.
+ * @param {string} [backupQueryUrl] - An url that return a json file containing an array of endpoint.
+ *                                    like: ["https://backup.api/1", "https://backup.api/2"]
+ */
+export function setCustomEndpoints({
+  main,
+  backups,
+  backupQueryUrl,
+}: {
+  main: string;
+  backUps?: string[];
+  backupQueryUrl?: string;
+}): void;
