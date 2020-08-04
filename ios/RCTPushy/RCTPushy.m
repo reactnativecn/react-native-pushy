@@ -93,10 +93,10 @@ RCT_EXPORT_MODULE(RCTPushy);
             BOOL isFirstTime = [pushyInfo[paramIsFirstTime] boolValue];
             BOOL isFirstLoadOK = [pushyInfo[paramIsFirstLoadOk] boolValue];
             
-            NSString *loadVersioin = curVersion;
-            BOOL needRollback = (!ignoreRollback && isFirstTime == NO && isFirstLoadOK == NO) || loadVersioin.length<=0;
+            NSString *loadVersion = curVersion;
+            BOOL needRollback = (!ignoreRollback && isFirstTime == NO && isFirstLoadOK == NO) || loadVersion.length<=0;
             if (needRollback) {
-                loadVersioin = lastVersion;
+                loadVersion = lastVersion;
                 
                 if (lastVersion.length) {
                     // roll back to last version
@@ -125,10 +125,10 @@ RCT_EXPORT_MODULE(RCTPushy);
                 [defaults synchronize];
             }
             
-            if (loadVersioin.length) {
+            if (loadVersion.length) {
                 NSString *downloadDir = [RCTPushy downloadDir];
                 
-                NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:loadVersioin] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+                NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:loadVersion] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
                 if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
                     NSURL *bundleURL = [NSURL fileURLWithPath:bundlePath];
                     return bundleURL;
@@ -302,7 +302,7 @@ RCT_EXPORT_METHOD(markSuccess)
         callback([self errorWithMessage:ERROR_FILE_OPERATION]);
         return;
     }
-    
+
     NSString *zipFilePath = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@",hashName, [self zipExtension:type]]];
     NSString *unzipDir = [dir stringByAppendingPathComponent:hashName];
 
