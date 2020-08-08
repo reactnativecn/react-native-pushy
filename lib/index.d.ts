@@ -55,3 +55,9 @@ export function setCustomEndpoints({
   backUps?: string[];
   backupQueryUrl?: string;
 }): void;
+
+
+interface ProgressEvent {
+  received: number;
+  total: number;
+}

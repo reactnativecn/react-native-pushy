@@ -41,6 +41,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     final int DOWNLOAD_CHUNK_SIZE = 4096;
 
     Context context;
+    String hash;
 
     DownloadTask(Context context) {
         this.context = context;
@@ -69,7 +70,10 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         }
     }
 
-    private void downloadFile(String url, File writePath) throws IOException {
+    private void downloadFile(DownloadTaskParams param) throws IOException {
+        String url = param.url;
+        File writePath = param.zipFilePath;
+        this.hash = param.hash;
         OkHttpClient client = new OkHttpClient();
         Request request = new Request.Builder().url(url)
                 .build();
@@ -92,21 +96,17 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         }
 
         long bytesRead = 0;
-        long totalRead = 0;
-        double lastProgressValue=0;
+        long received = 0;
         while ((bytesRead = source.read(sink.buffer(), DOWNLOAD_CHUNK_SIZE)) != -1) {
-            totalRead += bytesRead;
+            received += bytesRead;
             sink.emit();
             if (UpdateContext.DEBUG) {
-                Log.d("RNUpdate", "Progress " + totalRead + "/" + contentLength);
+                Log.d("RNUpdate", "Progress " + received + "/" + contentLength);
             }
-            double progress = Math.round(((double) totalRead * 100) / contentLength);
-            if ((progress != lastProgressValue) || (totalRead == contentLength)) {
-                lastProgressValue = progress;
-                publishProgress(new long[]{(long)progress,totalRead, contentLength});
-            }
+            
+            publishProgress(new long[]{received, contentLength});
         }
-        if (totalRead != contentLength) {
+        if (received != contentLength) {
             throw new Error("Unexpected eof while reading ppk");
         }
         sink.writeAll(source);
@@ -121,10 +121,10 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     protected void onProgressUpdate(long[]... values) {
         super.onProgressUpdate(values);
         WritableMap params = Arguments.createMap();
-        params.putDouble("progress", (values[0][0]));
-        params.putDouble("totalRead", (values[0][1]));
-        params.putDouble("contentLength", (values[0][2]));
-        sendEvent("progress", params);
+        params.putDouble("received", (values[0][0]));
+        params.putDouble("total", (values[0][1]));
+        params.putDouble("hashname", this.hash);
+        sendEvent("RCTPushyDownloadProgress", params);
 
     }
 
@@ -238,7 +238,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     }
 
     private void doDownload(DownloadTaskParams param) throws IOException {
-        downloadFile(param.url, param.zipFilePath);
+        downloadFile(param);
 
         ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
         ZipEntry ze;
@@ -295,7 +295,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     }
 
     private void doPatchFromApk(DownloadTaskParams param) throws IOException, JSONException {
-        downloadFile(param.url, param.zipFilePath);
+        downloadFile(param);
 
         ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
         ZipEntry ze;
@@ -371,7 +371,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     }
 
     private void doPatchFromPpk(DownloadTaskParams param) throws IOException, JSONException {
-        downloadFile(param.url, param.zipFilePath);
+        downloadFile(param);
 
         ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
         ZipEntry ze;
