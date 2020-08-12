@@ -23,6 +23,7 @@ public class UpdateContext {
 
     public static boolean DEBUG = false;
     private static ReactInstanceManager mReactInstanceManager;
+    private static boolean isUsingBundleUrl = false;
 
     public UpdateContext(Context context) {
         this.context = context;
@@ -65,6 +66,10 @@ public class UpdateContext {
 
     public String getBuildTime() {
         return context.getString(R.string.pushy_build_time);
+    }
+
+    public boolean getIsUsingBundleUrl() {
+        return isUsingBundleUrl;
     }
 
     public interface DownloadFileListener {
@@ -184,6 +189,7 @@ public class UpdateContext {
     }
 
     public String getBundleUrl(String defaultAssetsUrl) {
+        isUsingBundleUrl = true;
         String currentVersion = getCurrentVersion();
         if (currentVersion == null) {
             return defaultAssetsUrl;

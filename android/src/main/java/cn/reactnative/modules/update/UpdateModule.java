@@ -46,6 +46,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
         constants.put("packageVersion", updateContext.getPackageVersion());
         constants.put("currentVersion", updateContext.getCurrentVersion());
         constants.put("buildTime", updateContext.getBuildTime());
+        constants.put("isUsingBundleUrl", updateContext.getIsUsingBundleUrl());
         boolean isFirstTime = updateContext.isFirstTime();
         constants.put("isFirstTime", isFirstTime);
         if (isFirstTime) {
@@ -134,14 +135,14 @@ public class UpdateModule extends ReactContextBaseJavaModule{
                     }
 
                     try {
-                        Field jsBundleField = instanceManager.getClass().getDeclaredField("mJSBundleFile");
-                        jsBundleField.setAccessible(true);
-                        jsBundleField.set(instanceManager, UpdateContext.getBundleUrl(application));
-                    } catch (Throwable err) {
                         JSBundleLoader loader = JSBundleLoader.createFileLoader(UpdateContext.getBundleUrl(application));
                         Field loadField = instanceManager.getClass().getDeclaredField("mBundleLoader");
                         loadField.setAccessible(true);
                         loadField.set(instanceManager, loader);
+                    } catch (Throwable err) {
+                        Field jsBundleField = instanceManager.getClass().getDeclaredField("mJSBundleFile");
+                        jsBundleField.setAccessible(true);
+                        jsBundleField.set(instanceManager, UpdateContext.getBundleUrl(application));
                     }
 
                     try {

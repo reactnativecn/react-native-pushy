@@ -123,7 +123,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         WritableMap params = Arguments.createMap();
         params.putDouble("received", (values[0][0]));
         params.putDouble("total", (values[0][1]));
-        params.putDouble("hashname", this.hash);
+        params.putString("hashname", this.hash);
         sendEvent("RCTPushyDownloadProgress", params);
 
     }
