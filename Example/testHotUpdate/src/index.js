@@ -52,36 +52,34 @@ export default class App extends Component {
     }
   }
   doUpdate = async info => {
-    const hash = await downloadUpdate(info);
-    Alert.alert('提示', '下载完毕,是否重启应用?', [
-      {
-        text: '是',
-        onPress: () => {
-          switchVersion(hash);
+    try {
+      const hash = await downloadUpdate(info);
+      Alert.alert('提示', '下载完毕,是否重启应用?', [
+        {
+          text: '是',
+          onPress: () => {
+            switchVersion(hash);
+          },
         },
-      },
-      {text: '否'},
-      {
-        text: '下次启动时',
-        onPress: () => {
-          switchVersionLater(hash);
+        {text: '否'},
+        {
+          text: '下次启动时',
+          onPress: () => {
+            switchVersionLater(hash);
+          },
         },
-      },
-    ]);
+      ]);
+    } catch (err) {
+      Alert.alert('更新失败', err.message);
+    }
   };
 
   checkUpdate = async () => {
-    return await this.doUpdate({
-      update: true,
-      pdiffUrl: 'http://localhost:8888/1.pdiff',
-      hash: 'test',
-    });
-
     let info;
     try {
       info = await checkUpdate(appKey);
     } catch (err) {
-      console.warn(err);
+      Alert.alert('更新检查失败', err.message);
       return;
     }
     if (info.expired) {
@@ -115,7 +113,7 @@ export default class App extends Component {
   render() {
     return (
       <View style={styles.container}>
-        <Text style={styles.welcome}>443欢迎使用热更新服务</Text>
+        <Text style={styles.welcome}>欢迎使用热更新服务</Text>
         <Image
           resizeMode={'contain'}
           source={require('./assets/shezhi.png')}
