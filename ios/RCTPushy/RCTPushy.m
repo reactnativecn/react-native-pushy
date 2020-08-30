@@ -27,6 +27,7 @@ static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
 static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
+static NSString *const keyBlockUpdate = @"blockUpdate"
 static NSString *const keyFirstLoadMarked = @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY";
 static NSString *const keyRolledBackMarked = @"REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY";
 static NSString *const KeyPackageUpdatedMarked = @"REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY";
@@ -155,6 +156,7 @@ RCT_EXPORT_MODULE(RCTPushy);
     ret[@"buildTime"] = [RCTPushy buildTime];
     ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
     ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadMarked];
+    ret[@"blockUpdate"] = [defaults objectForKey:keyBlockUpdate];
     NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
     ret[@"currentVersion"] = [pushyInfo objectForKey:paramCurrentVersion];
     
@@ -186,6 +188,16 @@ RCT_EXPORT_MODULE(RCTPushy);
         _fileManager = [RCTPushyManager new];
     }
     return self;
+}
+
+RCT_EXPORT_METHOD(setBlockUpdate:(NSDictionary *)options)
+{
+    // NSMutableDictionary *blockUpdateInfo = [NSMutableDictionary new];
+    // blockUpdateInfo[@"reason"] = options[@"reason"];
+    // blockUpdateInfo[@"until"] = options[@"until"];
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:options forKey:keyBlockUpdate];
+    [defaults synchronize];
 }
 
 RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
