@@ -22,12 +22,14 @@
 
 //
 static NSString *const keyPushyInfo = @"REACTNATIVECN_PUSHY_INFO_KEY";
+static NSString *const keyPushyInfo = @"REACTNATIVECN_PUSHY_INFO_KEY";
 static NSString *const paramPackageVersion = @"packageVersion";
 static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
 static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
-static NSString *const keyBlockUpdate = @"blockUpdate"
+static NSString *const keyBlockUpdate = @"REACTNATIVECN_PUSHY_BLOCKUPDATE";
+static NSString *const keyUuid = @"REACTNATIVECN_PUSHY_UUID";
 static NSString *const keyFirstLoadMarked = @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY";
 static NSString *const keyRolledBackMarked = @"REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY";
 static NSString *const KeyPackageUpdatedMarked = @"REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY";
@@ -157,6 +159,7 @@ RCT_EXPORT_MODULE(RCTPushy);
     ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
     ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadMarked];
     ret[@"blockUpdate"] = [defaults objectForKey:keyBlockUpdate];
+    ret[@"uuid"] = [defaults objectForKey:keyUuid];
     NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
     ret[@"currentVersion"] = [pushyInfo objectForKey:paramCurrentVersion];
     
@@ -197,6 +200,13 @@ RCT_EXPORT_METHOD(setBlockUpdate:(NSDictionary *)options)
     // blockUpdateInfo[@"until"] = options[@"until"];
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setObject:options forKey:keyBlockUpdate];
+    [defaults synchronize];
+}
+
+RCT_EXPORT_METHOD(setUuid:(NSString *)uuid)
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:uuid forKey:keyUuid];
     [defaults synchronize];
 }
 
