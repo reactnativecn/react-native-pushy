@@ -7,6 +7,8 @@ import android.content.pm.PackageManager;
 import android.util.Log;
 import com.facebook.react.ReactInstanceManager;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
@@ -68,6 +70,17 @@ public class UpdateContext {
         return context.getString(R.string.pushy_build_time);
     }
 
+    public String getUuid() {
+        return sp.getString("uuid", null);
+    }
+
+    public Map getBlockUpdate() {
+        return new HashMap<String, Object>() {{
+            put("until", sp.getInt("blockUntil", 0));
+            put("reason", sp.getString("blockReason", null));
+        }};
+    }
+
     public boolean getIsUsingBundleUrl() {
         return isUsingBundleUrl;
     }
@@ -127,6 +140,19 @@ public class UpdateContext {
         editor.putBoolean("firstTime", true);
         editor.putBoolean("firstTimeOk", false);
         editor.putBoolean("rolledBack", false);
+        editor.apply();
+    }
+
+    public void setUuid(String uuid) {
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putString("uuid", uuid);
+        editor.apply();
+    }
+
+    public void setBlockUpdate(int until, String reason) {
+        SharedPreferences.Editor editor = sp.edit();
+        editor.putInt("blockUntil", until);
+        editor.putString("blockReason", reason);
         editor.apply();
     }
 

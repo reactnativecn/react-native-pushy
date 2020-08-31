@@ -27,6 +27,6 @@
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy#readme",
   "dependencies": {
-    "uuid": "^8.3.0"
+    "uuid": "3"
   }
 }

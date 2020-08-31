@@ -57,6 +57,8 @@ public class UpdateModule extends ReactContextBaseJavaModule{
         if (isRolledBack) {
             updateContext.clearRollbackMark();
         }
+        constants.put("blockUpdate", updateContext.getBlockUpdate());
+        constants.put("uuid", updateContext.getUuid());
         return constants;
     }
 
@@ -180,6 +182,28 @@ public class UpdateModule extends ReactContextBaseJavaModule{
             @Override
             public void run() {
                 updateContext.markSuccess();
+            }
+        });
+    }
+
+    @ReactMethod
+    public void setBlockUpdate(ReadableMap options) {
+        final int until = options.getInt("until");
+        final String reason = options.getString("reason");
+        UiThreadUtil.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateContext.setBlockUpdate(until, reason);
+            }
+        });
+    }
+
+    @ReactMethod
+    public void setUuid(final String uuid) {
+        UiThreadUtil.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateContext.setUuid(uuid);
             }
         });
     }
