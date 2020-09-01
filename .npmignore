@@ -1,11 +1,11 @@
-/.idea
-/.babelrc
-/.npmignore
-/.eslintrc
-/.nvmrc
-/.travis.yml
-/Example
-/android/build
+.babelrc
+.npmignore
+.eslintrc
+.nvmrc
+.travis.yml
+Example
+android/build
+.vscode
 
 # OSX
 #
@@ -46,3 +46,4 @@ yarn.lock
 android/jni
 
 domains.json
+endpoints.json

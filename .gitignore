@@ -1,7 +1,6 @@
-/.idea
-/node_modules
-/android/build
-/android/obj
+.vscode
+android/build
+android/obj
 *.iml
 
 # OSX

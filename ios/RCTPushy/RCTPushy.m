@@ -22,7 +22,6 @@
 
 //
 static NSString *const keyPushyInfo = @"REACTNATIVECN_PUSHY_INFO_KEY";
-static NSString *const keyPushyInfo = @"REACTNATIVECN_PUSHY_INFO_KEY";
 static NSString *const paramPackageVersion = @"packageVersion";
 static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
