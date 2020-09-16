@@ -122,6 +122,7 @@ export default class App extends Component {
   };
 
   render() {
+    const { received, total } = this.state;
     return (
       <View style={styles.container}>
         <Text style={styles.welcome}>欢迎使用热更新服务</Text>
