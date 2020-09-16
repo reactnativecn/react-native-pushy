@@ -59,7 +59,7 @@ export default class App extends Component {
     try {
       const hash = await downloadUpdate(info, {
         onDownloadProgress: ({received, total}) => {
-          setState({
+          this.setState({
             received,
             total,
           });
