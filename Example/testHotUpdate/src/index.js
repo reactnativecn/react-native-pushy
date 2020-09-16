@@ -27,6 +27,10 @@ import _updateConfig from '../update.json';
 const {appKey} = _updateConfig[Platform.OS];
 
 export default class App extends Component {
+  state = {
+    received: 0,
+    total: 0,
+  };
   componentDidMount() {
     if (isRolledBack) {
       Alert.alert('提示', '刚刚更新失败了,版本被回滚.');
@@ -51,9 +55,16 @@ export default class App extends Component {
       );
     }
   }
-  doUpdate = async info => {
+  doUpdate = async (info) => {
     try {
-      const hash = await downloadUpdate(info);
+      const hash = await downloadUpdate(info, {
+        onDownloadProgress: ({received, total}) => {
+          setState({
+            received,
+            total,
+          });
+        },
+      });
       Alert.alert('提示', '下载完毕,是否重启应用?', [
         {
           text: '是',
@@ -125,6 +136,9 @@ export default class App extends Component {
           {'\n'}
           当前热更新版本Hash: {currentVersion || '(空)'}
           {'\n'}
+        </Text>
+        <Text>
+          下载进度：{received} / {total}
         </Text>
         <TouchableOpacity onPress={this.checkUpdate}>
           <Text style={styles.instructions}>点击这里检查更新</Text>

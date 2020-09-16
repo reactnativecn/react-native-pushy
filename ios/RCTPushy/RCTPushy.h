@@ -6,13 +6,11 @@
 //  Copyright © 2016 erica. All rights reserved.
 //
 
-#if __has_include(<React/RCTBridge.h>)
 #import <React/RCTBridgeModule.h>
-#else
-#import "RCTBridgeModule.h"
-#endif
+#import <React/RCTEventEmitter.h>
 
-@interface RCTPushy : NSObject<RCTBridgeModule>
+
+@interface RCTPushy : RCTEventEmitter<RCTBridgeModule>
 
 + (NSURL *)bundleURL;
 

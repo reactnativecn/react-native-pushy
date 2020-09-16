@@ -10,17 +10,11 @@
 #import "RCTPushyDownloader.h"
 #import "RCTPushyManager.h"
 
-#if __has_include(<React/RCTBridge.h>)
-#import "React/RCTEventDispatcher.h"
+
 #import <React/RCTConvert.h>
 #import <React/RCTLog.h>
-#else
-#import "RCTEventDispatcher.h"
-#import "RCTConvert.h"
-#import "RCTLog.h"
-#endif
+#import <React/RCTReloadCommand.h>
 
-//
 static NSString *const keyPushyInfo = @"REACTNATIVECN_PUSHY_INFO_KEY";
 static NSString *const paramPackageVersion = @"packageVersion";
 static NSString *const paramLastVersion = @"lastVersion";
@@ -65,6 +59,7 @@ static BOOL ignoreRollback = false;
 
 @implementation RCTPushy {
     RCTPushyManager *_fileManager;
+    bool hasListeners;
 }
 
 @synthesize bridge = _bridge;
@@ -281,10 +276,12 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
         [self setNeedUpdate:options];
         
         // reload
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [_bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
-            [_bridge reload];
-        });
+        RCTReloadCommandSetBundleURL([[self class] bundleURL]);
+        RCTTriggerReloadCommandListeners(@"pushy reload");
+//        dispatch_async(dispatch_get_main_queue(), ^{
+//            [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
+//            [self.bridge reload];
+//        });
     }
 }
 
@@ -302,7 +299,27 @@ RCT_EXPORT_METHOD(markSuccess)
     [self clearInvalidFiles];
 }
 
+
+
 #pragma mark - private
+- (NSArray<NSString *> *)supportedEvents
+{
+  return @[EVENT_PROGRESS_DOWNLOAD, EVENT_PROGRESS_UNZIP];
+}
+
+// Will be called when this module's first listener is added.
+-(void)startObserving {
+    hasListeners = YES;
+    // Set up any upstream listeners or background tasks as necessary
+}
+
+// Will be called when this module's last listener is removed, or on dealloc.
+-(void)stopObserving {
+    hasListeners = NO;
+    // Remove upstream listeners, stop unnecessary background tasks
+}
+
+
 - (void)doPushy:(PushyType)type options:(NSDictionary *)options callback:(void (^)(NSError *error))callback
 {
     NSString *updateUrl = [RCTConvert NSString:options[@"updateUrl"]];
@@ -325,16 +342,17 @@ RCT_EXPORT_METHOD(markSuccess)
     }
 
     NSString *zipFilePath = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@",hashName, [self zipExtension:type]]];
-    NSString *unzipDir = [dir stringByAppendingPathComponent:hashName];
+//    NSString *unzipDir = [dir stringByAppendingPathComponent:hashName];
 
     RCTLogInfo(@"RCTPushy -- download file %@", updateUrl);
     [RCTPushyDownloader download:updateUrl savePath:zipFilePath progressHandler:^(long long receivedBytes, long long totalBytes) {
-        [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_DOWNLOAD
-                                                     body:@{
-                                                            PARAM_PROGRESS_HASHNAME:hashName,
-                                                            PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLongLong:receivedBytes],
-                                                            PARAM_PROGRESS_TOTAL:[NSNumber numberWithLongLong:totalBytes]
-                                                            }];
+        if (self->hasListeners) {
+            [self sendEventWithName:EVENT_PROGRESS_DOWNLOAD body:@{
+                PARAM_PROGRESS_HASHNAME:hashName,
+                PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLongLong:receivedBytes],
+                PARAM_PROGRESS_TOTAL:[NSNumber numberWithLongLong:totalBytes]
+            }];
+        }
     } completionHandler:^(NSString *path, NSError *error) {
         if (error) {
             callback(error);
@@ -342,16 +360,18 @@ RCT_EXPORT_METHOD(markSuccess)
         else {
             RCTLogInfo(@"RCTPushy -- unzip file %@", zipFilePath);
             NSString *unzipFilePath = [dir stringByAppendingPathComponent:hashName];
-            [_fileManager unzipFileAtPath:zipFilePath toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
-                [self.bridge.eventDispatcher sendAppEventWithName:EVENT_PROGRESS_UNZIP
-                                                             body:@{
-                                                                    PARAM_PROGRESS_HASHNAME:hashName,
-                                                                    PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLong:entryNumber],
-                                                                    PARAM_PROGRESS_TOTAL:[NSNumber numberWithLong:total]
-                                                                    }];
+            [self->_fileManager unzipFileAtPath:zipFilePath toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
+                if (self->hasListeners) {
+                    [self sendEventWithName:EVENT_PROGRESS_UNZIP
+                                       body:@{
+                                           PARAM_PROGRESS_HASHNAME:hashName,
+                                           PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLong:entryNumber],
+                                           PARAM_PROGRESS_TOTAL:[NSNumber numberWithLong:total]
+                                       }];
+                }
                 
             } completionHandler:^(NSString *path, BOOL succeeded, NSError *error) {
-                dispatch_async(_methodQueue, ^{
+                dispatch_async(self->_methodQueue, ^{
                     if (error) {
                         callback(error);
                     }
@@ -404,7 +424,7 @@ RCT_EXPORT_METHOD(markSuccess)
             NSDictionary *copies = json[@"copies"];
             NSDictionary *deletes = json[@"deletes"];
 
-            [_fileManager copyFiles:copies fromDir:sourceOrigin toDir:unzipDir deletes:deletes completionHandler:^(NSError *error) {
+            [self->_fileManager copyFiles:copies fromDir:sourceOrigin toDir:unzipDir deletes:deletes completionHandler:^(NSError *error) {
                 if (error) {
                     callback(error);
                 }

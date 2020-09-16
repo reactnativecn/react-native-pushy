@@ -31,7 +31,11 @@ export type CheckResult =
 export function checkUpdate(appkey: string): Promise<CheckResult>;
 
 export function downloadUpdate(
-  options: UpdateAvailableResult,
+  info: UpdateAvailableResult,
+  eventListeners?: {
+    onDownloadProgress?: (data: ProgressData) => void;
+    onUnzipProgress?: (data: ProgressData) => void;
+  },
 ): Promise<undefined | string>;
 
 export function switchVersion(hash: string): void;
@@ -56,8 +60,8 @@ export function setCustomEndpoints({
   backupQueryUrl?: string;
 }): void;
 
-
-interface ProgressEvent {
+interface ProgressData {
+  hashname: string;
   received: number;
   total: number;
 }
