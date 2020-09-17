@@ -13,7 +13,7 @@
 
 #import <React/RCTConvert.h>
 #import <React/RCTLog.h>
-#import <React/RCTReloadCommand.h>
+// #import <React/RCTReloadCommand.h>
 
 static NSString *const keyPushyInfo = @"REACTNATIVECN_PUSHY_INFO_KEY";
 static NSString *const paramPackageVersion = @"packageVersion";
@@ -275,13 +275,14 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
     if (hashName.length) {
         [self setNeedUpdate:options];
         
-        // reload
-        RCTReloadCommandSetBundleURL([[self class] bundleURL]);
-        RCTTriggerReloadCommandListeners(@"pushy reload");
-//        dispatch_async(dispatch_get_main_queue(), ^{
-//            [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
-//            [self.bridge reload];
-//        });
+        // reload 0.62+
+        // RCTReloadCommandSetBundleURL([[self class] bundleURL]);
+        // RCTTriggerReloadCommandListeners(@"pushy reload");
+        
+       dispatch_async(dispatch_get_main_queue(), ^{
+           [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
+           [self.bridge reload];
+       });
     }
 }
 
