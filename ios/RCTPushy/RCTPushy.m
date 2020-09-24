@@ -43,8 +43,8 @@ static NSString * const ERROR_FILE_OPERATION = @"file operation error";
 
 // event def
 static NSString * const EVENT_PROGRESS_DOWNLOAD = @"RCTPushyDownloadProgress";
-static NSString * const EVENT_PROGRESS_UNZIP = @"RCTPushyUnzipProgress";
-static NSString * const PARAM_PROGRESS_HASHNAME = @"hashname";
+// static NSString * const EVENT_PROGRESS_UNZIP = @"RCTPushyUnzipProgress";
+static NSString * const PARAM_PROGRESS_HASHNAME = @"hash";
 static NSString * const PARAM_PROGRESS_RECEIVED = @"received";
 static NSString * const PARAM_PROGRESS_TOTAL = @"total";
 
@@ -305,7 +305,10 @@ RCT_EXPORT_METHOD(markSuccess)
 #pragma mark - private
 - (NSArray<NSString *> *)supportedEvents
 {
-  return @[EVENT_PROGRESS_DOWNLOAD, EVENT_PROGRESS_UNZIP];
+  return @[
+      EVENT_PROGRESS_DOWNLOAD, 
+    //   EVENT_PROGRESS_UNZIP
+      ];
 }
 
 // Will be called when this module's first listener is added.
@@ -362,14 +365,14 @@ RCT_EXPORT_METHOD(markSuccess)
             RCTLogInfo(@"RCTPushy -- unzip file %@", zipFilePath);
             NSString *unzipFilePath = [dir stringByAppendingPathComponent:hashName];
             [self->_fileManager unzipFileAtPath:zipFilePath toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
-                if (self->hasListeners) {
-                    [self sendEventWithName:EVENT_PROGRESS_UNZIP
-                                       body:@{
-                                           PARAM_PROGRESS_HASHNAME:hashName,
-                                           PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLong:entryNumber],
-                                           PARAM_PROGRESS_TOTAL:[NSNumber numberWithLong:total]
-                                       }];
-                }
+                // if (self->hasListeners) {
+                //     [self sendEventWithName:EVENT_PROGRESS_UNZIP
+                //                        body:@{
+                //                            PARAM_PROGRESS_HASHNAME:hashName,
+                //                            PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLong:entryNumber],
+                //                            PARAM_PROGRESS_TOTAL:[NSNumber numberWithLong:total]
+                //                        }];
+                // }
                 
             } completionHandler:^(NSString *path, BOOL succeeded, NSError *error) {
                 dispatch_async(self->_methodQueue, ^{

@@ -34,7 +34,6 @@ export function downloadUpdate(
   info: UpdateAvailableResult,
   eventListeners?: {
     onDownloadProgress?: (data: ProgressData) => void;
-    onUnzipProgress?: (data: ProgressData) => void;
   },
 ): Promise<undefined | string>;
 

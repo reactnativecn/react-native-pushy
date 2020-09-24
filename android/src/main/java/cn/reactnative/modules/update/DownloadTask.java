@@ -97,6 +97,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
         long bytesRead = 0;
         long received = 0;
+        int currentPercentage = 0;
         while ((bytesRead = source.read(sink.buffer(), DOWNLOAD_CHUNK_SIZE)) != -1) {
             received += bytesRead;
             sink.emit();
@@ -104,11 +105,16 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 Log.d("RNUpdate", "Progress " + received + "/" + contentLength);
             }
             
-            publishProgress(new long[]{received, contentLength});
+            int percentage = (int)(received * 100.0 / contentLength + 0.5);
+            if (percentage > currentPercentage) {
+                currentPercentage = percentage;
+                publishProgress(new long[]{received, contentLength});
+            }
         }
         if (received != contentLength) {
-            throw new Error("Unexpected eof while reading ppk");
+            throw new Error("Unexpected eof while reading downloaded update");
         }
+        publishProgress(new long[]{received, contentLength});
         sink.writeAll(source);
         sink.close();
 
@@ -123,7 +129,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         WritableMap params = Arguments.createMap();
         params.putDouble("received", (values[0][0]));
         params.putDouble("total", (values[0][1]));
-        params.putString("hashname", this.hash);
+        params.putString("hash", this.hash);
         sendEvent("RCTPushyDownloadProgress", params);
 
     }
