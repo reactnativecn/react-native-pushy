@@ -70,7 +70,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     @ReactMethod
     public void downloadUpdate(ReadableMap options, final Promise promise){
         String url = options.getString("updateUrl");
-        String hash = options.getString("hashName");
+        String hash = options.getString("hash");
         updateContext.downloadFile(url, hash, new UpdateContext.DownloadFileListener() {
             @Override
             public void onDownloadCompleted() {
@@ -87,7 +87,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     @ReactMethod
     public void downloadPatchFromPackage(ReadableMap options, final Promise promise){
         String url = options.getString("updateUrl");
-        String hash = options.getString("hashName");
+        String hash = options.getString("hash");
         updateContext.downloadPatchFromApk(url, hash, new UpdateContext.DownloadFileListener() {
             @Override
             public void onDownloadCompleted() {
@@ -104,8 +104,8 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     @ReactMethod
     public void downloadPatchFromPpk(ReadableMap options, final Promise promise){
         String url = options.getString("updateUrl");
-        String hash = options.getString("hashName");
-        String originHash = options.getString("originHashName");
+        String hash = options.getString("hash");
+        String originHash = options.getString("originHash");
         updateContext.downloadPatchFromPpk(url, hash, originHash, new UpdateContext.DownloadFileListener() {
             @Override
             public void onDownloadCompleted() {
@@ -121,7 +121,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
 
     @ReactMethod
     public void reloadUpdate(ReadableMap options) {
-        final String hash = options.getString("hashName");
+        final String hash = options.getString("hash");
 
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
@@ -162,7 +162,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
 
     @ReactMethod
     public void setNeedUpdate(ReadableMap options) {
-        final String hash = options.getString("hashName");
+        final String hash = options.getString("hash");
 
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override

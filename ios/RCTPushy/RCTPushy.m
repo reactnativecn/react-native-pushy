@@ -44,7 +44,7 @@ static NSString * const ERROR_FILE_OPERATION = @"file operation error";
 // event def
 static NSString * const EVENT_PROGRESS_DOWNLOAD = @"RCTPushyDownloadProgress";
 // static NSString * const EVENT_PROGRESS_UNZIP = @"RCTPushyUnzipProgress";
-static NSString * const PARAM_PROGRESS_HASHNAME = @"hash";
+static NSString * const PARAM_PROGRESS_HASH = @"hash";
 static NSString * const PARAM_PROGRESS_RECEIVED = @"received";
 static NSString * const PARAM_PROGRESS_TOTAL = @"total";
 
@@ -248,8 +248,8 @@ RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
 
 RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 {
-    NSString *hashName = options[@"hashName"];
-    if (hashName.length) {
+    NSString *hash = options[@"hash"];
+    if (hash.length) {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         NSString *lastVersion = nil;
         if ([defaults objectForKey:keyPushyInfo]) {
@@ -258,7 +258,7 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
         }
         
         NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] init];
-        newInfo[paramCurrentVersion] = hashName;
+        newInfo[paramCurrentVersion] = hash;
         newInfo[paramLastVersion] = lastVersion;
         newInfo[paramIsFirstTime] = @(YES);
         newInfo[paramIsFirstLoadOk] = @(NO);
@@ -271,8 +271,8 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 
 RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 {
-    NSString *hashName = options[@"hashName"];
-    if (hashName.length) {
+    NSString *hash = options[@"hash"];
+    if (hash.length) {
         [self setNeedUpdate:options];
         
         // reload 0.62+
@@ -327,13 +327,13 @@ RCT_EXPORT_METHOD(markSuccess)
 - (void)doPushy:(PushyType)type options:(NSDictionary *)options callback:(void (^)(NSError *error))callback
 {
     NSString *updateUrl = [RCTConvert NSString:options[@"updateUrl"]];
-    NSString *hashName = [RCTConvert NSString:options[@"hashName"]];
-    if (updateUrl.length<=0 || hashName.length<=0) {
+    NSString *hash = [RCTConvert NSString:options[@"hash"]];
+    if (updateUrl.length <= 0 || hash.length <= 0) {
         callback([self errorWithMessage:ERROR_OPTIONS]);
         return;
     }
-    NSString *originHashName = [RCTConvert NSString:options[@"originHashName"]];
-    if (type == PushyTypePatchFromPpk && originHashName<=0) {
+    NSString *originHash = [RCTConvert NSString:options[@"originHash"]];
+    if (type == PushyTypePatchFromPpk && originHash <= 0) {
         callback([self errorWithMessage:ERROR_OPTIONS]);
         return;
     }
@@ -345,14 +345,14 @@ RCT_EXPORT_METHOD(markSuccess)
         return;
     }
 
-    NSString *zipFilePath = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@",hashName, [self zipExtension:type]]];
-//    NSString *unzipDir = [dir stringByAppendingPathComponent:hashName];
+    NSString *zipFilePath = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@%@",hash, [self zipExtension:type]]];
+//    NSString *unzipDir = [dir stringByAppendingPathComponent:hash];
 
     RCTLogInfo(@"RCTPushy -- download file %@", updateUrl);
     [RCTPushyDownloader download:updateUrl savePath:zipFilePath progressHandler:^(long long receivedBytes, long long totalBytes) {
         if (self->hasListeners) {
             [self sendEventWithName:EVENT_PROGRESS_DOWNLOAD body:@{
-                PARAM_PROGRESS_HASHNAME:hashName,
+                PARAM_PROGRESS_HASH:hash,
                 PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLongLong:receivedBytes],
                 PARAM_PROGRESS_TOTAL:[NSNumber numberWithLongLong:totalBytes]
             }];
@@ -363,12 +363,12 @@ RCT_EXPORT_METHOD(markSuccess)
         }
         else {
             RCTLogInfo(@"RCTPushy -- unzip file %@", zipFilePath);
-            NSString *unzipFilePath = [dir stringByAppendingPathComponent:hashName];
+            NSString *unzipFilePath = [dir stringByAppendingPathComponent:hash];
             [self->_fileManager unzipFileAtPath:zipFilePath toDestination:unzipFilePath progressHandler:^(NSString *entry,long entryNumber, long total) {
                 // if (self->hasListeners) {
                 //     [self sendEventWithName:EVENT_PROGRESS_UNZIP
                 //                        body:@{
-                //                            PARAM_PROGRESS_HASHNAME:hashName,
+                //                            PARAM_PROGRESS_HASH:hash,
                 //                            PARAM_PROGRESS_RECEIVED:[NSNumber numberWithLong:entryNumber],
                 //                            PARAM_PROGRESS_TOTAL:[NSNumber numberWithLong:total]
                 //                        }];
@@ -385,16 +385,16 @@ RCT_EXPORT_METHOD(markSuccess)
                             {
                                 NSString *sourceOrigin = [[NSBundle mainBundle] resourcePath];
                                 NSString *bundleOrigin = [[RCTPushy binaryBundleURL] path];
-                                [self patch:hashName fromBundle:bundleOrigin source:sourceOrigin callback:callback];
+                                [self patch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
                             case PushyTypePatchFromPpk:
                             {
-                                NSString *lastVersionDir = [dir stringByAppendingPathComponent:originHashName];
+                                NSString *lastVersionDir = [dir stringByAppendingPathComponent:originHash];
                                 
                                 NSString *sourceOrigin = lastVersionDir;
                                 NSString *bundleOrigin = [lastVersionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-                                [self patch:hashName fromBundle:bundleOrigin source:sourceOrigin callback:callback];
+                                [self patch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
                             default:
@@ -408,9 +408,9 @@ RCT_EXPORT_METHOD(markSuccess)
     }];
 }
 
-- (void)patch:(NSString *)hashName fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
+- (void)patch:(NSString *)hash fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
 {
-    NSString *unzipDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hashName];
+    NSString *unzipDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
     NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
     NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME];
     

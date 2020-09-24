@@ -90,50 +90,50 @@ public class UpdateContext {
         void onDownloadFailed(Throwable error);
     }
 
-    public void downloadFile(String url, String hashName, DownloadFileListener listener) {
+    public void downloadFile(String url, String hash, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_FULL_DOWNLOAD;
         params.url = url;
-        params.hash = hashName;
+        params.hash = hash;
         params.listener = listener;
-        params.zipFilePath = new File(rootDir, hashName + ".ppk");
-        params.unzipDirectory = new File(rootDir, hashName);
+        params.zipFilePath = new File(rootDir, hash + ".ppk");
+        params.unzipDirectory = new File(rootDir, hash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
-    public void downloadPatchFromApk(String url, String hashName, DownloadFileListener listener) {
+    public void downloadPatchFromApk(String url, String hash, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK;
         params.url = url;
-        params.hash = hashName;
+        params.hash = hash;
         params.listener = listener;
-        params.zipFilePath = new File(rootDir, hashName + ".apk.patch");
-        params.unzipDirectory = new File(rootDir, hashName);
+        params.zipFilePath = new File(rootDir, hash + ".apk.patch");
+        params.unzipDirectory = new File(rootDir, hash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
-    public void downloadPatchFromPpk(String url, String hashName, String originHashName, DownloadFileListener listener) {
+    public void downloadPatchFromPpk(String url, String hash, String originHash, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
         params.url = url;
-        params.hash = hashName;
-        params.originHash = originHashName;
+        params.hash = hash;
+        params.originHash = originHash;
         params.listener = listener;
-        params.zipFilePath = new File(rootDir, originHashName + "-" + hashName + ".ppk.patch");
-        params.unzipDirectory = new File(rootDir, hashName);
-        params.originDirectory = new File(rootDir, originHashName);
+        params.zipFilePath = new File(rootDir, originHash + "-" + hash + ".ppk.patch");
+        params.unzipDirectory = new File(rootDir, hash);
+        params.originDirectory = new File(rootDir, originHash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
     private SharedPreferences sp;
 
-    public void switchVersion(String hashName) {
-        if (!new File(rootDir, hashName+"/index.bundlejs").exists()) {
-            throw new Error("Bundle version " + hashName + " not found.");
+    public void switchVersion(String hash) {
+        if (!new File(rootDir, hash+"/index.bundlejs").exists()) {
+            throw new Error("Bundle version " + hash + " not found.");
         }
         String lastVersion = getCurrentVersion();
         SharedPreferences.Editor editor = sp.edit();
-        editor.putString("currentVersion", hashName);
+        editor.putString("currentVersion", hash);
         if (lastVersion != null) {
             editor.putString("lastVersion", lastVersion);
         }

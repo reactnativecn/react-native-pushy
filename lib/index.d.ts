@@ -60,7 +60,7 @@ export function setCustomEndpoints({
 }): void;
 
 interface ProgressData {
-  hashname: string;
+  hash: string;
   received: number;
   total: number;
 }
