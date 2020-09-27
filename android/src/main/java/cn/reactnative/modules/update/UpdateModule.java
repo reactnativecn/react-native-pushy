@@ -3,6 +3,8 @@ package cn.reactnative.modules.update;
 import android.app.Activity;
 import android.app.Application;
 import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
 import android.util.Log;
 
 import com.facebook.react.ReactApplication;
@@ -18,10 +20,13 @@ import com.facebook.react.bridge.JSBundleLoader;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
+
+import static android.support.v4.content.FileProvider.getUriForFile;
 
 /**
  * Created by tdzl2003 on 3/31/16.
@@ -71,9 +76,9 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     public void downloadUpdate(ReadableMap options, final Promise promise){
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
-        updateContext.downloadFile(url, hash, new UpdateContext.DownloadFileListener() {
+        updateContext.downloadFullUpdate(url, hash, new UpdateContext.DownloadFileListener() {
             @Override
-            public void onDownloadCompleted() {
+            public void onDownloadCompleted(DownloadTaskParams params) {
                 promise.resolve(null);
             }
 
@@ -85,12 +90,57 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     }
 
     @ReactMethod
+    public void downloadAndInstallApk(ReadableMap options, final Promise promise){
+        String url = options.getString("url");
+        String hash = options.getString("hash");
+        String target = options.getString("target");
+        updateContext.downloadFile(url, hash, target, new UpdateContext.DownloadFileListener() {
+            @Override
+            public void onDownloadCompleted(DownloadTaskParams params) {
+                installApk(params.targetFile);
+                promise.resolve(null);
+            }
+
+            @Override
+            public void onDownloadFailed(Throwable error) {
+                promise.reject(error);
+            }
+        });
+    }
+
+    // install downloaded apk
+    @ReactMethod
+    public static void installApk(String url) {
+        File toInstall = new File(url);
+        installApk(toInstall);
+    }
+
+    public static void installApk(File toInstall) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            Uri apkUri = getUriForFile(mContext, mContext.getPackageName() + ".pushy.fileprovider", toInstall);
+
+            Intent intent = new Intent(Intent.ACTION_INSTALL_PACKAGE);
+            intent.setData(apkUri);
+            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            mContext.startActivity(intent);
+        } else {
+            Uri apkUri = Uri.fromFile(toInstall);
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            mContext.startActivity(intent);
+        }
+    }
+
+
+    @ReactMethod
     public void downloadPatchFromPackage(ReadableMap options, final Promise promise){
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
         updateContext.downloadPatchFromApk(url, hash, new UpdateContext.DownloadFileListener() {
             @Override
-            public void onDownloadCompleted() {
+            public void onDownloadCompleted(DownloadTaskParams params) {
                 promise.resolve(null);
             }
 
@@ -108,7 +158,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
         String originHash = options.getString("originHash");
         updateContext.downloadPatchFromPpk(url, hash, originHash, new UpdateContext.DownloadFileListener() {
             @Override
-            public void onDownloadCompleted() {
+            public void onDownloadCompleted(DownloadTaskParams params) {
                 promise.resolve(null);
             }
 

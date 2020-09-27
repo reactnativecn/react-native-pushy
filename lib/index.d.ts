@@ -43,6 +43,14 @@ export function switchVersionLater(hash: string): void;
 
 export function markSuccess(): void;
 
+export async function downloadAndInstallApk({
+  url,
+  onDownloadProgress,
+}: {
+  url: string;
+  onDownloadProgress?: (data: ProgressData) => void;
+}): void;
+
 /**
  * @param {string} main - The main api endpoint
  * @param {string[]} [backups] - The back up endpoints.
@@ -55,7 +63,7 @@ export function setCustomEndpoints({
   backupQueryUrl,
 }: {
   main: string;
-  backUps?: string[];
+  backups?: string[];
   backupQueryUrl?: string;
 }): void;
 

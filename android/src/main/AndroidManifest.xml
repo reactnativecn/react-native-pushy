@@ -1,7 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="cn.reactnative.modules.update">
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <application>
         <meta-data android:name="pushy_build_time" android:value="@string/pushy_build_time" />
+        <provider
+            android:name=".PushyFileProvider"
+            android:authorities="${applicationId}.pushy.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+            android:name="android.support.FILE_PROVIDER_PATHS"
+            android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

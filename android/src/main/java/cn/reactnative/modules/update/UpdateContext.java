@@ -46,7 +46,7 @@ public class UpdateContext {
             editor.putString("packageVersion", packageVersion);
             editor.apply();
 
-            this.clearUp();
+            this.cleanUp();
         }
     }
 
@@ -86,18 +86,29 @@ public class UpdateContext {
     }
 
     public interface DownloadFileListener {
-        void onDownloadCompleted();
+        void onDownloadCompleted(DownloadTaskParams params);
         void onDownloadFailed(Throwable error);
     }
 
-    public void downloadFile(String url, String hash, DownloadFileListener listener) {
+    public void downloadFullUpdate(String url, String hash, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_FULL_DOWNLOAD;
+        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FULL;
         params.url = url;
         params.hash = hash;
         params.listener = listener;
-        params.zipFilePath = new File(rootDir, hash + ".ppk");
+        params.targetFile = new File(rootDir, hash + ".ppk");
         params.unzipDirectory = new File(rootDir, hash);
+        new DownloadTask(context).executeOnExecutor(this.executor, params);
+    }
+
+    public void downloadFile(String url, String hash, String fileName, DownloadFileListener listener) {
+        DownloadTaskParams params = new DownloadTaskParams();
+        params.type = DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD;
+        params.url = url;
+        params.hash = hash;
+        params.listener = listener;
+        params.targetFile = new File(rootDir, fileName);
+//        params.unzipDirectory = new File(rootDir, hash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
@@ -107,7 +118,7 @@ public class UpdateContext {
         params.url = url;
         params.hash = hash;
         params.listener = listener;
-        params.zipFilePath = new File(rootDir, hash + ".apk.patch");
+        params.targetFile = new File(rootDir, hash + ".apk.patch");
         params.unzipDirectory = new File(rootDir, hash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
@@ -119,7 +130,7 @@ public class UpdateContext {
         params.hash = hash;
         params.originHash = originHash;
         params.listener = listener;
-        params.zipFilePath = new File(rootDir, originHash + "-" + hash + ".ppk.patch");
+        params.targetFile = new File(rootDir, originHash + "-" + hash + ".ppk.patch");
         params.unzipDirectory = new File(rootDir, hash);
         params.originDirectory = new File(rootDir, originHash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
@@ -174,7 +185,7 @@ public class UpdateContext {
         editor.remove("lastVersion");
         editor.apply();
 
-        this.clearUp();
+        this.cleanUp();
     }
 
     public void clearFirstTime() {
@@ -182,7 +193,7 @@ public class UpdateContext {
         editor.putBoolean("firstTime", false);
         editor.apply();
 
-        this.clearUp();
+        this.cleanUp();
     }
 
     public void clearRollbackMark() {
@@ -190,7 +201,7 @@ public class UpdateContext {
         editor.putBoolean("rolledBack", false);
         editor.apply();
 
-        this.clearUp();
+        this.cleanUp();
     }
 
 
@@ -256,21 +267,12 @@ public class UpdateContext {
         return lastVersion;
     }
 
-    private void clearUp() {
+    private void cleanUp() {
         DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_CLEARUP;
+        params.type = DownloadTaskParams.TASK_TYPE_CLEANUP;
         params.hash = sp.getString("currentVersion", null);
         params.originHash = sp.getString("lastVersion", null);
         params.unzipDirectory = rootDir;
-        params.listener = new DownloadFileListener() {
-            @Override
-            public void onDownloadCompleted() {
-            }
-
-            @Override
-            public void onDownloadFailed(Throwable error) {
-            }
-        };
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 }

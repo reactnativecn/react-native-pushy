@@ -72,7 +72,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
     private void downloadFile(DownloadTaskParams param) throws IOException {
         String url = param.url;
-        File writePath = param.zipFilePath;
+        File writePath = param.targetFile;
         this.hash = param.hash;
         OkHttpClient client = new OkHttpClient();
         Request request = new Request.Builder().url(url)
@@ -243,10 +243,10 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         copyFilesWithBlacklist("", from, to, blackList);
     }
 
-    private void doDownload(DownloadTaskParams param) throws IOException {
+    private void doFullPatch(DownloadTaskParams param) throws IOException {
         downloadFile(param);
 
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
+        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.targetFile)));
         ZipEntry ze;
         String filename;
 
@@ -303,7 +303,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     private void doPatchFromApk(DownloadTaskParams param) throws IOException, JSONException {
         downloadFile(param);
 
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
+        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.targetFile)));
         ZipEntry ze;
         int count;
         String filename;
@@ -379,7 +379,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     private void doPatchFromPpk(DownloadTaskParams param) throws IOException, JSONException {
         downloadFile(param);
 
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.zipFilePath)));
+        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.targetFile)));
         ZipEntry ze;
         int count;
         String filename;
@@ -464,8 +464,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     protected Void doInBackground(DownloadTaskParams... params) {
         try {
             switch (params[0].type) {
-                case DownloadTaskParams.TASK_TYPE_FULL_DOWNLOAD:
-                    doDownload(params[0]);
+                case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
+                    doFullPatch(params[0]);
                     break;
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
                     doPatchFromApk(params[0]);
@@ -473,11 +473,18 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
                     doPatchFromPpk(params[0]);
                     break;
-                case DownloadTaskParams.TASK_TYPE_CLEARUP:
+                case DownloadTaskParams.TASK_TYPE_CLEANUP:
                     doCleanUp(params[0]);
                     break;
+                case DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD:
+                    downloadFile(params[0]);
+                    break;
+                default:
+                    break;
             }
-            params[0].listener.onDownloadCompleted();
+            if (params[0].listener != null) {
+                params[0].listener.onDownloadCompleted(params[0]);
+            }
         } catch (Throwable e) {
             if (UpdateContext.DEBUG) {
                 e.printStackTrace();
