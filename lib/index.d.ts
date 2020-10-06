@@ -5,15 +5,19 @@ export const isFirstTime: boolean;
 export const isRolledBack: boolean;
 
 export interface ExpiredResult {
+  upToDate?: false;
   expired: true;
   downloadUrl: string;
 }
 
 export interface UpTodateResult {
+  expired?: false;
   upToDate: true;
 }
 
 export interface UpdateAvailableResult {
+  expired?: false;
+  upToDate?: false;
   update: true;
   name: string; // version name
   hash: string;
@@ -43,13 +47,13 @@ export function switchVersionLater(hash: string): void;
 
 export function markSuccess(): void;
 
-export async function downloadAndInstallApk({
+export function downloadAndInstallApk({
   url,
   onDownloadProgress,
 }: {
   url: string;
   onDownloadProgress?: (data: ProgressData) => void;
-}): void;
+}): Promise<void>;
 
 /**
  * @param {string} main - The main api endpoint
