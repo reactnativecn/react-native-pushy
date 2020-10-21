@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   Linking,
   Image,
-  NativeModules,
 } from 'react-native';
 
 import {
@@ -163,6 +162,7 @@ export default class App extends Component {
         <TouchableOpacity onPress={this.checkUpdate}>
           <Text style={styles.instructions}>点击这里检查更新</Text>
         </TouchableOpacity>
+        {/* <WebView style={{flex:1}} source={{uri: require('../www/index.html')}}/> */}
       </View>
     );
   }
