@@ -13,7 +13,8 @@
   "dependencies": {
     "react": "16.13.1",
     "react-native": "0.63.3",
-    "react-native-update": "link:../.."
+    "react-native-update": "link:../..",
+    "react-native-webview": "^10.9.2"
   },
   "devDependencies": {
     "@babel/core": "^7.8.4",
