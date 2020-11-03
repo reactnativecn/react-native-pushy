@@ -489,6 +489,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             if (UpdateContext.DEBUG) {
                 e.printStackTrace();
             }
+            Log.e("pushy", "download task failed", e);
             params[0].listener.onDownloadFailed(e);
         }
         return null;
