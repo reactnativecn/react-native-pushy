@@ -84,7 +84,6 @@ RCT_EXPORT_MODULE(RCTPushy);
         }
         else {
             NSString *curVersion = pushyInfo[paramCurrentVersion];
-            NSString *lastVersion = pushyInfo[paramLastVersion];
             
             BOOL isFirstTime = [pushyInfo[paramIsFirstTime] boolValue];
             BOOL isFirstLoadOK = [pushyInfo[paramIsFirstLoadOk] boolValue];
@@ -92,23 +91,7 @@ RCT_EXPORT_MODULE(RCTPushy);
             NSString *loadVersion = curVersion;
             BOOL needRollback = (!ignoreRollback && isFirstTime == NO && isFirstLoadOK == NO) || loadVersion.length<=0;
             if (needRollback) {
-                loadVersion = lastVersion;
-                
-                if (lastVersion.length) {
-                    // roll back to last version
-                    [defaults setObject:@{paramCurrentVersion:lastVersion,
-                                          paramIsFirstTime:@(NO),
-                                          paramIsFirstLoadOk:@(YES),
-                                          paramPackageVersion:curPackageVersion}
-                                 forKey:keyPushyInfo];
-                }
-                else {
-                    // roll back to bundle
-                    [defaults setObject:nil forKey:keyPushyInfo];
-                }
-                [defaults setObject:@(YES) forKey:keyRolledBackMarked];
-                [defaults synchronize];
-                // ...need clear files later
+                loadVersion = [self rollback];
             }
             else if (isFirstTime && !ignoreRollback){
                 // bundleURL may be called many times, ignore rollbacks before process restarted again.
@@ -121,19 +104,44 @@ RCT_EXPORT_MODULE(RCTPushy);
                 [defaults synchronize];
             }
             
-            if (loadVersion.length) {
-                NSString *downloadDir = [RCTPushy downloadDir];
-                
+            NSString *downloadDir = [RCTPushy downloadDir];
+            while (loadVersion.length) {
                 NSString *bundlePath = [[downloadDir stringByAppendingPathComponent:loadVersion] stringByAppendingPathComponent:BUNDLE_FILE_NAME];
                 if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePath isDirectory:NULL]) {
                     NSURL *bundleURL = [NSURL fileURLWithPath:bundlePath];
                     return bundleURL;
+                } else {
+                    RCTLogError(@"RCTPushy -- bundle version %@ not found", loadVersion);
+                    loadVersion = [self rollback];
                 }
             }
         }
     }
     
     return [RCTPushy binaryBundleURL];
+}
+
++ (NSString *) rollback {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    
+    NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
+    NSString *lastVersion = pushyInfo[paramLastVersion];
+    NSString *curPackageVersion = [RCTPushy packageVersion];
+    if (lastVersion.length) {
+        // roll back to last version
+        [defaults setObject:@{paramCurrentVersion:lastVersion,
+                              paramIsFirstTime:@(NO),
+                              paramIsFirstLoadOk:@(YES),
+                              paramPackageVersion:curPackageVersion}
+                     forKey:keyPushyInfo];
+    }
+    else {
+        // roll back to bundle
+        [defaults setObject:nil forKey:keyPushyInfo];
+    }
+    [defaults setObject:@(YES) forKey:keyRolledBackMarked];
+    [defaults synchronize];
+    return lastVersion;
 }
 
 + (BOOL)requiresMainQueueSetup {
