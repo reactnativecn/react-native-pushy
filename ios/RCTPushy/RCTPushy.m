@@ -256,6 +256,9 @@ RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
 RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 {
     NSString *hash = options[@"hash"];
+    if (hash.length <= 0) {
+        hash = options[@"hashName"];
+    }
     if (hash.length) {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         NSString *lastVersion = nil;
@@ -279,6 +282,9 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 {
     NSString *hash = options[@"hash"];
+    if (hash.length <= 0) {
+        hash = options[@"hashName"];
+    }
     if (hash.length) {
         [self setNeedUpdate:options];
         
@@ -335,6 +341,9 @@ RCT_EXPORT_METHOD(markSuccess)
 {
     NSString *updateUrl = [RCTConvert NSString:options[@"updateUrl"]];
     NSString *hash = [RCTConvert NSString:options[@"hash"]];
+    if (hash.length <= 0) {
+        hash = [RCTConvert NSString:options[@"hashName"]];;
+    }
     if (updateUrl.length <= 0 || hash.length <= 0) {
         callback([self errorWithMessage:ERROR_OPTIONS]);
         return;

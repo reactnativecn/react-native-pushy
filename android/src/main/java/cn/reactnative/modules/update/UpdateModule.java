@@ -31,13 +31,14 @@ import static android.support.v4.content.FileProvider.getUriForFile;
 /**
  * Created by tdzl2003 on 3/31/16.
  */
-public class UpdateModule extends ReactContextBaseJavaModule{
+public class UpdateModule extends ReactContextBaseJavaModule {
     UpdateContext updateContext;
     public static ReactApplicationContext mContext;
+
     public UpdateModule(ReactApplicationContext reactContext, UpdateContext updateContext) {
         super(reactContext);
         this.updateContext = updateContext;
-        mContext=reactContext;
+        mContext = reactContext;
     }
 
     public UpdateModule(ReactApplicationContext reactContext) {
@@ -73,7 +74,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     }
 
     @ReactMethod
-    public void downloadUpdate(ReadableMap options, final Promise promise){
+    public void downloadUpdate(ReadableMap options, final Promise promise) {
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
         updateContext.downloadFullUpdate(url, hash, new UpdateContext.DownloadFileListener() {
@@ -90,7 +91,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     }
 
     @ReactMethod
-    public void downloadAndInstallApk(ReadableMap options, final Promise promise){
+    public void downloadAndInstallApk(ReadableMap options, final Promise promise) {
         String url = options.getString("url");
         String hash = options.getString("hash");
         String target = options.getString("target");
@@ -136,9 +137,12 @@ public class UpdateModule extends ReactContextBaseJavaModule{
 
 
     @ReactMethod
-    public void downloadPatchFromPackage(ReadableMap options, final Promise promise){
+    public void downloadPatchFromPackage(ReadableMap options, final Promise promise) {
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
+        if (hash == null) {
+            hash = options.getString("hashName");
+        }
         updateContext.downloadPatchFromApk(url, hash, new UpdateContext.DownloadFileListener() {
             @Override
             public void onDownloadCompleted(DownloadTaskParams params) {
@@ -153,10 +157,16 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     }
 
     @ReactMethod
-    public void downloadPatchFromPpk(ReadableMap options, final Promise promise){
+    public void downloadPatchFromPpk(ReadableMap options, final Promise promise) {
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
+        if (hash == null) {
+            hash = options.getString("hashName");
+        }
         String originHash = options.getString("originHash");
+        if (originHash == null) {
+            originHash = options.getString(("originHashName"));
+        }
         updateContext.downloadPatchFromPpk(url, hash, originHash, new UpdateContext.DownloadFileListener() {
             @Override
             public void onDownloadCompleted(DownloadTaskParams params) {
@@ -172,7 +182,8 @@ public class UpdateModule extends ReactContextBaseJavaModule{
 
     @ReactMethod
     public void reloadUpdate(ReadableMap options) {
-        final String hash = options.getString("hash");
+        final String hash = options.getString("hash") == null ?
+                options.getString("hashName") : options.getString("hash");
 
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
@@ -200,7 +211,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
 
                     try {
                         instanceManager.recreateReactContextInBackground();
-                    } catch(Throwable err) {
+                    } catch (Throwable err) {
                         activity.recreate();
                     }
 
@@ -213,7 +224,8 @@ public class UpdateModule extends ReactContextBaseJavaModule{
 
     @ReactMethod
     public void setNeedUpdate(ReadableMap options) {
-        final String hash = options.getString("hash");
+        final String hash = options.getString("hash") == null ?
+                options.getString("hashName") : options.getString("hash");
 
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
@@ -260,7 +272,7 @@ public class UpdateModule extends ReactContextBaseJavaModule{
     }
 
     /* 发送事件*/
-    public static void sendEvent(String eventName,  WritableMap params) {
+    public static void sendEvent(String eventName, WritableMap params) {
         ((ReactContext) mContext).getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName,
                 params);
     }
