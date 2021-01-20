@@ -510,21 +510,20 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             if (UpdateContext.DEBUG) {
                 e.printStackTrace();
             }
-            File targetToClean = params[0].targetFile;
             switch (taskType) {
                 case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
                     try {
-                        removeDirectory(targetToClean);
+                        removeDirectory(params[0].unzipDirectory);
                     } catch (IOException ioException) {
                         ioException.printStackTrace();
                     }
                     break;
                 case DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD:
-                    if (targetToClean.exists()) {
-                        targetToClean.delete();
-                    }
+//                    if (targetToClean.exists()) {
+                    params[0].targetFile.delete();
+//                    }
                     break;
                 default:
                     break;
