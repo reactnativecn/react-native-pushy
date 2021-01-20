@@ -277,12 +277,12 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         }
     }
 
-    private void copyFromResource(HashMap<String, ArrayList<File> > map) throws IOException {
+    private void copyFromResource(HashMap<String, ArrayList<File> > resToCopy) throws IOException {
         ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(context.getPackageResourcePath())));
         ZipEntry ze;
         while ((ze = zis.getNextEntry()) != null) {
             String fn = ze.getName();
-            ArrayList<File> targets = map.get(fn);
+            ArrayList<File> targets = resToCopy.get(fn);
             if (targets != null) {
                 File lastTarget = null;
                 for (File target: targets) {
@@ -462,8 +462,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
     @Override
     protected Void doInBackground(DownloadTaskParams... params) {
+        int taskType = params[0].type;
         try {
-            switch (params[0].type) {
+            switch (taskType) {
                 case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
                     doFullPatch(params[0]);
                     break;
@@ -488,6 +489,25 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         } catch (Throwable e) {
             if (UpdateContext.DEBUG) {
                 e.printStackTrace();
+            }
+            File targetToClean = params[0].targetFile;
+            switch (taskType) {
+                case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
+                case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
+                case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
+                    try {
+                        removeDirectory(targetToClean);
+                    } catch (IOException ioException) {
+                        ioException.printStackTrace();
+                    }
+                    break;
+                case DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD:
+                    if (targetToClean.exists()) {
+                        targetToClean.delete();
+                    }
+                    break;
+                default:
+                    break;
             }
             Log.e("pushy", "download task failed", e);
             params[0].listener.onDownloadFailed(e);
