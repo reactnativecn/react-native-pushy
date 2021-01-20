@@ -307,6 +307,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         ZipEntry ze;
         int count;
         String filename;
+        boolean foundDiff = false;
+        boolean foundBundlePatch = false;
 
         removeDirectory(param.unzipDirectory);
         param.unzipDirectory.mkdirs();
@@ -318,6 +320,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             String fn = ze.getName();
 
             if (fn.equals("__diff.json")) {
+                foundDiff = true;
                 // copy files from assets
                 byte[] bytes = readBytes(zis);
                 String json = new String(bytes, "UTF-8");
@@ -344,6 +347,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 continue;
             }
             if (fn.equals("index.bundlejs.patch")) {
+                foundBundlePatch = true;
                 // do bsdiff patch
                 byte[] patched = bsdiffPatch(readOriginBundle(), readBytes(zis));
 
@@ -367,6 +371,12 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         }
 
         zis.close();
+        if (!foundDiff) {
+            throw new Error("diff.json not found");
+        }
+        if (!foundBundlePatch) {
+            throw new Error("bundle patch not found");
+        }
 
         copyFromResource(copyList);
 
@@ -383,6 +393,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         ZipEntry ze;
         int count;
         String filename;
+        boolean foundDiff = false;
+        boolean foundBundlePatch = false;
 
         removeDirectory(param.unzipDirectory);
         param.unzipDirectory.mkdirs();
@@ -392,6 +404,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             String fn = ze.getName();
 
             if (fn.equals("__diff.json")) {
+                foundDiff = true;
                 // copy files from assets
                 byte[] bytes = readBytes(zis);
                 String json = new String(bytes, "UTF-8");
@@ -412,6 +425,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 continue;
             }
             if (fn.equals("index.bundlejs.patch")) {
+                foundBundlePatch = true;
                 // do bsdiff patch
                 byte[] patched = bsdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
 
@@ -436,6 +450,12 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
         zis.close();
 
+        if (!foundDiff) {
+            throw new Error("diff.json not found");
+        }
+        if (!foundBundlePatch) {
+            throw new Error("bundle patch not found");
+        }
         if (UpdateContext.DEBUG) {
             Log.d("RNUpdate", "Unzip finished");
         }
