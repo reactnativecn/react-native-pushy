@@ -529,7 +529,10 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                     break;
             }
             Log.e("pushy", "download task failed", e);
-            params[0].listener.onDownloadFailed(e);
+
+            if (params[0].listener != null) {
+                params[0].listener.onDownloadFailed(e);
+            }
         }
         return null;
     }
