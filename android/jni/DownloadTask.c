@@ -109,3 +109,10 @@ JNIEXPORT jbyteArray JNICALL Java_cn_reactnative_modules_update_DownloadTask_bsd
     (*env)->ReleaseByteArrayElements(env, patch, patchPtr, JNI_ABORT);
     return ret;
 }
+
+
+JNIEXPORT jbyteArray JNICALL Java_cn_reactnative_modules_update_DownloadTask_hdiffPatch
+        (JNIEnv *env, jobject self, jbyteArray origin, jbyteArray patch){
+    //todo: 
+    return 0;
+}

@@ -134,9 +134,10 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
     }
 
-    byte[] buffer = new byte[1024];
+    byte[] buffer = new byte[1024*4];
 
     private static native byte[] bsdiffPatch(byte[] origin, byte[] patch);
+    private static native byte[] hdiffPatch(byte[] origin, byte[] patch);
 
     private void unzipToFile(ZipInputStream zis, File fmd) throws IOException {
         int count;
