@@ -6,32 +6,14 @@
 
 //#define _CompressPlugin_zlib
 //#define _CompressPlugin_bz2
-//#define _CompressPlugin_lzma
+#define _CompressPlugin_lzma
 #define _CompressPlugin_lzma2
 #define _IsNeedIncludeDefaultCompressHead 0
+#include "lzma/C/LzmaDec.h"
 #include "lzma/C/Lzma2Dec.h"
 #include "HDiffPatch/decompress_plugin_demo.h"
 
 #define kMaxLoadMemOldSize ((1<<20)*8)
-
-enum {
-    kHPatch_ok                  = 0,
-    kHPatch_error_malloc        =-1,
-    kHPatch_error_info          =-2,
-    kHPatch_error_compressType  =-3,
-    kHPatch_error_patch         =-4,
-    kHPatch_error_old_fopen     =-5,
-    kHPatch_error_old_fread     =-6,
-    kHPatch_error_old_fclose    =-7,
-    kHPatch_error_pat_fopen     =-8,
-    kHPatch_error_pat_fread     =-9,
-    kHPatch_error_pat_fclose    =-10,
-    kHPatch_error_new_fopen     =-11,
-    kHPatch_error_new_fwrite    =-12,
-    kHPatch_error_new_fclose    =-13,
-    kHPatch_error_old_size      =-14,
-    kHPatch_error_new_size      =-15,
-};
 
 #define  _check(v,errorType) do{ \
     if (!(v)){ if (result==kHPatch_ok) result=errorType; if (!_isInClear){ goto _clear; }; } }while(0)

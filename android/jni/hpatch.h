@@ -7,6 +7,26 @@
 # include <stdint.h> //for uint8_t
 #include "HDiffPatch/libHDiffPatch/HPatch/patch_types.h" //for hpatch_singleCompressedDiffInfo
 
+//result
+enum {
+    kHPatch_ok                  = 0,
+    kHPatch_error_malloc        =-1,
+    kHPatch_error_info          =-2,
+    kHPatch_error_compressType  =-3,
+    kHPatch_error_patch         =-4,
+    kHPatch_error_old_fopen     =-5,
+    kHPatch_error_old_fread     =-6,
+    kHPatch_error_old_fclose    =-7,
+    kHPatch_error_pat_fopen     =-8,
+    kHPatch_error_pat_fread     =-9,
+    kHPatch_error_pat_fclose    =-10,
+    kHPatch_error_new_fopen     =-11,
+    kHPatch_error_new_fwrite    =-12,
+    kHPatch_error_new_fclose    =-13,
+    kHPatch_error_old_size      =-14,
+    kHPatch_error_new_size      =-15,
+};
+
 int hpatch_getInfo_by_mem(hpatch_singleCompressedDiffInfo* out_patinfo,
                           const uint8_t* pat,size_t patsize);
 
