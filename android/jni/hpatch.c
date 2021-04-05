@@ -4,18 +4,31 @@
 #include "HDiffPatch/libHDiffPatch/HPatch/patch.h"
 #include "HDiffPatch/file_for_patch.h"
 
+//#define _CompressPlugin_zlib
+//#define _CompressPlugin_bz2
+//#define _CompressPlugin_lzma
+#define _CompressPlugin_lzma2
+#include "HDiffPatch/decompress_plugin_demo.h"
+
+#define kMaxLoadMemOldSize ((1<<20)*8)
+
 enum {
     kHPatch_ok                  = 0,
-    kHPatch_error_info          =-1,
-    kHPatch_error_old_fopen     =-2,
-    kHPatch_error_old_fread     =-3,
-    kHPatch_error_old_fclose    =-4,
-    kHPatch_error_pat_fopen     =-5,
-    kHPatch_error_pat_fread     =-6,
-    kHPatch_error_pat_fclose    =-7,
-    kHPatch_error_new_fopen     =-8,
-    kHPatch_error_new_fwrite    =-9,
-    kHPatch_error_new_fclose    =-10,
+    kHPatch_error_malloc        =-1,
+    kHPatch_error_info          =-2,
+    kHPatch_error_compressType  =-3,
+    kHPatch_error_patch         =-4,
+    kHPatch_error_old_fopen     =-5,
+    kHPatch_error_old_fread     =-6,
+    kHPatch_error_old_fclose    =-7,
+    kHPatch_error_pat_fopen     =-8,
+    kHPatch_error_pat_fread     =-9,
+    kHPatch_error_pat_fclose    =-10,
+    kHPatch_error_new_fopen     =-11,
+    kHPatch_error_new_fwrite    =-12,
+    kHPatch_error_new_fclose    =-13,
+    kHPatch_error_old_size      =-14,
+    kHPatch_error_new_size      =-15,
 };
 
 #define  _check(v,errorType) do{ \
@@ -30,11 +43,71 @@ int hpatch_getInfo_by_mem(struct hpatch_singleCompressedDiffInfo* out_patinfo,
     return kHPatch_ok; //ok              
 }
 
-
-static int hpatch_by_stream(const hpatch_TStreamInput* old,hpatch_BOOL isLoadOldToMem,const hpatch_TStreamInput* pat,
+static hpatch_TDecompress* getDecompressPlugin(const char* compressType){
+#ifdef  _CompressPlugin_zlib
+    if (zlibDecompressPlugin.is_can_open(compressType))
+        return &zlibDecompressPlugin;
+#endif
+#ifdef  _CompressPlugin_bz2
+    if (bz2DecompressPlugin.is_can_open(compressType))
+        return &bz2DecompressPlugin;
+#endif
+#ifdef  _CompressPlugin_lzma
+    if (lzmaDecompressPlugin.is_can_open(compressType))
+        return &lzmaDecompressPlugin;
+#endif
+#ifdef  _CompressPlugin_lzma2
+    if (lzma2DecompressPlugin.is_can_open(compressType))
+        return &lzma2DecompressPlugin;
+#endif
+    return 0;
+}
+static int hpatch_by_stream(const hpatch_TStreamInput* old,hpatch_BOOL isLoadOldAllToMem,const hpatch_TStreamInput* pat,
                             hpatch_TStreamOutput* out_new,const hpatch_singleCompressedDiffInfo* patInfo){
-//todo:
-    return -1;
+    int     result=kHPatch_ok;
+    int     _isInClear=hpatch_FALSE;
+    hpatch_TDecompress* decompressPlugin=0;
+    uint8_t* temp_cache=0;
+    size_t temp_cache_size;
+    hpatch_singleCompressedDiffInfo _patinfo;
+    hpatch_TStreamInput _old;
+    {// info
+        if (!patInfo){
+            _check(getSingleCompressedDiffInfo(&_patinfo,pat,0),kHPatch_error_info);
+            patInfo=&_patinfo;
+        }
+        _check(old->streamSize==patInfo->oldDataSize,kHPatch_error_old_size);
+        _check(out_new->streamSize>=patInfo->newDataSize,kHPatch_error_new_size);
+        out_new->streamSize=patInfo->newDataSize;
+        if (strlen(patInfo->compressType)>0){
+            decompressPlugin=getDecompressPlugin(patInfo->compressType);
+            _check(decompressPlugin,kHPatch_error_compressType);
+        }
+    }
+    {// mem 
+        size_t mem_size;
+        size_t oldSize=(size_t)old->streamSize;
+        isLoadOldAllToMem=isLoadOldAllToMem&&(old->streamSize<=kMaxLoadMemOldSize);
+        temp_cache_size=patInfo->stepMemSize+hpatch_kFileIOBufBetterSize*3;
+        mem_size=temp_cache_size+(isLoadOldAllToMem?oldSize:0);
+        temp_cache=malloc(mem_size);
+        _check(temp_cache,kHPatch_error_malloc);
+        if (isLoadOldAllToMem){//load old to mem 
+            uint8_t* oldMem=temp_cache+temp_cache_size;
+            _check(old->read(old,0,oldMem,oldMem+oldSize),kHPatch_error_old_fread);
+            mem_as_hStreamInput(&_old,oldMem,oldMem+oldSize);
+            old=&_old;
+        }
+    }
+
+    _check(patch_single_compressed_diff(&out_new,old,pat,patInfo->diffDataPos,
+               patInfo->uncompressedSize,decompressPlugin,patInfo->coverCount,
+               patInfo->stepMemSize,temp_cache,temp_cache+temp_cache_size),kHPatch_error_patch);
+
+_clear:
+    _isInClear=hpatch_TRUE;
+    if (temp_cache){ free(temp_cache); temp_cache=0; }
+    return result;
 }
 
 int hpatch_by_mem(const uint8_t* old,size_t oldsize,uint8_t* newBuf,size_t newsize,
