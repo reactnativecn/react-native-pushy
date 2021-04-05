@@ -131,7 +131,7 @@ JNIEXPORT jbyteArray JNICALL Java_cn_reactnative_modules_update_DownloadTask_hdi
     hpatch_singleCompressedDiffInfo patInfo;
 
     _check(((originLength==0)||originPtr) && patchPtr && (patchLength>0),"Corrupt patch");
-    _check(kHPatch_ok!=hpatch_getInfo_by_mem(&patInfo,(const uint8_t*)patchPtr,patchLength),"Error info in hpatch");
+    _check(kHPatch_ok==hpatch_getInfo_by_mem(&patInfo,(const uint8_t*)patchPtr,patchLength),"Error info in hpatch");
     _check(originLength==patInfo.oldDataSize,"Error oldDataSize in hpatch");
     newsize=(size_t)patInfo.newDataSize;
     if (sizeof(size_t)!=sizeof(hpatch_StreamPos_t))
@@ -144,7 +144,7 @@ JNIEXPORT jbyteArray JNICALL Java_cn_reactnative_modules_update_DownloadTask_hdi
         _check(outPtr,"Corrupt JNIEnv::GetByteArrayElements");
     }
 
-    _check(kHPatch_ok!=hpatch_by_mem((const uint8_t*)originPtr,originLength,(uint8_t*)outPtr,newsize,
+    _check(kHPatch_ok==hpatch_by_mem((const uint8_t*)originPtr,originLength,(uint8_t*)outPtr,newsize,
                                      (const uint8_t*)patchPtr,patchLength,&patInfo),"hpacth");
 
 _clear:

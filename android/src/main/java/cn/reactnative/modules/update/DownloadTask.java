@@ -498,11 +498,11 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                     break;
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
                 case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_APK:
-                    doPatchFromApk(params[0],type);
+                    doPatchFromApk(params[0],taskType);
                     break;
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
                 case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_PPK:
-                    doPatchFromPpk(params[0],type);
+                    doPatchFromPpk(params[0],taskType);
                     break;
                 case DownloadTaskParams.TASK_TYPE_CLEANUP:
                     doCleanUp(params[0]);

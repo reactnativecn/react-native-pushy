@@ -92,15 +92,15 @@ public class UpdateContext {
 
     private String zipExtension(int patchType){
         switch (patchType) {
-            case TASK_TYPE_PATCH_FULL:
+            case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
                 return ".ppk";
-            case TASK_TYPE_PATCH_FROM_APK:
+            case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
                 return ".apk.patch";
-            case TASK_TYPE_PATCH_FROM_PPK:
+            case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
                 return ".ppk.patch";
-            case TASK_TYPE_HPATCH_FROM_APK:
+            case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_APK:
                 return ".apk.hpatch";
-            case TASK_TYPE_HPATCH_FROM_PPK:
+            case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_PPK:
                 return ".ppk.hpatch";
             default:
                 return "";//unknown type
