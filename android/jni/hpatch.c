@@ -8,6 +8,8 @@
 //#define _CompressPlugin_bz2
 //#define _CompressPlugin_lzma
 #define _CompressPlugin_lzma2
+#define _IsNeedIncludeDefaultCompressHead 0
+#include "lzma/C/Lzma2Dec.h"
 #include "HDiffPatch/decompress_plugin_demo.h"
 
 #define kMaxLoadMemOldSize ((1<<20)*8)
@@ -34,7 +36,7 @@ enum {
 #define  _check(v,errorType) do{ \
     if (!(v)){ if (result==kHPatch_ok) result=errorType; if (!_isInClear){ goto _clear; }; } }while(0)
 
-int hpatch_getInfo_by_mem(struct hpatch_singleCompressedDiffInfo* out_patinfo,
+int hpatch_getInfo_by_mem(hpatch_singleCompressedDiffInfo* out_patinfo,
                           const uint8_t* pat,size_t patsize){
     hpatch_TStreamInput patStream;
     mem_as_hStreamInput(&patStream,pat,pat+patsize);
@@ -100,7 +102,7 @@ static int hpatch_by_stream(const hpatch_TStreamInput* old,hpatch_BOOL isLoadOld
         }
     }
 
-    _check(patch_single_compressed_diff(&out_new,old,pat,patInfo->diffDataPos,
+    _check(patch_single_compressed_diff(out_new,old,pat,patInfo->diffDataPos,
                patInfo->uncompressedSize,decompressPlugin,patInfo->coverCount,
                patInfo->stepMemSize,temp_cache,temp_cache+temp_cache_size),kHPatch_error_patch);
 
@@ -111,7 +113,7 @@ _clear:
 }
 
 int hpatch_by_mem(const uint8_t* old,size_t oldsize,uint8_t* newBuf,size_t newsize,
-                  const uint8_t* pat,size_t patsize,const struct hpatch_singleCompressedDiffInfo* patInfo){      
+                  const uint8_t* pat,size_t patsize,const hpatch_singleCompressedDiffInfo* patInfo){      
     hpatch_TStreamInput oldStream;
     hpatch_TStreamInput patStream;
     hpatch_TStreamOutput newStream;
