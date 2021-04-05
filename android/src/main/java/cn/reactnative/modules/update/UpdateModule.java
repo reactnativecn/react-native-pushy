@@ -135,15 +135,36 @@ public class UpdateModule extends ReactContextBaseJavaModule {
         }
     }
 
-
-    @ReactMethod
-    public void downloadPatchFromPackage(ReadableMap options, final Promise promise) {
+    private void _downloadPatchFromPackage(ReadableMap options, final Promise promise,int apkPatchType) {
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
         if (hash == null) {
             hash = options.getString("hashName");
         }
-        updateContext.downloadPatchFromApk(url, hash, new UpdateContext.DownloadFileListener() {
+        updateContext.downloadPatchFromApk(url,hash,apkPatchType,new UpdateContext.DownloadFileListener() {
+            @Override
+            public void onDownloadCompleted(DownloadTaskParams params) {
+                promise.resolve(null);
+            }
+
+            @Override
+            public void onDownloadFailed(Throwable error) {
+                promise.reject(error);
+            }
+        });
+    }
+    
+    private void _downloadPatchFromPpk(ReadableMap options, final Promise promise,int ppkPatchType) {
+        String url = options.getString("updateUrl");
+        String hash = options.getString("hash");
+        if (hash == null) {
+            hash = options.getString("hashName");
+        }
+        String originHash = options.getString("originHash");
+        if (originHash == null) {
+            originHash = options.getString(("originHashName"));
+        }
+        updateContext.downloadPatchFromPpk(url,hash,originHash,ppkPatchType,new UpdateContext.DownloadFileListener() {
             @Override
             public void onDownloadCompleted(DownloadTaskParams params) {
                 promise.resolve(null);
@@ -157,27 +178,23 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void downloadPatchFromPpk(ReadableMap options, final Promise promise) {
-        String url = options.getString("updateUrl");
-        String hash = options.getString("hash");
-        if (hash == null) {
-            hash = options.getString("hashName");
-        }
-        String originHash = options.getString("originHash");
-        if (originHash == null) {
-            originHash = options.getString(("originHashName"));
-        }
-        updateContext.downloadPatchFromPpk(url, hash, originHash, new UpdateContext.DownloadFileListener() {
-            @Override
-            public void onDownloadCompleted(DownloadTaskParams params) {
-                promise.resolve(null);
-            }
+    public void downloadPatchFromPackage(ReadableMap options, final Promise promise) {
+        _downloadPatchFromPackage(options,promise,DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK);
+    }
+    
+    @ReactMethod
+    public void downloadHPatchFromPackage(ReadableMap options, final Promise promise) {
+        _downloadPatchFromPackage(options,promise,DownloadTaskParams.TASK_TYPE_HPATCH_FROM_APK);
+    }
 
-            @Override
-            public void onDownloadFailed(Throwable error) {
-                promise.reject(error);
-            }
-        });
+    @ReactMethod
+    public void downloadPatchFromPpk(ReadableMap options, final Promise promise) {
+        _downloadPatchFromPpk(options,promise,DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK);
+    }
+
+    @ReactMethod
+    public void downloadHPatchFromPpk(ReadableMap options, final Promise promise) {
+        _downloadPatchFromPpk(options,promise,DownloadTaskParams.TASK_TYPE_HPATCH_FROM_PPK);
     }
 
     @ReactMethod

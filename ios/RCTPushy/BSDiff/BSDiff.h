@@ -13,4 +13,9 @@
 + (BOOL)bsdiffPatch:(NSString *)path
              origin:(NSString *)origin
       toDestination:(NSString *)destination;
+
++ (BOOL)hdiffPatch:(NSString *)path
+            origin:(NSString *)origin
+     toDestination:(NSString *)destination;
+
 @end

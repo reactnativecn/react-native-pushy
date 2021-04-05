@@ -88,6 +88,19 @@
     });
 }
 
+- (void)hdiffFileAtPath:(NSString *)path
+             fromOrigin:(NSString *)origin
+         toDestination:(NSString *)destination
+     completionHandler:(void (^)(BOOL success))completionHandler
+{
+    dispatch_async(_opQueue, ^{
+        BOOL success = [BSDiff hdiffPatch:path origin:origin toDestination:destination];
+        if (completionHandler) {
+            completionHandler(success);
+        }
+    });
+}
+
 - (void)copyFiles:(NSDictionary *)filesDic
           fromDir:(NSString *)fromDir
             toDir:(NSString *)toDir
