@@ -9,6 +9,7 @@
 #import "RCTPushyManager.h"
 #import "ZipArchive.h"
 #import "BSDiff.h"
+#import "HDiffPatch.h"
 #import "bspatch.h"
 
 @implementation RCTPushyManager {
@@ -94,7 +95,7 @@
      completionHandler:(void (^)(BOOL success))completionHandler
 {
     dispatch_async(_opQueue, ^{
-        BOOL success = [BSDiff hdiffPatch:path origin:origin toDestination:destination];
+        BOOL success = [HDiffPatch hdiffPatch:path origin:origin toDestination:destination];
         if (completionHandler) {
             completionHandler(success);
         }

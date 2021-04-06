@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		249F2F50261C577300A1E60E /* HDiffPatch.m in Sources */ = {isa = PBXBuildFile; fileRef = 249F2F4E261C577300A1E60E /* HDiffPatch.m */; };
+		249F2F55261C584900A1E60E /* hpatch.c in Sources */ = {isa = PBXBuildFile; fileRef = 249F2F54261C584900A1E60E /* hpatch.c */; };
+		249F2F59261C586900A1E60E /* file_for_patch.c in Sources */ = {isa = PBXBuildFile; fileRef = 249F2F58261C586900A1E60E /* file_for_patch.c */; };
+		249F2F5E261C589D00A1E60E /* patch.c in Sources */ = {isa = PBXBuildFile; fileRef = 249F2F5C261C589D00A1E60E /* patch.c */; };
+		249F2F64261C58C700A1E60E /* Lzma2Dec.c in Sources */ = {isa = PBXBuildFile; fileRef = 249F2F60261C58C700A1E60E /* Lzma2Dec.c */; };
+		249F2F65261C58C700A1E60E /* LzmaDec.c in Sources */ = {isa = PBXBuildFile; fileRef = 249F2F62261C58C700A1E60E /* LzmaDec.c */; };
 		91C5F0031C76ECA90037E727 /* RCTPushy.h in CopyFiles */ = {isa = PBXBuildFile; fileRef = 91C5F0021C76ECA90037E727 /* RCTPushy.h */; };
 		91C5F0051C76ECA90037E727 /* RCTPushy.m in Sources */ = {isa = PBXBuildFile; fileRef = 91C5F0041C76ECA90037E727 /* RCTPushy.m */; };
 		9F1BCB1D1CAE5937000EF2CB /* RCTPushyManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 9F1BCB1C1CAE5937000EF2CB /* RCTPushyManager.m */; };
@@ -43,6 +49,19 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		249F2F4E261C577300A1E60E /* HDiffPatch.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = HDiffPatch.m; sourceTree = "<group>"; };
+		249F2F4F261C577300A1E60E /* HDiffPatch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = HDiffPatch.h; sourceTree = "<group>"; };
+		249F2F53261C584900A1E60E /* hpatch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = hpatch.h; path = ../../../android/jni/hpatch.h; sourceTree = "<group>"; };
+		249F2F54261C584900A1E60E /* hpatch.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = hpatch.c; path = ../../../android/jni/hpatch.c; sourceTree = "<group>"; };
+		249F2F57261C586900A1E60E /* file_for_patch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = file_for_patch.h; path = ../../../android/jni/HDiffPatch/file_for_patch.h; sourceTree = "<group>"; };
+		249F2F58261C586900A1E60E /* file_for_patch.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = file_for_patch.c; path = ../../../android/jni/HDiffPatch/file_for_patch.c; sourceTree = "<group>"; };
+		249F2F5B261C589C00A1E60E /* patch_types.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = patch_types.h; path = ../../../android/jni/HDiffPatch/libHDiffPatch/HPatch/patch_types.h; sourceTree = "<group>"; };
+		249F2F5C261C589D00A1E60E /* patch.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = patch.c; path = ../../../android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c; sourceTree = "<group>"; };
+		249F2F5D261C589D00A1E60E /* patch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = patch.h; path = ../../../android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.h; sourceTree = "<group>"; };
+		249F2F60261C58C700A1E60E /* Lzma2Dec.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = Lzma2Dec.c; path = ../../../android/jni/lzma/C/Lzma2Dec.c; sourceTree = "<group>"; };
+		249F2F61261C58C700A1E60E /* Lzma2Dec.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = Lzma2Dec.h; path = ../../../android/jni/lzma/C/Lzma2Dec.h; sourceTree = "<group>"; };
+		249F2F62261C58C700A1E60E /* LzmaDec.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; name = LzmaDec.c; path = ../../../android/jni/lzma/C/LzmaDec.c; sourceTree = "<group>"; };
+		249F2F63261C58C700A1E60E /* LzmaDec.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = LzmaDec.h; path = ../../../android/jni/lzma/C/LzmaDec.h; sourceTree = "<group>"; };
 		91C5EFFF1C76ECA90037E727 /* libRCTPushy.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libRCTPushy.a; sourceTree = BUILT_PRODUCTS_DIR; };
 		91C5F0021C76ECA90037E727 /* RCTPushy.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = RCTPushy.h; sourceTree = "<group>"; };
 		91C5F0041C76ECA90037E727 /* RCTPushy.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = RCTPushy.m; sourceTree = "<group>"; };
@@ -102,6 +121,34 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		249F2F4D261C56E100A1E60E /* HDiffPatch */ = {
+			isa = PBXGroup;
+			children = (
+				249F2F52261C581200A1E60E /* hpatch */,
+				249F2F4F261C577300A1E60E /* HDiffPatch.h */,
+				249F2F4E261C577300A1E60E /* HDiffPatch.m */,
+			);
+			path = HDiffPatch;
+			sourceTree = "<group>";
+		};
+		249F2F52261C581200A1E60E /* hpatch */ = {
+			isa = PBXGroup;
+			children = (
+				249F2F60261C58C700A1E60E /* Lzma2Dec.c */,
+				249F2F61261C58C700A1E60E /* Lzma2Dec.h */,
+				249F2F62261C58C700A1E60E /* LzmaDec.c */,
+				249F2F63261C58C700A1E60E /* LzmaDec.h */,
+				249F2F5B261C589C00A1E60E /* patch_types.h */,
+				249F2F5C261C589D00A1E60E /* patch.c */,
+				249F2F5D261C589D00A1E60E /* patch.h */,
+				249F2F58261C586900A1E60E /* file_for_patch.c */,
+				249F2F57261C586900A1E60E /* file_for_patch.h */,
+				249F2F54261C584900A1E60E /* hpatch.c */,
+				249F2F53261C584900A1E60E /* hpatch.h */,
+			);
+			name = hpatch;
+			sourceTree = "<group>";
+		};
 		91C5EFF61C76ECA90037E727 = {
 			isa = PBXGroup;
 			children = (
@@ -121,6 +168,7 @@
 		91C5F0011C76ECA90037E727 /* RCTPushy */ = {
 			isa = PBXGroup;
 			children = (
+				249F2F4D261C56E100A1E60E /* HDiffPatch */,
 				9F1BCB381CAF6B3E000EF2CB /* BSDiff */,
 				9F394D571C7C25DC00C794C0 /* SSZipArchive */,
 				91C5F0021C76ECA90037E727 /* RCTPushy.h */,
@@ -272,19 +320,25 @@
 				9F394D871C7C25DC00C794C0 /* mztools.c in Sources */,
 				9F394D821C7C25DC00C794C0 /* hmac.c in Sources */,
 				9F394D881C7C25DC00C794C0 /* unzip.c in Sources */,
+				249F2F65261C58C700A1E60E /* LzmaDec.c in Sources */,
 				9F1BCB1D1CAE5937000EF2CB /* RCTPushyManager.m in Sources */,
+				249F2F5E261C589D00A1E60E /* patch.c in Sources */,
 				9F1BCB4F1CAF6B68000EF2CB /* BSDiff.m in Sources */,
 				9F394D7E1C7C25DC00C794C0 /* aeskey.c in Sources */,
 				9F394D7F1C7C25DC00C794C0 /* aestab.c in Sources */,
 				9F394D7D1C7C25DC00C794C0 /* aescrypt.c in Sources */,
 				9F394D801C7C25DC00C794C0 /* entropy.c in Sources */,
 				9F292F7D1C7C44290095945D /* RCTPushyDownloader.m in Sources */,
+				249F2F64261C58C700A1E60E /* Lzma2Dec.c in Sources */,
+				249F2F55261C584900A1E60E /* hpatch.c in Sources */,
 				9F394D831C7C25DC00C794C0 /* prng.c in Sources */,
 				9F394D861C7C25DC00C794C0 /* ioapi.c in Sources */,
 				9F1BCB461CAF6B3E000EF2CB /* bspatch.c in Sources */,
 				9F394D8A1C7C25DC00C794C0 /* SSZipArchive.m in Sources */,
+				249F2F50261C577300A1E60E /* HDiffPatch.m in Sources */,
 				9F394D891C7C25DC00C794C0 /* zip.c in Sources */,
 				9F394D841C7C25DC00C794C0 /* pwd2key.c in Sources */,
+				249F2F59261C586900A1E60E /* file_for_patch.c in Sources */,
 				91C5F0051C76ECA90037E727 /* RCTPushy.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

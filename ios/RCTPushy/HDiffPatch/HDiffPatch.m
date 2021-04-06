@@ -2,18 +2,17 @@
 //  BSDiff.m
 //  RCTPushy
 //
-//  Created by lvbingru on 16/4/2.
-//  Copyright © 2016年 erica. All rights reserved.
+//  Created by HouSisong, All rights reserved.
 //
 
-#import "BSDiff.h"
-#include "bspatch.h"
+#import "HDiffPatch.h"
+#include "../../../android/jni/hpatch.h"
 
-@implementation BSDiff
+@implementation HDiffPatch
 
-+ (BOOL)bsdiffPatch:(NSString *)patch
++ (BOOL)hdiffPatch:(NSString *)patch
             origin:(NSString *)origin
-      toDestination:(NSString *)destination
+     toDestination:(NSString *)destination
 {
     if (![[NSFileManager defaultManager] fileExistsAtPath:patch]) {
         return NO;
@@ -26,7 +25,7 @@
         [[NSFileManager defaultManager] removeItemAtPath:destination error:nil];
     }
     
-    int err = beginPatch([origin UTF8String], [destination UTF8String], [patch UTF8String]);
+    int err = hpatch_by_file([origin UTF8String], [destination UTF8String], [patch UTF8String]);
     if (err) {
         return NO;
     }
