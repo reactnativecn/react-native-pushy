@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   Linking,
   Image,
+  NativeModules,
 } from 'react-native';
 
 import {
@@ -21,11 +22,11 @@ import {
   switchVersionLater,
   markSuccess,
   downloadAndInstallApk,
+  cInfo,
 } from 'react-native-update';
 
 import _updateConfig from '../update.json';
 const {appKey} = _updateConfig[Platform.OS];
-
 export default class App extends Component {
   state = {
     received: 0,
@@ -140,7 +141,7 @@ export default class App extends Component {
   };
 
   render() {
-    const { received, total } = this.state;
+    const {received, total} = this.state;
     return (
       <View style={styles.container}>
         <Text style={styles.welcome}>欢迎使用热更新服务</Text>
@@ -161,6 +162,16 @@ export default class App extends Component {
         </Text>
         <TouchableOpacity onPress={this.checkUpdate}>
           <Text style={styles.instructions}>点击这里检查更新</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={{marginTop: 15}}
+          onLongPress={() => {
+            // TODO 调试pushy方法
+          }}>
+          <Text style={styles.instructions}>
+            react-native-update版本：{cInfo.pushy}
+          </Text>
         </TouchableOpacity>
         {/* <WebView style={{flex:1}} source={{uri: require('../www/index.html')}}/> */}
       </View>
