@@ -5,7 +5,7 @@
   "main": "lib/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build-lib": "$ANDROID_HOME/ndk-bundle/ndk-build NDK_PROJECT_PATH=android APP_BUILD_SCRIPT=android/jni/Android.mk NDK_LIBS_OUT=android/lib"
+    "build-lib": "git submodule update --init --recursive && $ANDROID_HOME/ndk/20.1.5948944/ndk-build NDK_PROJECT_PATH=android APP_BUILD_SCRIPT=android/jni/Android.mk NDK_LIBS_OUT=android/lib"
   },
   "repository": {
     "type": "git",
