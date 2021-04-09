@@ -472,7 +472,7 @@ RCT_EXPORT_METHOD(markSuccess)
     NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME];
     
     NSString *destination = [unzipDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-    void (^)(BOOL success) completionHandler=^(BOOL success) {
+    void (^completionHandler)(BOOL success) = ^(BOOL success) {
         if (success) {
             NSData *data = [NSData dataWithContentsOfFile:sourcePatch];
             NSError *error = nil;
@@ -500,7 +500,7 @@ RCT_EXPORT_METHOD(markSuccess)
             else
                 callback([self errorWithMessage:ERROR_BSDIFF]);
         }
-    }
+    };
     if (isHPatch)
         [_fileManager hdiffFileAtPath:bundlePatch fromOrigin:bundleOrigin toDestination:destination completionHandler:completionHandler];
     else
