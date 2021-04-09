@@ -266,9 +266,13 @@ PODS:
   - react-native-update (5.11.0-beta2):
     - React
     - react-native-update/BSDiff (= 5.11.0-beta2)
+    - react-native-update/HDiffPatch (= 5.11.0-beta2)
     - react-native-update/RCTPushy (= 5.11.0-beta2)
     - SSZipArchive
   - react-native-update/BSDiff (5.11.0-beta2):
+    - React
+    - SSZipArchive
+  - react-native-update/HDiffPatch (5.11.0-beta2):
     - React
     - SSZipArchive
   - react-native-update/RCTPushy (5.11.0-beta2):
@@ -503,7 +507,7 @@ SPEC CHECKSUMS:
   React-jsi: 74341196d9547cbcbcfa4b3bbbf03af56431d5a1
   React-jsiexecutor: 06a9c77b56902ae7ffcdd7a4905f664adc5d237b
   React-jsinspector: 0ae35a37b20d5e031eb020a69cc5afdbd6406301
-  react-native-update: 57368bcb714d347147b87e520f596ca44ab1de52
+  react-native-update: db9e97cda2a5158d7b526d930676b32fbb053f10
   react-native-webview: 4e96d493f9f90ba4f03b28933f30b2964df07e39
   React-perflogger: 9c547d8f06b9bf00cb447f2b75e8d7f19b7e02af
   React-RCTActionSheet: 3080b6e12e0e1a5b313c8c0050699b5c794a1b11
