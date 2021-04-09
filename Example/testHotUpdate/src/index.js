@@ -176,7 +176,6 @@ export default class App extends Component {
           </Text>
         </TouchableOpacity>
         <TestConsole visible={showTestConsole} />
-        {/* <WebView style={{flex:1}} source={{uri: require('../www/index.html')}}/> */}
       </View>
     );
   }
