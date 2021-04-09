@@ -34,7 +34,12 @@ Pod::Spec.new do |s|
   end
 
   s.subspec 'HDiffPatch' do |ss|
-    ss.source_files = 'ios/RCTPushy/HDiffPatch/**/*.{h,m,c}'
+    ss.source_files = ['ios/RCTPushy/HDiffPatch/**/*.{h,m,c}',
+                       'android/jni/hpatch.{h,c}',
+                       'android/jni/HDiffPatch/libHDiffPatch/HPatch/*.{h,c}',
+                       'android/jni/HDiffPatch/file_for_patch.{h,c}',
+                       'android/jni/lzma/C/LzmaDec.{h,c}',
+                       'android/jni/lzma/C/Lzma2Dec.{h,c}']
     ss.private_header_files = 'ios/RCTPushy/HDiffPatch/**/*.h'
   end
 end
