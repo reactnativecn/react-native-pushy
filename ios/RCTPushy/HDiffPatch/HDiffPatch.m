@@ -1,5 +1,5 @@
 //
-//  BSDiff.m
+//  HDiffPatch.m
 //  RCTPushy
 //
 //  Created by HouSisong, All rights reserved.

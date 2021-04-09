@@ -6,6 +6,9 @@
 #define HDIFFPATCH_PATCH_H
 # include <stdint.h> //for uint8_t
 #include "HDiffPatch/libHDiffPatch/HPatch/patch_types.h" //for hpatch_singleCompressedDiffInfo
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 //result
 enum {
@@ -35,4 +38,7 @@ int hpatch_by_mem(const uint8_t* old,size_t oldsize, uint8_t* newBuf,size_t news
                   const uint8_t* pat,size_t patsize,const hpatch_singleCompressedDiffInfo* patInfo);
 int hpatch_by_file(const char* oldfile, const char* newfile, const char* patchfile);
 
+#ifdef __cplusplus
+}
+#endif
 #endif //HDIFFPATCH_PATCH_H
