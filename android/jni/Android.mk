@@ -13,14 +13,6 @@ Hdp_Files := \
 
 LOCAL_SRC_FILES := \
 	DownloadTask.c \
-	blocksort.c \
-	bspatch.c \
-	bzlib.c \
-	crctable.c \
-	compress.c \
-	decompress.c \
-	huffman.c \
-	randtable.c \
 	$(Hdp_Files)
 
 include $(BUILD_SHARED_LIBRARY)

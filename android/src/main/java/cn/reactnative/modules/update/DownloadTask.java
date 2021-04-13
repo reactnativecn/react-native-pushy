@@ -136,7 +136,6 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
     byte[] buffer = new byte[1024*4];
 
-    private static native byte[] bsdiffPatch(byte[] origin, byte[] patch);
     private static native byte[] hdiffPatch(byte[] origin, byte[] patch);
 
     private void unzipToFile(ZipInputStream zis, File fmd) throws IOException {
@@ -301,7 +300,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         }
     }
 
-    private void doPatchFromApk(DownloadTaskParams param,int apkPatchType) throws IOException, JSONException {
+    private void doPatchFromApk(DownloadTaskParams param) throws IOException, JSONException {
         downloadFile(param);
 
         ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.targetFile)));
@@ -350,11 +349,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             if (fn.equals("index.bundlejs.patch")) {
                 foundBundlePatch = true;
                 
-                byte[] patched;
-                if (DownloadTaskParams.isHPatchType(apkPatchType)) // hpatch
-                    patched = hdiffPatch(readOriginBundle(), readBytes(zis));
-                else // do bsdiff patch
-                    patched = bsdiffPatch(readOriginBundle(), readBytes(zis));
+                byte[] patched = hdiffPatch(readOriginBundle(), readBytes(zis));
 
                 FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
                 fout.write(patched);
@@ -391,7 +386,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
     }
 
-    private void doPatchFromPpk(DownloadTaskParams param,int ppkPatchType) throws IOException, JSONException {
+    private void doPatchFromPpk(DownloadTaskParams param) throws IOException, JSONException {
         downloadFile(param);
 
         ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.targetFile)));
@@ -431,12 +426,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             }
             if (fn.equals("index.bundlejs.patch")) {
                 foundBundlePatch = true;
-                byte[] patched;
-                if (DownloadTaskParams.isHPatchType(ppkPatchType)) // hpatch
-                    patched = hdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
-                else // do bsdiff patch
-                    patched = bsdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
-
+                byte[] patched = hdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
+                
                 FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
                 fout.write(patched);
                 fout.close();
@@ -497,12 +488,10 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                     doFullPatch(params[0]);
                     break;
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
-                case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_APK:
-                    doPatchFromApk(params[0],taskType);
+                    doPatchFromApk(params[0]);
                     break;
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
-                case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_PPK:
-                    doPatchFromPpk(params[0],taskType);
+                    doPatchFromPpk(params[0]);
                     break;
                 case DownloadTaskParams.TASK_TYPE_CLEANUP:
                     doCleanUp(params[0]);
@@ -524,8 +513,6 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
                 case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
-                case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_APK:
-                case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_PPK:
                     try {
                         removeDirectory(params[0].unzipDirectory);
                     } catch (IOException ioException) {

@@ -8,7 +8,7 @@
     "start": "react-native start",
     "test": "jest",
     "lint": "eslint .",
-    "apk": "(npx jetify && cd android &&  ./gradlew aR)"
+    "apk": "(cd android && ./gradlew aR)"
   },
   "dependencies": {
     "react": "17.0.1",

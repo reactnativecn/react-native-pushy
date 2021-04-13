@@ -90,30 +90,13 @@ public class UpdateContext {
         void onDownloadFailed(Throwable error);
     }
 
-    private String zipExtension(int patchType){
-        switch (patchType) {
-            case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
-                return ".ppk";
-            case DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK:
-                return ".apk.patch";
-            case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
-                return ".ppk.patch";
-            case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_APK:
-                return ".apk.hpatch";
-            case DownloadTaskParams.TASK_TYPE_HPATCH_FROM_PPK:
-                return ".ppk.hpatch";
-            default:
-                return "";//unknown type
-        }
-    }
-
     public void downloadFullUpdate(String url, String hash, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_PATCH_FULL;
         params.url = url;
         params.hash = hash;
         params.listener = listener;
-        params.targetFile = new File(rootDir, hash + zipExtension(params.type));
+        params.targetFile = new File(rootDir, hash + ".ppk");
         params.unzipDirectory = new File(rootDir, hash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
@@ -129,25 +112,25 @@ public class UpdateContext {
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
-    public void downloadPatchFromApk(String url, String hash,int apkPatchType,DownloadFileListener listener) {
+    public void downloadPatchFromApk(String url, String hash, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
-        params.type = apkPatchType;
+        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK;
         params.url = url;
         params.hash = hash;
         params.listener = listener;
-        params.targetFile = new File(rootDir, hash + zipExtension(params.type));
+        params.targetFile = new File(rootDir, hash + ".apk.patch");
         params.unzipDirectory = new File(rootDir, hash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
 
-    public void downloadPatchFromPpk(String url,String hash,String originHash,int ppkPatchType,DownloadFileListener listener) {
+    public void downloadPatchFromPpk(String url, String hash, String originHash, DownloadFileListener listener) {
         DownloadTaskParams params = new DownloadTaskParams();
-        params.type = ppkPatchType;
+        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
         params.url = url;
         params.hash = hash;
         params.originHash = originHash;
         params.listener = listener;
-        params.targetFile = new File(rootDir, originHash + "-" + hash + zipExtension(params.type));
+        params.targetFile = new File(rootDir, originHash + "-" + hash + ".ppk.patch");
         params.unzipDirectory = new File(rootDir, hash);
         params.originDirectory = new File(rootDir, originHash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
