@@ -27,12 +27,7 @@ Pod::Spec.new do |s|
     ss.source_files = 'ios/RCTPushy/*.{h,m}'
     ss.public_header_files = ['ios/RCTPushy/RCTPushy.h']
   end
-
-  s.subspec 'BSDiff' do |ss|
-    ss.source_files = 'ios/RCTPushy/BSDiff/**/*.{h,m,c}'
-    ss.private_header_files = 'ios/RCTPushy/BSDiff/**/*.h'
-  end
-
+  
   s.subspec 'HDiffPatch' do |ss|
     ss.source_files = ['ios/RCTPushy/HDiffPatch/**/*.{h,m,c}',
                        'android/jni/hpatch.{h,c}',

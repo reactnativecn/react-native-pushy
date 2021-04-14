@@ -21,6 +21,7 @@ export default function TestConsole({visible}) {
       <SafeAreaView style={{flex: 1, padding: 10}}>
         <Text>调试Pushy方法（方法名，参数，值换行）</Text>
         <TextInput
+          autoCorrect={false}
           style={{
             borderWidth: StyleSheet.hairlineWidth * 4,
             borderColor: 'black',
@@ -63,7 +64,8 @@ export default function TestConsole({visible}) {
               Alert.alert(e.message);
             }
             setRunning(false);
-          }}></Button>
+          }}
+        />
         <View style={{marginTop: 15}}>
           <Button title="重置" onPress={() => setText('')} />
         </View>

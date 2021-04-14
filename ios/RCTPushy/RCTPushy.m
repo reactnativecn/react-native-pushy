@@ -38,7 +38,6 @@ static NSString * const BUNDLE_PATCH_NAME = @"index.bundlejs.patch";
 
 // error def
 static NSString * const ERROR_OPTIONS = @"options error";
-static NSString * const ERROR_BSDIFF = @"bsdiff error";
 static NSString * const ERROR_HDIFFPATCH = @"hdiffpatch error";
 static NSString * const ERROR_FILE_OPERATION = @"file operation error";
 
@@ -55,8 +54,6 @@ typedef NS_ENUM(NSInteger, PushyType) {
     PushyTypePatchFromPackage = 2,
     PushyTypePatchFromPpk = 3,
     //TASK_TYPE_PLAIN_DOWNLOAD=4?
-    PushyTypeHPatchFromPackage = 5,
-    PushyTypeHPatchFromPpk = 6,
 };
 
 static BOOL ignoreRollback = false;
@@ -257,34 +254,6 @@ RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
     }];
 }
 
-RCT_EXPORT_METHOD(downloadHPatchFromPackage:(NSDictionary *)options
-                  resolver:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    [self doPushy:PushyTypeHPatchFromPackage options:options callback:^(NSError *error) {
-        if (error) {
-            reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
-        }
-        else {
-            resolve(nil);
-        }
-    }];
-}
-
-RCT_EXPORT_METHOD(downloadHPatchFromPpk:(NSDictionary *)options
-                  resolver:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    [self doPushy:PushyTypeHPatchFromPpk options:options callback:^(NSError *error) {
-        if (error) {
-            reject([NSString stringWithFormat: @"%lu", (long)error.code], error.localizedDescription, error);
-        }
-        else {
-            resolve(nil);
-        }
-    }];
-}
-
 RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 {
     NSString *hash = options[@"hash"];
@@ -381,7 +350,7 @@ RCT_EXPORT_METHOD(markSuccess)
         return;
     }
     NSString *originHash = [RCTConvert NSString:options[@"originHash"]];
-    if (((type == PushyTypePatchFromPpk)||(type == PushyTypeHPatchFromPpk)) && originHash <= 0) {
+    if (type == PushyTypePatchFromPpk && originHash <= 0) {
         callback([self errorWithMessage:ERROR_OPTIONS]);
         return;
     }
@@ -430,27 +399,19 @@ RCT_EXPORT_METHOD(markSuccess)
                     else {
                         switch (type) {
                             case PushyTypePatchFromPackage:
-                            case PushyTypeHPatchFromPackage:
                             {
                                 NSString *sourceOrigin = [[NSBundle mainBundle] resourcePath];
                                 NSString *bundleOrigin = [[RCTPushy binaryBundleURL] path];
-                                if (type==PushyTypeHPatchFromPackage)
-                                    [self hpatch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
-                                else
-                                    [self patch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
+                                [self patch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
                             case PushyTypePatchFromPpk:
-                            case PushyTypeHPatchFromPpk:
                             {
                                 NSString *lastVersionDir = [dir stringByAppendingPathComponent:originHash];
                                 
                                 NSString *sourceOrigin = lastVersionDir;
                                 NSString *bundleOrigin = [lastVersionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-                                if (type==PushyTypeHPatchFromPpk)
-                                    [self hpatch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
-                                else
-                                    [self patch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
+                                [self patch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
                             }
                                 break;
                             default:
@@ -465,7 +426,7 @@ RCT_EXPORT_METHOD(markSuccess)
 }
 
 - (void)_dopatch:(NSString *)hash fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin
-        callback:(void (^)(NSError *error))callback isHPatch:(BOOL)isHPatch
+        callback:(void (^)(NSError *error))callback
 {
     NSString *unzipDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
     NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
@@ -495,25 +456,15 @@ RCT_EXPORT_METHOD(markSuccess)
             }];
         }
         else {
-            if (isHPatch)
-                callback([self errorWithMessage:ERROR_HDIFFPATCH]);
-            else
-                callback([self errorWithMessage:ERROR_BSDIFF]);
+            callback([self errorWithMessage:ERROR_HDIFFPATCH]);
         }
     };
-    if (isHPatch)
-        [_fileManager hdiffFileAtPath:bundlePatch fromOrigin:bundleOrigin toDestination:destination completionHandler:completionHandler];
-    else
-        [_fileManager bsdiffFileAtPath:bundlePatch fromOrigin:bundleOrigin toDestination:destination completionHandler:completionHandler];
+    [_fileManager hdiffFileAtPath:bundlePatch fromOrigin:bundleOrigin toDestination:destination completionHandler:completionHandler];
 }
 
 - (void)patch:(NSString *)hash fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
 {
-    [self _dopatch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback isHPatch:false];
-}
-- (void)hpatch:(NSString *)hash fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
-{
-    [self _dopatch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback isHPatch:true];
+    [self _dopatch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
 }
 
 - (void)clearInvalidFiles
@@ -545,10 +496,6 @@ RCT_EXPORT_METHOD(markSuccess)
             return @".ipa.patch";
         case PushyTypePatchFromPpk:
             return @".ppk.patch";
-        case PushyTypeHPatchFromPackage:
-            return @".ipa.hpatch";
-        case PushyTypeHPatchFromPpk:
-            return @".ppk.hpatch";
         default:
             break;
     }
