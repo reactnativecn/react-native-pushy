@@ -139,9 +139,9 @@ android {
     splits {
         abi {
             reset()
-            enable enableSeparateBuildPerCPUArchitecture
+            enable true
             universalApk false  // If true, also generate a universal APK
-            include "armeabi-v7a", "x86", "arm64-v8a", "x86_64"
+            include "arm64-v8a"
         }
     }
     signingConfigs {
