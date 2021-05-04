@@ -134,9 +134,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
     }
 
-    byte[] buffer = new byte[1024];
+    byte[] buffer = new byte[1024*4];
 
-    private static native byte[] bsdiffPatch(byte[] origin, byte[] patch);
+    private static native byte[] hdiffPatch(byte[] origin, byte[] patch);
 
     private void unzipToFile(ZipInputStream zis, File fmd) throws IOException {
         int count;
@@ -348,8 +348,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             }
             if (fn.equals("index.bundlejs.patch")) {
                 foundBundlePatch = true;
-                // do bsdiff patch
-                byte[] patched = bsdiffPatch(readOriginBundle(), readBytes(zis));
+                
+                byte[] patched = hdiffPatch(readOriginBundle(), readBytes(zis));
 
                 FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
                 fout.write(patched);
@@ -426,9 +426,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             }
             if (fn.equals("index.bundlejs.patch")) {
                 foundBundlePatch = true;
-                // do bsdiff patch
-                byte[] patched = bsdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
-
+                byte[] patched = hdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
+                
                 FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
                 fout.write(patched);
                 fout.close();

@@ -25,6 +25,8 @@ export interface UpdateAvailableResult {
   metaInfo: string;
   pdiffUrl: string;
   diffUrl?: string;
+  phdiffUrl?: string;
+  hdiffUrl?: string;
 }
 
 export type CheckResult =

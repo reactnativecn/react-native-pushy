@@ -38,7 +38,7 @@ static NSString * const BUNDLE_PATCH_NAME = @"index.bundlejs.patch";
 
 // error def
 static NSString * const ERROR_OPTIONS = @"options error";
-static NSString * const ERROR_BSDIFF = @"bsdiff error";
+static NSString * const ERROR_HDIFFPATCH = @"hdiffpatch error";
 static NSString * const ERROR_FILE_OPERATION = @"file operation error";
 
 // event def
@@ -53,6 +53,7 @@ typedef NS_ENUM(NSInteger, PushyType) {
     PushyTypeFullDownload = 1,
     PushyTypePatchFromPackage = 2,
     PushyTypePatchFromPpk = 3,
+    //TASK_TYPE_PLAIN_DOWNLOAD=4?
 };
 
 static BOOL ignoreRollback = false;
@@ -424,14 +425,15 @@ RCT_EXPORT_METHOD(markSuccess)
     }];
 }
 
-- (void)patch:(NSString *)hash fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
+- (void)_dopatch:(NSString *)hash fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin
+        callback:(void (^)(NSError *error))callback
 {
     NSString *unzipDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
     NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
     NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME];
     
     NSString *destination = [unzipDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-    [_fileManager bsdiffFileAtPath:bundlePatch fromOrigin:bundleOrigin toDestination:destination completionHandler:^(BOOL success) {
+    void (^completionHandler)(BOOL success) = ^(BOOL success) {
         if (success) {
             NSData *data = [NSData dataWithContentsOfFile:sourcePatch];
             NSError *error = nil;
@@ -454,9 +456,15 @@ RCT_EXPORT_METHOD(markSuccess)
             }];
         }
         else {
-            callback([self errorWithMessage:ERROR_BSDIFF]);
+            callback([self errorWithMessage:ERROR_HDIFFPATCH]);
         }
-    }];
+    };
+    [_fileManager hdiffFileAtPath:bundlePatch fromOrigin:bundleOrigin toDestination:destination completionHandler:completionHandler];
+}
+
+- (void)patch:(NSString *)hash fromBundle:(NSString *)bundleOrigin source:(NSString *)sourceOrigin callback:(void (^)(NSError *error))callback
+{
+    [self _dopatch:hash fromBundle:bundleOrigin source:sourceOrigin callback:callback];
 }
 
 - (void)clearInvalidFiles

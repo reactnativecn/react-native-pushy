@@ -9,10 +9,10 @@ extern "C" {
 #endif
 /*
  * Class:     cn_reactnative_modules_update_DownloadTask
- * Method:    bsdiffPatch
+ * Method:    hdiffPatch
  * Signature: ([B[B)[B
  */
-JNIEXPORT jbyteArray JNICALL Java_cn_reactnative_modules_update_DownloadTask_bsdiffPatch
+JNIEXPORT jbyteArray JNICALL Java_cn_reactnative_modules_update_DownloadTask_hdiffPatch
   (JNIEnv *, jclass, jbyteArray, jbyteArray);
 
 #ifdef __cplusplus

@@ -8,8 +8,7 @@
 
 #import "RCTPushyManager.h"
 #import "ZipArchive.h"
-#import "BSDiff.h"
-#import "bspatch.h"
+#import "HDiffPatch.h"
 
 @implementation RCTPushyManager {
     dispatch_queue_t _opQueue;
@@ -75,13 +74,13 @@
     });
 }
 
-- (void)bsdiffFileAtPath:(NSString *)path
-              fromOrigin:(NSString *)origin
-          toDestination:(NSString *)destination
-      completionHandler:(void (^)(BOOL success))completionHandler
+- (void)hdiffFileAtPath:(NSString *)path
+             fromOrigin:(NSString *)origin
+         toDestination:(NSString *)destination
+     completionHandler:(void (^)(BOOL success))completionHandler
 {
     dispatch_async(_opQueue, ^{
-        BOOL success = [BSDiff bsdiffPatch:path origin:origin toDestination:destination];
+        BOOL success = [HDiffPatch hdiffPatch:path origin:origin toDestination:destination];
         if (completionHandler) {
             completionHandler(success);
         }

@@ -21,15 +21,18 @@ import {
   switchVersionLater,
   markSuccess,
   downloadAndInstallApk,
+  cInfo,
 } from 'react-native-update';
+
+import TestConsole from './TestConsole';
 
 import _updateConfig from '../update.json';
 const {appKey} = _updateConfig[Platform.OS];
-
 export default class App extends Component {
   state = {
     received: 0,
     total: 0,
+    showTestConsole: false,
   };
   componentDidMount() {
     if (isRolledBack) {
@@ -55,7 +58,7 @@ export default class App extends Component {
       );
     }
   }
-  doUpdate = async (info) => {
+  doUpdate = async info => {
     try {
       const hash = await downloadUpdate(info, {
         onDownloadProgress: ({received, total}) => {
@@ -140,7 +143,7 @@ export default class App extends Component {
   };
 
   render() {
-    const { received, total } = this.state;
+    const {received, total, showTestConsole} = this.state;
     return (
       <View style={styles.container}>
         <Text style={styles.welcome}>欢迎使用热更新服务</Text>
@@ -162,7 +165,17 @@ export default class App extends Component {
         <TouchableOpacity onPress={this.checkUpdate}>
           <Text style={styles.instructions}>点击这里检查更新</Text>
         </TouchableOpacity>
-        {/* <WebView style={{flex:1}} source={{uri: require('../www/index.html')}}/> */}
+
+        <TouchableOpacity
+          style={{marginTop: 15}}
+          onLongPress={() => {
+            this.setState({showTestConsole: true});
+          }}>
+          <Text style={styles.instructions}>
+            react-native-update版本：{cInfo.pushy}
+          </Text>
+        </TouchableOpacity>
+        <TestConsole visible={showTestConsole} />
       </View>
     );
   }
