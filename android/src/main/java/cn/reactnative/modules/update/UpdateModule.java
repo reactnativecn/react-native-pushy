@@ -125,14 +125,13 @@ public class UpdateModule extends ReactContextBaseJavaModule {
             intent.setData(apkUri);
             intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            mContext.startActivity(intent);
         } else {
             apkUri = Uri.fromFile(toInstall);
             intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(apkUri, "application/vnd.android.package-archive");
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            mContext.startActivity(intent);
         }
+        mContext.startActivity(intent);
     }
 
     @ReactMethod

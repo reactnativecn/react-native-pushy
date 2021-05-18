@@ -4,7 +4,10 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
+import android.os.Environment;
 import android.util.Log;
+
 import com.facebook.react.ReactInstanceManager;
 
 import java.util.HashMap;
@@ -13,7 +16,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 import java.io.File;
-import java.net.URL;
 
 /**
  * Created by tdzl2003 on 3/31/16.
@@ -107,7 +109,14 @@ public class UpdateContext {
         params.url = url;
         params.hash = hash;
         params.listener = listener;
-        params.targetFile = new File(rootDir, fileName);
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N && fileName.equals("update.apk")) {
+            params.targetFile = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "pushy_update.apk");
+
+        } else {
+            params.targetFile = new File(rootDir, fileName);
+
+        }
 //        params.unzipDirectory = new File(rootDir, hash);
         new DownloadTask(context).executeOnExecutor(this.executor, params);
     }
