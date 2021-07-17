@@ -22,6 +22,7 @@ export default function TestConsole({visible}) {
         <Text>调试Pushy方法（方法名，参数，值换行）</Text>
         <TextInput
           autoCorrect={false}
+          autoCapitalize="none"
           style={{
             borderWidth: StyleSheet.hairlineWidth * 4,
             borderColor: 'black',
