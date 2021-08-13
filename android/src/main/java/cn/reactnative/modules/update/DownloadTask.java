@@ -19,15 +19,13 @@ import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
 import java.util.HashMap;
 
 import okio.BufferedSink;
@@ -138,19 +136,6 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
     private static native byte[] hdiffPatch(byte[] origin, byte[] patch);
 
-    private void unzipToFile(ZipInputStream zis, File fmd) throws IOException {
-        int count;
-
-        FileOutputStream fout = new FileOutputStream(fmd);
-
-        while ((count = zis.read(buffer)) != -1)
-        {
-            fout.write(buffer, 0, count);
-        }
-
-        fout.close();
-        zis.closeEntry();
-    }
 
     private void copyFile(File from, File fmd) throws IOException {
         int count;
@@ -167,7 +152,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         in.close();
     }
 
-    private byte[] readBytes(ZipInputStream zis) throws IOException {
+    private byte[] readBytes(InputStream zis) throws IOException {
         int count;
 
         ByteArrayOutputStream fout = new ByteArrayOutputStream();
@@ -177,7 +162,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         }
 
         fout.close();
-        zis.closeEntry();
+        zis.close();
         return fout.toByteArray();
     }
 
@@ -246,15 +231,14 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     private void doFullPatch(DownloadTaskParams param) throws IOException {
         downloadFile(param);
 
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.targetFile)));
-        ZipEntry ze;
-        String filename;
-
         removeDirectory(param.unzipDirectory);
         param.unzipDirectory.mkdirs();
 
-        while ((ze = zis.getNextEntry()) != null)
-        {
+        SafeZipFile zipFile = new SafeZipFile(param.targetFile);
+        Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry ze = entries.nextElement();
+
             String fn = ze.getName();
             File fmd = new File(param.unzipDirectory, fn);
 
@@ -267,10 +251,11 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 continue;
             }
 
-            unzipToFile(zis, fmd);
+            zipFile.unzipToFile(ze, fmd);
         }
 
-        zis.close();
+        zipFile.close();
+
 
         if (UpdateContext.DEBUG) {
             Log.d("RNUpdate", "Unzip finished");
@@ -278,9 +263,11 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     }
 
     private void copyFromResource(HashMap<String, ArrayList<File> > resToCopy) throws IOException {
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(context.getPackageResourcePath())));
-        ZipEntry ze;
-        while ((ze = zis.getNextEntry()) != null) {
+        SafeZipFile zipFile = new SafeZipFile(new File(context.getPackageResourcePath()));
+        Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry ze = entries.nextElement();
+
             String fn = ze.getName();
             ArrayList<File> targets = resToCopy.get(fn);
             if (targets != null) {
@@ -292,37 +279,35 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                     if (lastTarget != null) {
                         copyFile(lastTarget, target);
                     } else {
-                        unzipToFile(zis, target);
+                        zipFile.unzipToFile(ze, target);
                         lastTarget = target;
                     }
                 }
             }
         }
+        zipFile.close();
     }
 
     private void doPatchFromApk(DownloadTaskParams param) throws IOException, JSONException {
         downloadFile(param);
 
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.targetFile)));
-        ZipEntry ze;
-        int count;
-        String filename;
+        removeDirectory(param.unzipDirectory);
+        param.unzipDirectory.mkdirs();
+        HashMap<String, ArrayList<File>> copyList = new HashMap<String, ArrayList<File>>();
+
         boolean foundDiff = false;
         boolean foundBundlePatch = false;
 
-        removeDirectory(param.unzipDirectory);
-        param.unzipDirectory.mkdirs();
-
-        HashMap<String, ArrayList<File>> copyList = new HashMap<String, ArrayList<File>>();
-
-        while ((ze = zis.getNextEntry()) != null)
-        {
+        SafeZipFile zipFile = new SafeZipFile(param.targetFile);
+        Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry ze = entries.nextElement();
             String fn = ze.getName();
 
             if (fn.equals("__diff.json")) {
                 foundDiff = true;
                 // copy files from assets
-                byte[] bytes = readBytes(zis);
+                byte[] bytes = readBytes(zipFile.getInputStream(ze));
                 String json = new String(bytes, "UTF-8");
                 JSONObject obj = (JSONObject)new JSONTokener(json).nextValue();
 
@@ -348,8 +333,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             }
             if (fn.equals("index.bundlejs.patch")) {
                 foundBundlePatch = true;
-                
-                byte[] patched = hdiffPatch(readOriginBundle(), readBytes(zis));
+
+                byte[] patched = hdiffPatch(readOriginBundle(), readBytes(zipFile.getInputStream(ze)));
 
                 FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
                 fout.write(patched);
@@ -367,10 +352,12 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 continue;
             }
 
-            unzipToFile(zis, fmd);
+            zipFile.unzipToFile(ze, fmd);
         }
 
-        zis.close();
+        zipFile.close();
+
+
         if (!foundDiff) {
             throw new Error("diff.json not found");
         }
@@ -389,24 +376,25 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     private void doPatchFromPpk(DownloadTaskParams param) throws IOException, JSONException {
         downloadFile(param);
 
-        ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(param.targetFile)));
-        ZipEntry ze;
+        removeDirectory(param.unzipDirectory);
+        param.unzipDirectory.mkdirs();
+
         int count;
         String filename;
         boolean foundDiff = false;
         boolean foundBundlePatch = false;
 
-        removeDirectory(param.unzipDirectory);
-        param.unzipDirectory.mkdirs();
 
-        while ((ze = zis.getNextEntry()) != null)
-        {
+        SafeZipFile zipFile = new SafeZipFile(param.targetFile);
+        Enumeration<? extends ZipEntry> entries = zipFile.entries();
+        while (entries.hasMoreElements()) {
+            ZipEntry ze = entries.nextElement();
             String fn = ze.getName();
 
             if (fn.equals("__diff.json")) {
                 foundDiff = true;
                 // copy files from assets
-                byte[] bytes = readBytes(zis);
+                byte[] bytes = readBytes(zipFile.getInputStream(ze));
                 String json = new String(bytes, "UTF-8");
                 JSONObject obj = (JSONObject)new JSONTokener(json).nextValue();
 
@@ -426,8 +414,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             }
             if (fn.equals("index.bundlejs.patch")) {
                 foundBundlePatch = true;
-                byte[] patched = hdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zis));
-                
+                byte[] patched = hdiffPatch(readFile(new File(param.originDirectory, "index.bundlejs")), readBytes(zipFile.getInputStream(ze)));
+
                 FileOutputStream fout = new FileOutputStream(new File(param.unzipDirectory, "index.bundlejs"));
                 fout.write(patched);
                 fout.close();
@@ -444,10 +432,10 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 continue;
             }
 
-            unzipToFile(zis, fmd);
+            zipFile.unzipToFile(ze, fmd);
         }
 
-        zis.close();
+        zipFile.close();
 
         if (!foundDiff) {
             throw new Error("diff.json not found");
