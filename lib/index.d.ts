@@ -72,6 +72,12 @@ export function setCustomEndpoints({
   backupQueryUrl?: string;
 }): void;
 
+export function getCurrentVersionInfo(): Promise<{
+  name?: string;
+  description?: string;
+  metaInfo?: string;
+}>;
+
 interface ProgressData {
   hash: string;
   received: number;

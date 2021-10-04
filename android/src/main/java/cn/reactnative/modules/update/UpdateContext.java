@@ -17,9 +17,6 @@ import java.util.concurrent.Executors;
 
 import java.io.File;
 
-/**
- * Created by tdzl2003 on 3/31/16.
- */
 public class UpdateContext {
     private Context context;
     private File rootDir;
@@ -70,10 +67,6 @@ public class UpdateContext {
 
     public String getBuildTime() {
         return context.getString(R.string.pushy_build_time);
-    }
-
-    public String getUuid() {
-        return sp.getString("uuid", null);
     }
 
     public Map getBlockUpdate() {
@@ -163,10 +156,14 @@ public class UpdateContext {
         editor.apply();
     }
 
-    public void setUuid(String uuid) {
+    public void setKv(String key, String value) {
         SharedPreferences.Editor editor = sp.edit();
-        editor.putString("uuid", uuid);
+        editor.putString(key, value);
         editor.apply();
+    }
+
+    public String getKv(String key) {
+        return sp.getString(key, null);
     }
 
     public void setBlockUpdate(int until, String reason) {
@@ -191,7 +188,11 @@ public class UpdateContext {
     public void markSuccess() {
         SharedPreferences.Editor editor = sp.edit();
         editor.putBoolean("firstTimeOk", true);
-        editor.remove("lastVersion");
+        String lastVersion = sp.getString("lastVersion", null);
+        if (lastVersion != null) {
+            editor.remove("lastVersion");
+            editor.remove("hash_" + lastVersion);
+        }
         editor.apply();
 
         this.cleanUp();

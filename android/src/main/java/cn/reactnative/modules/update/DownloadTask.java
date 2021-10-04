@@ -15,7 +15,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
-import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -32,9 +31,8 @@ import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.Okio;
 import static cn.reactnative.modules.update.UpdateModule.sendEvent;
-/**
- * Created by tdzl2003 on 3/31/16.
- */
+
+
 class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
     final int DOWNLOAD_CHUNK_SIZE = 4096;
 

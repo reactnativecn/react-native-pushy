@@ -22,15 +22,11 @@ import com.facebook.react.modules.core.DeviceEventManagerModule;
 
 import java.io.File;
 import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.util.HashMap;
 import java.util.Map;
 
 import static android.support.v4.content.FileProvider.getUriForFile;
 
-/**
- * Created by tdzl2003 on 3/31/16.
- */
 public class UpdateModule extends ReactContextBaseJavaModule {
     UpdateContext updateContext;
     public static ReactApplicationContext mContext;
@@ -64,7 +60,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
             updateContext.clearRollbackMark();
         }
         constants.put("blockUpdate", updateContext.getBlockUpdate());
-        constants.put("uuid", updateContext.getUuid());
+        constants.put("uuid", updateContext.getKv("uuid"));
         return constants;
     }
 
@@ -264,10 +260,26 @@ public class UpdateModule extends ReactContextBaseJavaModule {
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                updateContext.setUuid(uuid);
+                updateContext.setKv("uuid", uuid);
             }
         });
     }
+
+    @ReactMethod
+    public void setLocalHashInfo(final String hash, final String info) {
+        UiThreadUtil.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateContext.setKv("hash_" + hash, info);
+            }
+        });
+    }
+
+    @ReactMethod
+    public void getLocalHashInfo(final String hash, final Promise promise) {
+        promise.resolve(updateContext.getKv("hash_" + hash));
+    }
+    
 
     /* 发送事件*/
     public static void sendEvent(String eventName, WritableMap params) {
