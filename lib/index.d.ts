@@ -13,6 +13,7 @@ export interface ExpiredResult {
 export interface UpTodateResult {
   expired?: false;
   upToDate: true;
+  paused?: 'app' | 'package';
 }
 
 export interface UpdateAvailableResult {
@@ -25,8 +26,6 @@ export interface UpdateAvailableResult {
   metaInfo: string;
   pdiffUrl: string;
   diffUrl?: string;
-  phdiffUrl?: string;
-  hdiffUrl?: string;
 }
 
 export type CheckResult =
