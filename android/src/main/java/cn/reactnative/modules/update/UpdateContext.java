@@ -147,7 +147,7 @@ public class UpdateContext {
         String lastVersion = getCurrentVersion();
         SharedPreferences.Editor editor = sp.edit();
         editor.putString("currentVersion", hash);
-        if (lastVersion != null && lastVersion != hash) {
+        if (lastVersion != null && !lastVersion.equals(hash)) {
             editor.putString("lastVersion", lastVersion);
         }
         editor.putBoolean("firstTime", true);
@@ -189,7 +189,8 @@ public class UpdateContext {
         SharedPreferences.Editor editor = sp.edit();
         editor.putBoolean("firstTimeOk", true);
         String lastVersion = sp.getString("lastVersion", null);
-        if (lastVersion != null) {
+        String curVersion = sp.getString("currentVersion", null);
+        if (lastVersion != null && !lastVersion.equals(curVersion)) {
             editor.remove("lastVersion");
             editor.remove("hash_" + lastVersion);
         }

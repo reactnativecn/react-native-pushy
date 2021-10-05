@@ -1,11 +1,3 @@
-//
-//  RCTPushyDownloader.m
-//  RCTPushy
-//
-//  Created by lvbingru on 16/2/23.
-//  Copyright © 2016年 erica. All rights reserved.
-//
-
 #import "RCTPushyDownloader.h"
 
 @interface RCTPushyDownloader()<NSURLSessionDelegate>

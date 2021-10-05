@@ -1,11 +1,3 @@
-//
-//  RCTPushy.m
-//  RCTPushy
-//
-//  Created by LvBingru on 2/19/16.
-//  Copyright © 2016 erica. All rights reserved.
-//
-
 #import "RCTPushy.h"
 #import "RCTPushyDownloader.h"
 #import "RCTPushyManager.h"
@@ -23,6 +15,7 @@ static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
 static NSString *const keyBlockUpdate = @"REACTNATIVECN_PUSHY_BLOCKUPDATE";
 static NSString *const keyUuid = @"REACTNATIVECN_PUSHY_UUID";
+static NSString *const keyHashInfo = @"REACTNATIVECN_PUSHY_HASH_";
 static NSString *const keyFirstLoadMarked = @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY";
 static NSString *const keyRolledBackMarked = @"REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY";
 static NSString *const KeyPackageUpdatedMarked = @"REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY";
@@ -212,6 +205,24 @@ RCT_EXPORT_METHOD(setUuid:(NSString *)uuid)
     [defaults synchronize];
 }
 
+RCT_EXPORT_METHOD(setLocalHashInfo:(NSString *)hash
+                  value:(NSString *)value)
+{
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setObject:value forKey:[keyHashInfo stringByAppendingString:hash]];
+    [defaults synchronize];
+}
+
+
+RCT_EXPORT_METHOD(getLocalHashInfo:(NSString *)hash
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    resolve([defaults stringForKey:[keyHashInfo stringByAppendingString:hash]]);
+}
+
 RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
@@ -304,10 +315,16 @@ RCT_EXPORT_METHOD(markSuccess)
 {
     // up package info
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableDictionary *packageInfo = [[NSMutableDictionary alloc] initWithDictionary:[defaults objectForKey:keyPushyInfo]];
-    [packageInfo setObject:@(NO) forKey:paramIsFirstTime];
-    [packageInfo setObject:@(YES) forKey:paramIsFirstLoadOk];
-    [defaults setObject:packageInfo forKey:keyPushyInfo];
+    NSMutableDictionary *pushyInfo = [[NSMutableDictionary alloc] initWithDictionary:[defaults objectForKey:keyPushyInfo]];
+    [pushyInfo setObject:@(NO) forKey:paramIsFirstTime];
+    [pushyInfo setObject:@(YES) forKey:paramIsFirstLoadOk];
+    
+    NSString *lastVersion = pushyInfo[paramLastVersion];
+    NSString *curVersion = pushyInfo[paramCurrentVersion];
+    if (lastVersion != nil && ![lastVersion isEqualToString:curVersion]) {
+        [pushyInfo removeObjectForKey:[keyHashInfo stringByAppendingString:lastVersion]];
+    }
+    [defaults setObject:pushyInfo forKey:keyPushyInfo];
     [defaults synchronize];
     
     // clear other package dir

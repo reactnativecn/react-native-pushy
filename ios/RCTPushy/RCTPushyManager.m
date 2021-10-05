@@ -1,11 +1,3 @@
-//
-//  RCTPushyManager.m
-//  RCTPushy
-//
-//  Created by lvbingru on 16/4/1.
-//  Copyright © 2016年 erica. All rights reserved.
-//
-
 #import "RCTPushyManager.h"
 #import "ZipArchive.h"
 #import "HDiffPatch.h"
