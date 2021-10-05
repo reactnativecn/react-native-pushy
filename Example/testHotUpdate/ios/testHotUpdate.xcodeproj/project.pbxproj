@@ -17,7 +17,6 @@
 
 /* Begin PBXFileReference section */
 		008F07F21AC5B25A0029DE68 /* main.jsbundle */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = main.jsbundle; sourceTree = "<group>"; };
-		0583A8BB0D57980C590354CD /* Pods-testHotUpdate-tvOSTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-testHotUpdate-tvOSTests.release.xcconfig"; path = "Target Support Files/Pods-testHotUpdate-tvOSTests/Pods-testHotUpdate-tvOSTests.release.xcconfig"; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* testHotUpdate.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = testHotUpdate.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FAF1A68108700A75B9A /* AppDelegate.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = AppDelegate.h; path = testHotUpdate/AppDelegate.h; sourceTree = "<group>"; };
 		13B07FB01A68108700A75B9A /* AppDelegate.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = AppDelegate.m; path = testHotUpdate/AppDelegate.m; sourceTree = "<group>"; };
@@ -27,17 +26,8 @@
 		13B07FB71A68108700A75B9A /* main.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = main.m; path = testHotUpdate/main.m; sourceTree = "<group>"; };
 		1A3E77317B15A5C3816ACE3A /* Pods-testHotUpdate.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-testHotUpdate.release.xcconfig"; path = "Target Support Files/Pods-testHotUpdate/Pods-testHotUpdate.release.xcconfig"; sourceTree = "<group>"; };
 		28C264AEBE1E206870F9D871 /* libPods-testHotUpdate.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-testHotUpdate.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		5975B699C3CC54D97D7D17AC /* Pods-testHotUpdate-tvOS.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-testHotUpdate-tvOS.debug.xcconfig"; path = "Target Support Files/Pods-testHotUpdate-tvOS/Pods-testHotUpdate-tvOS.debug.xcconfig"; sourceTree = "<group>"; };
 		84EBA9C1A760F4136B306391 /* Pods-testHotUpdate.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-testHotUpdate.debug.xcconfig"; path = "Target Support Files/Pods-testHotUpdate/Pods-testHotUpdate.debug.xcconfig"; sourceTree = "<group>"; };
-		8D1BC055E138B80CD38184D9 /* libPods-testHotUpdate-tvOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-testHotUpdate-tvOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		95A532A9388B822764C95FE7 /* libPods-testHotUpdateTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-testHotUpdateTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		9E6234BBCA688ADDFBCB18E0 /* Pods-testHotUpdate-tvOS.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-testHotUpdate-tvOS.release.xcconfig"; path = "Target Support Files/Pods-testHotUpdate-tvOS/Pods-testHotUpdate-tvOS.release.xcconfig"; sourceTree = "<group>"; };
-		A210EF57CA3ECCF4BA22ACD7 /* libPods-testHotUpdate-tvOSTests.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-testHotUpdate-tvOSTests.a"; sourceTree = BUILT_PRODUCTS_DIR; };
-		C29B96E519A1834F3DC4E653 /* Pods-testHotUpdateTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-testHotUpdateTests.debug.xcconfig"; path = "Target Support Files/Pods-testHotUpdateTests/Pods-testHotUpdateTests.debug.xcconfig"; sourceTree = "<group>"; };
-		DBD82A01837CBC988265B839 /* Pods-testHotUpdate-tvOSTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-testHotUpdate-tvOSTests.debug.xcconfig"; path = "Target Support Files/Pods-testHotUpdate-tvOSTests/Pods-testHotUpdate-tvOSTests.debug.xcconfig"; sourceTree = "<group>"; };
-		ED1DB2CEADC1A82A43867C0E /* Pods-testHotUpdateTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-testHotUpdateTests.release.xcconfig"; path = "Target Support Files/Pods-testHotUpdateTests/Pods-testHotUpdateTests.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		ED2971642150620600B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = Platforms/AppleTVOS.platform/Developer/SDKs/AppleTVOS12.0.sdk/System/Library/Frameworks/JavaScriptCore.framework; sourceTree = DEVELOPER_DIR; };
 		F1CBCFD524FE1CF80019170D /* testHotUpdate-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "testHotUpdate-Bridging-Header.h"; sourceTree = "<group>"; };
 		F1CBCFD624FE1CF80019170D /* dummy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = dummy.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -59,12 +49,6 @@
 			children = (
 				84EBA9C1A760F4136B306391 /* Pods-testHotUpdate.debug.xcconfig */,
 				1A3E77317B15A5C3816ACE3A /* Pods-testHotUpdate.release.xcconfig */,
-				5975B699C3CC54D97D7D17AC /* Pods-testHotUpdate-tvOS.debug.xcconfig */,
-				9E6234BBCA688ADDFBCB18E0 /* Pods-testHotUpdate-tvOS.release.xcconfig */,
-				DBD82A01837CBC988265B839 /* Pods-testHotUpdate-tvOSTests.debug.xcconfig */,
-				0583A8BB0D57980C590354CD /* Pods-testHotUpdate-tvOSTests.release.xcconfig */,
-				C29B96E519A1834F3DC4E653 /* Pods-testHotUpdateTests.debug.xcconfig */,
-				ED1DB2CEADC1A82A43867C0E /* Pods-testHotUpdateTests.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -89,11 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
-				ED2971642150620600B7C4FE /* JavaScriptCore.framework */,
 				28C264AEBE1E206870F9D871 /* libPods-testHotUpdate.a */,
-				8D1BC055E138B80CD38184D9 /* libPods-testHotUpdate-tvOS.a */,
-				A210EF57CA3ECCF4BA22ACD7 /* libPods-testHotUpdate-tvOSTests.a */,
-				95A532A9388B822764C95FE7 /* libPods-testHotUpdateTests.a */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -262,10 +242,12 @@
 			);
 			inputPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-testHotUpdate/Pods-testHotUpdate-frameworks.sh",
+				"${PODS_XCFRAMEWORKS_BUILD_DIR}/double-conversion/double-conversion.framework/double-conversion",
 				"${PODS_XCFRAMEWORKS_BUILD_DIR}/OpenSSL/OpenSSL.framework/OpenSSL",
 			);
 			name = "[CP] Embed Pods Frameworks";
 			outputPaths = (
+				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/double-conversion.framework",
 				"${TARGET_BUILD_DIR}/${FRAMEWORKS_FOLDER_PATH}/OpenSSL.framework",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
