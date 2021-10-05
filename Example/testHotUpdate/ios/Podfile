@@ -16,7 +16,7 @@ target 'testHotUpdate' do
   #
   # Note that if you have use_frameworks! enabled, Flipper will not work and
   # you should disable the next line.
-  use_flipper!()
+  use_flipper!({ "Flipper-DoubleConversion" => "1.1.7" })
 
   post_install do |installer|
     react_native_post_install(installer)
