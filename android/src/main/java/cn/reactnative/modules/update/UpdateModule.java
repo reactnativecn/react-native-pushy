@@ -279,8 +279,17 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     public void getLocalHashInfo(final String hash, final Promise promise) {
         promise.resolve(updateContext.getKv("hash_" + hash));
     }
-    
 
+    @ReactMethod
+    public void addListener(String eventName) {
+    // Set up any upstream listeners or background tasks as necessary
+    }
+
+    @ReactMethod
+    public void removeListeners(Integer count) {
+    // Remove upstream listeners, stop unnecessary background tasks
+    }
+    
     /* 发送事件*/
     public static void sendEvent(String eventName, WritableMap params) {
         ((ReactContext) mContext).getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName,
