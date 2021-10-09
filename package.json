@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "6.4.0",
+  "version": "6.5.0",
   "description": "react-native hot update",
   "main": "lib/index.js",
   "scripts": {
