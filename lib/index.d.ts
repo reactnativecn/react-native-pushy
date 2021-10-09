@@ -83,3 +83,5 @@ interface ProgressData {
   received: number;
   total: number;
 }
+
+export function simpleUpdate(wrappedComponent: any): any;
