@@ -25,7 +25,7 @@ import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 
-import static android.support.v4.content.FileProvider.getUriForFile;
+import static androidx.core.content.FileProvider.getUriForFile;
 
 public class UpdateModule extends ReactContextBaseJavaModule {
     UpdateContext updateContext;
