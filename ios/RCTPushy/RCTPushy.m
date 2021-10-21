@@ -120,6 +120,7 @@ RCT_EXPORT_MODULE(RCTPushy);
     
     NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
     NSString *lastVersion = pushyInfo[paramLastVersion];
+    NSString *curVersion = pushyInfo[paramCurrentVersion]; 
     NSString *curPackageVersion = [RCTPushy packageVersion];
     if (lastVersion.length) {
         // roll back to last version
@@ -133,7 +134,7 @@ RCT_EXPORT_MODULE(RCTPushy);
         // roll back to bundle
         [defaults setObject:nil forKey:keyPushyInfo];
     }
-    [defaults setObject:@(YES) forKey:keyRolledBackMarked];
+    [defaults setObject:curVersion forKey:keyRolledBackMarked];
     [defaults synchronize];
     return lastVersion;
 }
@@ -151,7 +152,7 @@ RCT_EXPORT_MODULE(RCTPushy);
     ret[@"downloadRootDir"] = [RCTPushy downloadDir];
     ret[@"packageVersion"] = [RCTPushy packageVersion];
     ret[@"buildTime"] = [RCTPushy buildTime];
-    ret[@"isRolledBack"] = [defaults objectForKey:keyRolledBackMarked];
+    ret[@"rolledBackVersion"] = [defaults objectForKey:keyRolledBackMarked];
     ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadMarked];
     ret[@"blockUpdate"] = [defaults objectForKey:keyBlockUpdate];
     ret[@"uuid"] = [defaults objectForKey:keyUuid];
@@ -159,12 +160,12 @@ RCT_EXPORT_MODULE(RCTPushy);
     ret[@"currentVersion"] = [pushyInfo objectForKey:paramCurrentVersion];
     
     // clear isFirstTimemarked
-    if ([[defaults objectForKey:keyFirstLoadMarked] boolValue]) {
+    if (ret[@"isFirstTime"]) {
         [defaults setObject:nil forKey:keyFirstLoadMarked];
     }
     
     // clear rolledbackmark
-    if ([[defaults objectForKey:keyRolledBackMarked] boolValue]) {
+    if (ret[@"rolledBackVersion"] != nil) {
         [defaults setObject:nil forKey:keyRolledBackMarked];
         [self clearInvalidFiles];
     }
@@ -268,9 +269,7 @@ RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
 RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 {
     NSString *hash = options[@"hash"];
-    if (hash.length <= 0) {
-        hash = options[@"hashName"];
-    }
+    
     if (hash.length) {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         NSString *lastVersion = nil;
@@ -294,9 +293,7 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
 RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
 {
     NSString *hash = options[@"hash"];
-    if (hash.length <= 0) {
-        hash = options[@"hashName"];
-    }
+
     if (hash.length) {
         [self setNeedUpdate:options];
         
@@ -359,9 +356,7 @@ RCT_EXPORT_METHOD(markSuccess)
 {
     NSString *updateUrl = [RCTConvert NSString:options[@"updateUrl"]];
     NSString *hash = [RCTConvert NSString:options[@"hash"]];
-    if (hash.length <= 0) {
-        hash = [RCTConvert NSString:options[@"hashName"]];;
-    }
+
     if (updateUrl.length <= 0 || hash.length <= 0) {
         callback([self errorWithMessage:ERROR_OPTIONS]);
         return;

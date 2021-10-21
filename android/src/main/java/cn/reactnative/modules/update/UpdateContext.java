@@ -152,7 +152,7 @@ public class UpdateContext {
         }
         editor.putBoolean("firstTime", true);
         editor.putBoolean("firstTimeOk", false);
-        editor.putBoolean("rolledBack", false);
+        editor.putString("rolledBackVersion", null);
         editor.apply();
     }
 
@@ -181,8 +181,8 @@ public class UpdateContext {
         return sp.getBoolean("firstTime", false);
     }
 
-    public boolean isRolledBack() {
-        return sp.getBoolean("rolledBack", false);
+    public String rolledBackVersion() {
+        return sp.getString("rolledBackVersion", null);
     }
 
     public void markSuccess() {
@@ -209,7 +209,7 @@ public class UpdateContext {
 
     public void clearRollbackMark() {
         SharedPreferences.Editor editor = sp.edit();
-        editor.putBoolean("rolledBack", false);
+        editor.putString("rolledBackVersion", null);
         editor.apply();
 
         this.cleanUp();
@@ -265,6 +265,7 @@ public class UpdateContext {
 
     private String rollBack() {
         String lastVersion = sp.getString("lastVersion", null);
+        String currentVersion = sp.getString("currentVersion", null);
         SharedPreferences.Editor editor = sp.edit();
         if (lastVersion == null) {
             editor.remove("currentVersion");
@@ -273,7 +274,7 @@ public class UpdateContext {
         }
         editor.putBoolean("firstTimeOk", true);
         editor.putBoolean("firstTime", false);
-        editor.putBoolean("rolledBack", true);
+        editor.putString("rolledBackVersion", currentVersion);
         editor.apply();
         return lastVersion;
     }

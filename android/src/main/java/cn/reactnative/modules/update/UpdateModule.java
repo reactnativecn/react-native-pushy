@@ -54,9 +54,9 @@ public class UpdateModule extends ReactContextBaseJavaModule {
         if (isFirstTime) {
             updateContext.clearFirstTime();
         }
-        boolean isRolledBack = updateContext.isRolledBack();
-        constants.put("isRolledBack", isRolledBack);
-        if (isRolledBack) {
+        String rolledBackVersion = updateContext.rolledBackVersion();
+        constants.put("rolledBackVersion", rolledBackVersion);
+        if (rolledBackVersion != null) {
             updateContext.clearRollbackMark();
         }
         constants.put("blockUpdate", updateContext.getBlockUpdate());
@@ -134,9 +134,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     private void downloadPatchFromPackage(ReadableMap options, final Promise promise) {
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
-        if (hash == null) {
-            hash = options.getString("hashName");
-        }
+        
         updateContext.downloadPatchFromApk(url, hash, new UpdateContext.DownloadFileListener() {
             @Override
             public void onDownloadCompleted(DownloadTaskParams params) {
@@ -154,13 +152,9 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     private void downloadPatchFromPpk(ReadableMap options, final Promise promise) {
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
-        if (hash == null) {
-            hash = options.getString("hashName");
-        }
+        
         String originHash = options.getString("originHash");
-        if (originHash == null) {
-            originHash = options.getString(("originHashName"));
-        }
+        
         updateContext.downloadPatchFromPpk(url, hash, originHash, new UpdateContext.DownloadFileListener() {
             @Override
             public void onDownloadCompleted(DownloadTaskParams params) {
@@ -176,8 +170,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void reloadUpdate(ReadableMap options) {
-        final String hash = options.getString("hash") == null ?
-                options.getString("hashName") : options.getString("hash");
+        final String hash = options.getString("hash");
 
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
@@ -218,8 +211,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
 
     @ReactMethod
     public void setNeedUpdate(ReadableMap options) {
-        final String hash = options.getString("hash") == null ?
-                options.getString("hashName") : options.getString("hash");
+        final String hash = options.getString("hash");
 
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
