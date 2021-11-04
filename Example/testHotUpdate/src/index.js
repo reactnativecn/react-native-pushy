@@ -68,6 +68,9 @@ export default class App extends Component {
           });
         },
       });
+      if (!hash) {
+        return;
+      }
       Alert.alert('提示', '下载完毕,是否重启应用?', [
         {
           text: '是',
