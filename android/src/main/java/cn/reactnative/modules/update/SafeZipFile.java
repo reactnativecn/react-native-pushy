@@ -16,40 +16,6 @@ public class SafeZipFile extends ZipFile {
         super(file);
     }
 
-    @Override
-    public Enumeration<? extends ZipEntry> entries() {
-        return new SafeZipEntryIterator(super.entries());
-    }
-
-    private static class SafeZipEntryIterator implements Enumeration<ZipEntry> {
-
-        final private Enumeration<? extends ZipEntry> delegate;
-
-        private SafeZipEntryIterator(Enumeration<? extends ZipEntry> delegate) {
-            this.delegate = delegate;
-        }
-
-        @Override
-        public boolean hasMoreElements() {
-            return delegate.hasMoreElements();
-        }
-
-        @Override
-        public ZipEntry nextElement() {
-            ZipEntry entry = delegate.nextElement();
-            if (null != entry) {
-                String name = entry.getName();
-                /**
-                 * avoid ZipperDown
-                 */
-                if (null != name && (name.contains("../") || name.contains("..\\"))) {
-                    throw new SecurityException("illegal entry: " + entry.getName());
-                }
-            }
-            return entry;
-        }
-    }
-
     public void unzipToFile(ZipEntry entry, File output) throws IOException {
         InputStream inputStream = null;
         try {
@@ -63,6 +29,11 @@ public class SafeZipFile extends ZipFile {
     }
 
     private void writeOutInputStream(File file, InputStream inputStream) throws IOException {
+        // https://support.google.com/faqs/answer/9294009
+        String canonicalPath = file.getCanonicalPath();
+        if (!canonicalPath.startsWith(UpdateContext.getRootDir())) {
+            throw new SecurityException("illegal entry: " + file.getName());
+        }
         BufferedOutputStream output = null;
         try {
             output = new BufferedOutputStream(

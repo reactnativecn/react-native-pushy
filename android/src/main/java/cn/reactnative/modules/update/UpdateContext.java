@@ -19,12 +19,13 @@ import java.io.File;
 
 public class UpdateContext {
     private Context context;
-    private File rootDir;
+    private static File rootDir;
     private Executor executor;
 
     public static boolean DEBUG = false;
     private static ReactInstanceManager mReactInstanceManager;
     private static boolean isUsingBundleUrl = false;
+
 
     public UpdateContext(Context context) {
         this.context = context;
@@ -49,7 +50,7 @@ public class UpdateContext {
         }
     }
 
-    public String getRootDir() {
+    public static String getRootDir() {
         return rootDir.toString();
     }
 
