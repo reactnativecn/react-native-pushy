@@ -70,7 +70,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void downloadUpdate(ReadableMap options, final Promise promise) {
+    public void downloadFullUpdate(ReadableMap options, final Promise promise) {
         String url = options.getString("updateUrl");
         String hash = options.getString("hash");
         updateContext.downloadFullUpdate(url, hash, new UpdateContext.DownloadFileListener() {

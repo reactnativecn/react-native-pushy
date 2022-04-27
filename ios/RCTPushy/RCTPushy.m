@@ -224,7 +224,7 @@ RCT_EXPORT_METHOD(getLocalHashInfo:(NSString *)hash
     resolve([defaults stringForKey:[keyHashInfo stringByAppendingString:hash]]);
 }
 
-RCT_EXPORT_METHOD(downloadUpdate:(NSDictionary *)options
+RCT_EXPORT_METHOD(downloadFullUpdate:(NSDictionary *)options
                   resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
