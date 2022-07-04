@@ -84,4 +84,11 @@ interface ProgressData {
   total: number;
 }
 
-export function simpleUpdate(wrappedComponent: any): any;
+interface SimpleUpdateOptions {
+  appKey: string;
+}
+
+export function simpleUpdate(
+  wrappedComponent: any,
+  options: SimpleUpdateOptions,
+): any;
