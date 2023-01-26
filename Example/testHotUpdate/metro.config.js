@@ -1,6 +1,7 @@
 const path = require('path');
 
 const extraNodeModules = {
+  react: path.resolve(__dirname, 'node_modules/react'),
   'react-native': path.resolve(__dirname, 'node_modules/react-native'),
   'react-native-update': path.resolve(__dirname, '../..'),
   '@babel/runtime': path.resolve(__dirname, 'node_modules/@babel/runtime'),
