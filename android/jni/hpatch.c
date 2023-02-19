@@ -24,7 +24,7 @@ int hpatch_getInfo_by_mem(hpatch_singleCompressedDiffInfo* out_patinfo,
     mem_as_hStreamInput(&patStream,pat,pat+patsize);
     if (!getSingleCompressedDiffInfo(out_patinfo,&patStream,0))
         return kHPatch_error_info;//data error;
-    return kHPatch_ok; //ok              
+    return kHPatch_ok; //ok
 }
 
 static hpatch_TDecompress* getDecompressPlugin(const char* compressType){
@@ -68,7 +68,7 @@ static int hpatch_by_stream(const hpatch_TStreamInput* old,hpatch_BOOL isLoadOld
             _check(decompressPlugin,kHPatch_error_compressType);
         }
     }
-    {// mem 
+    {// mem
         size_t mem_size;
         size_t oldSize=(size_t)old->streamSize;
         isLoadOldAllToMem=isLoadOldAllToMem&&(old->streamSize<=kMaxLoadMemOldSize);
@@ -76,7 +76,7 @@ static int hpatch_by_stream(const hpatch_TStreamInput* old,hpatch_BOOL isLoadOld
         mem_size=temp_cache_size+(isLoadOldAllToMem?oldSize:0);
         temp_cache=malloc(mem_size);
         _check(temp_cache,kHPatch_error_malloc);
-        if (isLoadOldAllToMem){//load old to mem 
+        if (isLoadOldAllToMem){//load old to mem
             uint8_t* oldMem=temp_cache+temp_cache_size;
             _check(old->read(old,0,oldMem,oldMem+oldSize),kHPatch_error_old_fread);
             mem_as_hStreamInput(&_old,oldMem,oldMem+oldSize);
@@ -95,7 +95,7 @@ _clear:
 }
 
 int hpatch_by_mem(const uint8_t* old,size_t oldsize,uint8_t* newBuf,size_t newsize,
-                  const uint8_t* pat,size_t patsize,const hpatch_singleCompressedDiffInfo* patInfo){      
+                  const uint8_t* pat,size_t patsize,const hpatch_singleCompressedDiffInfo* patInfo){
     hpatch_TStreamInput oldStream;
     hpatch_TStreamInput patStream;
     hpatch_TStreamOutput newStream;

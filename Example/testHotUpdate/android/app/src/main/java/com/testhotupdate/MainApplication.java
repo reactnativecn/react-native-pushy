@@ -9,16 +9,17 @@ import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint;
 import com.facebook.react.defaults.DefaultReactNativeHost;
 import com.facebook.soloader.SoLoader;
 import java.util.List;
+
 import cn.reactnative.modules.update.UpdateContext;
+
 public class MainApplication extends Application implements ReactApplication {
 
   private final ReactNativeHost mReactNativeHost =
       new DefaultReactNativeHost(this) {
-        @Override
-        protected String getJSBundleFile() {
-            return UpdateContext.getBundleUrl(MainApplication.this);
-        }
-        
+          @Override
+          protected String getJSBundleFile() {
+              return UpdateContext.getBundleUrl(MainApplication.this);
+          }
         @Override
         public boolean getUseDeveloperSupport() {
           return BuildConfig.DEBUG;

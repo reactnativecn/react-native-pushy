@@ -1,7 +1,5 @@
 package cn.reactnative.modules.update;
 
-import android.content.Context;
-
 import java.io.File;
 
 /**
