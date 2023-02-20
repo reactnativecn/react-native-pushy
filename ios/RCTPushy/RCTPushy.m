@@ -3,7 +3,7 @@
 #import "RCTPushyManager.h"
 // Thanks to this guard, we won't import this header when we build for the old architecture.
 #ifdef RCT_NEW_ARCH_ENABLED
-#import "RNUpdateSpec.h"
+#import "RCTPushySpec.h"
 #endif
 
 #import <React/RCTConvert.h>

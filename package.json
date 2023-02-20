@@ -34,7 +34,7 @@
   "codegenConfig": {
     "libraries": [
         {
-        "name": "RNUpdateSpec",
+        "name": "RCTPushySpec",
         "type": "modules",
         "jsSrcsDir": "lib"
         }

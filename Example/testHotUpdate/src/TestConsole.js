@@ -1,21 +1,23 @@
-import React from 'react';
+/* eslint-disable react-native/no-inline-styles */
+/* eslint-disable react/react-in-jsx-scope */
+import {useState} from 'react';
 import {
   ActivityIndicator,
   Alert,
   Modal,
   TextInput,
   Button,
-  NativeModules,
   StyleSheet,
   SafeAreaView,
   Text,
   View,
 } from 'react-native';
 
-const Pushy = NativeModules.Pushy;
+import {PushyModule} from 'react-native-update';
+
 export default function TestConsole({visible}) {
-  const [text, setText] = React.useState('');
-  const [running, setRunning] = React.useState(false);
+  const [text, setText] = useState('');
+  const [running, setRunning] = useState(false);
   return (
     <Modal visible={visible}>
       <SafeAreaView style={{flex: 1, padding: 10}}>
@@ -47,7 +49,7 @@ export default function TestConsole({visible}) {
               const methodName = inputs[0];
               let params;
               if (inputs.length === 1) {
-                await Pushy[methodName]();
+                await PushyModule[methodName]();
               } else {
                 if (inputs.length === 2) {
                   params = inputs[1];
@@ -58,7 +60,7 @@ export default function TestConsole({visible}) {
                   }
                   console.log({inputs, params});
                 }
-                await Pushy[methodName](params);
+                await PushyModule[methodName](params);
               }
               Alert.alert('done');
             } catch (e) {
