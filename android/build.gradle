@@ -5,7 +5,15 @@ def safeExtGet(prop, fallback) {
     rootProject.ext.has(prop) ? rootProject.ext.get(prop) : fallback
 }
 
+def isNewArchitectureEnabled() {
+    return project.hasProperty("newArchEnabled") && project.newArchEnabled == "true"
+}
+
 apply plugin: 'com.android.library'
+if (isNewArchitectureEnabled()) {
+    apply plugin: 'com.facebook.react'
+}
+
 
 android {
     compileSdkVersion safeExtGet('compileSdkVersion', 28)
@@ -17,11 +25,17 @@ android {
         versionCode 1
         versionName "1.0"
         consumerProguardFiles "proguard.pro"
+        buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
     }
     sourceSets {
         main {
             // let gradle pack the shared library into apk
             jniLibs.srcDirs = ['./lib']
+            if (isNewArchitectureEnabled()) {
+                java.srcDirs += ['src/newarch']
+            } else {
+                java.srcDirs += ['src/oldarch']
+            }
         }
     }
 
@@ -44,4 +58,11 @@ repositories {
 
 dependencies {
     implementation 'com.facebook.react:react-native:+'
+}
+if (isNewArchitectureEnabled()) {
+    react {
+        jsRootDir = file("../lib/")
+        libraryName = "update"
+        codegenJavaPackageName = "cn.reactnative.modules.update"
+    }
 }

@@ -1,5 +1,5 @@
-// hpatch.h 
-// import HDiffPatch, support patchData created by "hdiffz -SD -c-lzma2 oldfile newfile patchfile" 
+// hpatch.h
+// import HDiffPatch, support patchData created by "hdiffz -SD -c-lzma2 oldfile newfile patchfile"
 // Copyright 2021 housisong, All rights reserved
 
 #ifndef HDIFFPATCH_PATCH_H
