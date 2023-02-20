@@ -127,7 +127,18 @@ public class UpdateModule extends NativeUpdateSpec {
     public void getLocalHashInfo(final String hash, final Promise promise) {
         UpdateModuleImpl.getLocalHashInfo(updateContext,hash,promise);
     }
-    
+
+    @Override
+    public void addListener(String eventName) {
+        // Set up any upstream listeners or background tasks as necessary
+    }
+
+    @Override
+    public void removeListeners(double count) {
+        // Remove upstream listeners, stop unnecessary background tasks
+    }
+
+
     /* 发送事件*/
     public static void sendEvent(String eventName, WritableMap params) {
         ((ReactContext) mContext).getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(eventName,
