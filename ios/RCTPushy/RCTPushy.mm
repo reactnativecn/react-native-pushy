@@ -192,29 +192,53 @@ RCT_EXPORT_MODULE(RCTPushy);
     return self;
 }
 
-RCT_EXPORT_METHOD(setBlockUpdate:(NSDictionary *)options)
+RCT_EXPORT_METHOD(setBlockUpdate:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                                    rejecter:(RCTPromiseRejectBlock)reject)
 {
     // NSMutableDictionary *blockUpdateInfo = [NSMutableDictionary new];
     // blockUpdateInfo[@"reason"] = options[@"reason"];
     // blockUpdateInfo[@"until"] = options[@"until"];
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setObject:options forKey:keyBlockUpdate];
-    [defaults synchronize];
+    @try {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:options forKey:keyBlockUpdate];
+        [defaults synchronize];
+        resolve(@true);
+    }
+    @catch (NSException *exception) {
+        reject(@"执行报错", nil, nil);
+    }
 }
 
-RCT_EXPORT_METHOD(setUuid:(NSString *)uuid)
+RCT_EXPORT_METHOD(setUuid:(NSString *)uuid  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setObject:uuid forKey:keyUuid];
-    [defaults synchronize];
+    @try {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:uuid forKey:keyUuid];
+        [defaults synchronize];
+        resolve(@true);
+    }
+    @catch (NSException *exception) {
+        reject(@"json格式校验报错", nil, nil);
+    }
 }
 
 RCT_EXPORT_METHOD(setLocalHashInfo:(NSString *)hash
-                  value:(NSString *)value)
+                  value:(NSString *)value resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 {
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setObject:value forKey:[keyHashInfo stringByAppendingString:hash]];
-    [defaults synchronize];
+    NSData *data = [value dataUsingEncoding:NSUTF8StringEncoding];
+    NSError *error = nil;
+    id object = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+    if (object && [object isKindOfClass:[NSDictionary class]]) {
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        [defaults setObject:value forKey:[keyHashInfo stringByAppendingString:hash]];
+        [defaults synchronize];
+        resolve(@true);
+    } else {
+        reject(@"json格式校验报错", nil, nil);
+    }
 }
 
 
@@ -269,7 +293,9 @@ RCT_EXPORT_METHOD(downloadPatchFromPpk:(NSDictionary *)options
     }];
 }
 
-RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
+RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
 {
     NSString *hash = options[@"hash"];
     
@@ -290,45 +316,66 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options)
         [defaults setObject:newInfo forKey:keyPushyInfo];
         
         [defaults synchronize];
+        resolve(@true);
+    }else{
+        reject(@"执行报错", nil, nil);
     }
 }
 
-RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options)
+RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                                    rejecter:(RCTPromiseRejectBlock)reject)
 {
-    NSString *hash = options[@"hash"];
-
-    if (hash.length) {
-        [self setNeedUpdate:options];
-        
-        // reload 0.62+
-        // RCTReloadCommandSetBundleURL([[self class] bundleURL]);
-        // RCTTriggerReloadCommandListeners(@"pushy reload");
-        
-       dispatch_async(dispatch_get_main_queue(), ^{
-           [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
-           [self.bridge reload];
-       });
+    @try {
+        NSString *hash = options[@"hash"];
+        if (hash.length) {
+            [self setNeedUpdate:options resolver:resolve rejecter:reject];
+            
+            // reload 0.62+
+            // RCTReloadCommandSetBundleURL([[self class] bundleURL]);
+            // RCTTriggerReloadCommandListeners(@"pushy reload");
+            
+           dispatch_async(dispatch_get_main_queue(), ^{
+               [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
+               [self.bridge reload];
+           });
+            resolve(@true);
+        }else{
+            reject(@"执行报错", nil, nil);
+        }
+    }
+    @catch (NSException *exception) {
+        reject(@"执行报错", nil, nil);
     }
 }
 
-RCT_EXPORT_METHOD(markSuccess)
+RCT_EXPORT_METHOD(markSuccess:
+                  resolver:(RCTPromiseResolveBlock)resolve
+                                    rejecter:(RCTPromiseRejectBlock)reject)
 {
-    // up package info
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableDictionary *pushyInfo = [[NSMutableDictionary alloc] initWithDictionary:[defaults objectForKey:keyPushyInfo]];
-    [pushyInfo setObject:@(NO) forKey:paramIsFirstTime];
-    [pushyInfo setObject:@(YES) forKey:paramIsFirstLoadOk];
     
-    NSString *lastVersion = pushyInfo[paramLastVersion];
-    NSString *curVersion = pushyInfo[paramCurrentVersion];
-    if (lastVersion != nil && ![lastVersion isEqualToString:curVersion]) {
-        [pushyInfo removeObjectForKey:[keyHashInfo stringByAppendingString:lastVersion]];
+    @try {
+        // up package info
+        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+        NSMutableDictionary *pushyInfo = [[NSMutableDictionary alloc] initWithDictionary:[defaults objectForKey:keyPushyInfo]];
+        [pushyInfo setObject:@(NO) forKey:paramIsFirstTime];
+        [pushyInfo setObject:@(YES) forKey:paramIsFirstLoadOk];
+        
+        NSString *lastVersion = pushyInfo[paramLastVersion];
+        NSString *curVersion = pushyInfo[paramCurrentVersion];
+        if (lastVersion != nil && ![lastVersion isEqualToString:curVersion]) {
+            [pushyInfo removeObjectForKey:[keyHashInfo stringByAppendingString:lastVersion]];
+        }
+        [defaults setObject:pushyInfo forKey:keyPushyInfo];
+        [defaults synchronize];
+        
+        // clear other package dir
+        [self clearInvalidFiles];
+        resolve(@true);
     }
-    [defaults setObject:pushyInfo forKey:keyPushyInfo];
-    [defaults synchronize];
-    
-    // clear other package dir
-    [self clearInvalidFiles];
+    @catch (NSException *exception) {
+        reject(@"执行报错", nil, nil);
+    }
 }
 
 
@@ -354,6 +401,19 @@ RCT_EXPORT_METHOD(markSuccess)
     // Remove upstream listeners, stop unnecessary background tasks
 }
 
+- (BOOL) isBlankString:(NSString *)string {
+    if (string == nil || string == NULL) {
+        return YES;
+    }
+    if ([string isKindOfClass:[NSNull class]]) {
+        return YES;
+    }
+    if ([[string stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] length]==0) {
+        return YES;
+    }
+    return NO;
+}
+
 
 - (void)doPushy:(PushyType)type options:(NSDictionary *)options callback:(void (^)(NSError *error))callback
 {
@@ -365,7 +425,7 @@ RCT_EXPORT_METHOD(markSuccess)
         return;
     }
     NSString *originHash = [RCTConvert NSString:options[@"originHash"]];
-    if (type == PushyTypePatchFromPpk && originHash <= 0) {
+    if (type == PushyTypePatchFromPpk && [self isBlankString:originHash]) {
         callback([self errorWithMessage:ERROR_OPTIONS]);
         return;
     }
@@ -570,7 +630,7 @@ RCT_EXPORT_METHOD(markSuccess)
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {
-    return std::make_shared<facebook::react::NativeCalculatorSpecJSI>(params);
+    return std::make_shared<facebook::react::NativeUpdateSpecJSI>(params);
 }
 #endif
 

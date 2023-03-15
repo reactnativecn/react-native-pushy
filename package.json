@@ -7,7 +7,23 @@
     "prepublish": "yarn submodule",
     "submodule": "git submodule update --init --recursive",
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build-lib": "yarn submodule && $ANDROID_HOME/ndk/20.1.5948944/ndk-build NDK_PROJECT_PATH=android APP_BUILD_SCRIPT=android/jni/Android.mk NDK_APPLICATION_MK=android/jni/Application.mk NDK_LIBS_OUT=android/lib"
+    "build-lib": "yarn submodule && $ANDROID_HOME/ndk/20.1.5948944/ndk-build NDK_PROJECT_PATH=android APP_BUILD_SCRIPT=android/jni/Android.mk NDK_APPLICATION_MK=android/jni/Application.mk NDK_LIBS_OUT=android/lib",
+    "build:ios": "cd Example/testHotUpdate && detox build --configuration ios.sim.debug",
+    "build:ios-debug": "cd Example/testHotUpdate && detox build --configuration ios.sim.debug",
+    "build:ios-release": "cd Example/testHotUpdate && detox build --configuration ios.sim.release",
+    "build:android-debug": "cd Example/testHotUpdate && detox build --configuration android.emu.debug",
+    "build:android-release": "cd Example/testHotUpdate && detox build --configuration android.emu.release",
+    "test:ios": "cd Example/testHotUpdate && detox test --configuration ios.sim.debug",
+    "test:ios-debug": "cd Example/testHotUpdate && detox test --configuration ios.sim.debug",
+    "test:ios-release": "cd Example/testHotUpdate && detox test --configuration ios.sim.release",
+    "test:android-debug": "cd Example/testHotUpdate && detox test --configuration android.emu.debug",
+    "test:android-release": "cd Example/testHotUpdate && ./node_modules/.bin/nyc yarn detox test --configuration android.emu.debug",
+    "e2e:ios": "npm run build:ios-release && npm run test:ios-release",
+    "e2e:android": "npm run build:android-release && npm run test:android-release",
+    "tests:emulator:prepare": "cd .github/workflows/scripts/functions && yarn && yarn build",
+    "tests:emulator:start-ci": "yarn tests:emulator:prepare && cd ./.github/workflows/scripts && ./start-firebase-emulator.sh",
+    "tests:packager:jet-ci": "cd Example/testHotUpdate && cross-env TMPDIR=$HOME/.metro REACT_DEBUGGER=\"echo nope\" node_modules/.bin/react-native start --no-interactive",
+    "tests:ios:pod:install": "rm -rf ios/RCTPushy.xcworkspace && yarn pod-install"
   },
   "repository": {
     "type": "git",
@@ -33,11 +49,14 @@
   },
   "codegenConfig": {
     "libraries": [
-        {
+      {
         "name": "RCTPushySpec",
         "type": "modules",
         "jsSrcsDir": "lib"
-        }
+      }
     ]
-}
+  },
+  "devDependencies": {
+    "firebase-tools": "^11.24.1"
+  }
 }

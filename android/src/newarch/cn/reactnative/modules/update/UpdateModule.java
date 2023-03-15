@@ -94,33 +94,33 @@ public class UpdateModule extends NativeUpdateSpec {
     }
 
     @Override
-    public void reloadUpdate(ReadableMap options) {
-        UpdateModuleImpl.reloadUpdate(updateContext, mContext, options);
+    public void reloadUpdate(ReadableMap options,Promise promise) {
+        UpdateModuleImpl.reloadUpdate(updateContext, mContext, options,promise);
     }
 
     @Override
-    public void setNeedUpdate(ReadableMap options) {
-        UpdateModuleImpl.setNeedUpdate(updateContext, options);
+    public void setNeedUpdate(ReadableMap options,Promise promise) {
+        UpdateModuleImpl.setNeedUpdate(updateContext, options,promise);
     }
 
     @Override
-    public void markSuccess() {
-        UpdateModuleImpl.markSuccess(updateContext);
+    public void markSuccess(Promise promise) {
+        UpdateModuleImpl.markSuccess(updateContext,promise);
     }
 
     @Override
-    public void setBlockUpdate(ReadableMap options) {
-        UpdateModuleImpl.setBlockUpdate(updateContext,options);
+    public void setBlockUpdate(ReadableMap options,Promise promise) {
+        UpdateModuleImpl.setBlockUpdate(updateContext,options,promise);
     }
 
     @Override
-    public void setUuid(final String uuid) {
-        UpdateModuleImpl.setUuid(updateContext,uuid);
+    public void setUuid(final String uuid, Promise promise) {
+        UpdateModuleImpl.setUuid(updateContext,uuid,promise);
     }
 
     @Override
-    public void setLocalHashInfo(final String hash, final String info) {
-        UpdateModuleImpl.setLocalHashInfo(updateContext,hash,info);
+    public void setLocalHashInfo(final String hash, final String info, final Promise promise) {
+        UpdateModuleImpl.setLocalHashInfo(updateContext,hash,info,promise);
     }
 
     @Override
