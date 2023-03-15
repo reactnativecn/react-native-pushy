@@ -22,7 +22,7 @@
     "e2e:android": "npm run build:android-release && npm run test:android-release",
     "tests:emulator:prepare": "cd .github/workflows/scripts/functions && yarn && yarn build",
     "tests:emulator:start-ci": "yarn tests:emulator:prepare && cd ./.github/workflows/scripts && ./start-firebase-emulator.sh",
-    "tests:packager:jet-ci": "cd Example/testHotUpdate && cross-env TMPDIR=$HOME/.metro REACT_DEBUGGER=\"echo nope\" node_modules/.bin/react-native start --no-interactive",
+    "tests:packager:jet-ci": "sudo cd Example/testHotUpdate && cross-env TMPDIR=$HOME/.metro REACT_DEBUGGER=\"echo nope\" node_modules/.bin/react-native start --no-interactive",
     "tests:ios:pod:install": "rm -rf ios/RCTPushy.xcworkspace && yarn pod-install"
   },
   "repository": {
