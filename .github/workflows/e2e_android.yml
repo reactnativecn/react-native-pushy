@@ -19,8 +19,7 @@ on:
 
   push:
     branches:
-      - main
-      - v14-release
+      - master
     paths-ignore:
       - 'docs/**'
       - 'website/**'
