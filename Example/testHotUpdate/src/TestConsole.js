@@ -114,7 +114,7 @@ export default function TestConsole({visible}) {
           onPress={() => {
             NativeTestMethod[i].invoke();
           }}
-          style={{width: 10, height: 10, backgroundColor: 'red'}}
+          style={{width: 10, height: 10}}
         />,
       );
     }

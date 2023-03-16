@@ -24,21 +24,6 @@ module.exports = {
       build:
         'export RCT_NO_LAUNCH_PACKAGER=true && xcodebuild -workspace ios/testHotUpdate.xcworkspace -UseNewBuildSystem=NO -scheme testHotUpdate -configuration Release -sdk iphonesimulator -derivedDataPath ios/build -quiet',
     },
-    'ios.debug': {
-      type: 'ios.app',
-      binaryPath:
-        'ios/build/Build/Products/Debug-iphonesimulator/testHotUpdate.app',
-      build:
-        'xcodebuild -workspace ios/testHotUpdate.xcworkspace -UseNewBuildSystem=NO -scheme testHotUpdate -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build',
-      start: 'scripts/start-rn.sh ios',
-    },
-    'android.debug': {
-      type: 'android.apk',
-      binaryPath: 'android/app/build/outputs/apk/debug/app-debug.apk',
-      build:
-        'cd android ; ./gradlew assembleDebug assembleAndroidTest -DtestBuildType=debug ; cd -',
-      start: 'scripts/start-rn.sh android',
-    },
     'android.release': {
       type: 'android.apk',
       binaryPath: 'android/app/build/outputs/apk/release/app-release.apk',
