@@ -41,7 +41,6 @@ local.properties
 node_modules/
 npm-debug.log
 
-Example/**/update.json
 Example/**/.update
 Example/**/.pushy
 yarn-error.log

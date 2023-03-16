@@ -159,6 +159,18 @@ jobs:
           key: ${{ runner.os }}-metro-v1-${{ github.run_id }}
           restore-keys: ${{ runner.os }}-metro-v1
 
+      - name: Pre-fetch Javascript bundle
+        run: |
+          nohup yarn tests:packager:jet-ci &
+          printf 'Waiting for packager to come online'
+          until curl --output /dev/null --silent --head --fail http://localhost:8081/status; do
+            printf '.'
+            sleep 2
+          done
+          echo "Packager is online! Preparing bundle..."
+          curl --output /dev/null --silent --head --fail "http://localhost:8081/index.bundle?platform=ios&dev=true&minify=false&inlineSourceMap=true"
+          echo "...javascript bundle ready"
+
       - name: Create Simulator Log
         # With a little delay so the detox test below has time to spawn it, missing the first part of boot is fine
         # If you boot the simulator separately from detox, some other race fails and detox testee never sends ready to proxy
