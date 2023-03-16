@@ -44,7 +44,7 @@ module.exports = {
       headless: Boolean(process.env.CI),
       gpuMode: process.env.CI ? 'off' : undefined,
       device: {
-        avdName: 'Pixel_3a_API_33_arm64-v8a',
+        avdName: 'TestingAVD',
       },
       utilBinaryPaths: ['./cache/test-butler-app.apk'],
     },
@@ -58,7 +58,7 @@ module.exports = {
     'genymotion.emulator.name': {
       type: 'android.genycloud',
       device: {
-        recipeName: 'Pixel_3a_API_33_arm64-v8a',
+        recipeName: 'TestingAVD',
       },
       utilBinaryPaths: ['./cache/test-butler-app.apk'],
     },
