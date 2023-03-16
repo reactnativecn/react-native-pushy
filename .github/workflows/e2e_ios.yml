@@ -111,9 +111,12 @@ jobs:
           restore-keys: ${{ runner.os }}-pods-v2
 
       - name: Pod Install
-        run: |
-          gem update cocoapods xcodeproj
-          cd ios && pod install && cd ..
+        uses: nick-invision/retry@v2
+        with:
+          timeout_minutes: 10
+          retry_wait_seconds: 30
+          max_attempts: 3
+          command: yarn tests:ios:pod:install
 
       - name: Cache Firestore Emulator
         uses: actions/cache@v3
