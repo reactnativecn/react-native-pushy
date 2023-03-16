@@ -21,14 +21,12 @@ module.exports = {
       type: 'ios.app',
       binaryPath:
         'ios/build/Build/Products/Release-iphonesimulator/testHotUpdate.app',
-      build:
-        'export RCT_NO_LAUNCH_PACKAGER=true && xcodebuild -workspace ios/testHotUpdate.xcworkspace -UseNewBuildSystem=NO -scheme testHotUpdate -configuration Release -sdk iphonesimulator -derivedDataPath ios/build -quiet',
+        "build": "export RCT_NO_LAUNCH_PACKAGER=true && set -o pipefail | xcodebuild  CC=clang CPLUSPLUS=clang++ LD=clang LDPLUSPLUS=clang++ -workspace ios/testHotUpdate.xcworkspace -scheme testHotUpdate -configuration Release -sdk iphonesimulator -derivedDataPath ios/build | xcbeautify",
     },
     'android.release': {
       type: 'android.apk',
       binaryPath: 'android/app/build/outputs/apk/release/app-release.apk',
-      build:
-        'cd android ; ./gradlew assembleRelease assembleAndroidTest -DtestBuildType=release ; cd -',
+      build: "cd android && ./gradlew assembleRelease assembleAndroidTest -DtestBuildType=release && cd ..",
     },
   },
   devices: {
