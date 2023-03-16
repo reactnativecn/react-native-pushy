@@ -23,7 +23,7 @@
     "tests:emulator:prepare": "cd .github/workflows/scripts/functions && yarn && yarn build",
     "tests:emulator:start-ci": "yarn tests:emulator:prepare && cd ./.github/workflows/scripts && ./start-firebase-emulator.sh",
     "tests:packager:jet-ci": "cd Example/testHotUpdate && cross-env TMPDIR=$HOME/.metro REACT_DEBUGGER=\"echo nope\" node_modules/.bin/react-native start --no-interactive",
-    "tests:ios:pod:install": "cd Example/testHotUpdate/ios && rm -rf RCTPushy.xcworkspace && yarn pod-install"
+    "tests:ios:pod:install": "yarn && cd Example/testHotUpdate/ios && rm -rf RCTPushy.xcworkspace && yarn pod-install"
   },
   "repository": {
     "type": "git",

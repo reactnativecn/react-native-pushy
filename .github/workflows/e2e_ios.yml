@@ -116,7 +116,7 @@ jobs:
           timeout_minutes: 10
           retry_wait_seconds: 30
           max_attempts: 3
-          command: yarn && yarn tests:ios:pod:install
+          command: yarn tests:ios:pod:install
 
       - name: Cache Firestore Emulator
         uses: actions/cache@v3
