@@ -59,77 +59,77 @@ jobs:
         with:
           node-version: 16
 
-      # - name: Configure JDK 1.11
-      #   uses: actions/setup-java@v3
-      #   with:
-      #     distribution: 'temurin'
-      #     java-version: '11'
+      - name: Configure JDK 1.11
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '11'
 
-      # # Set path variables needed for caches
-      # - name: Set workflow variables
-      #   id: workflow-variables
-      #   run: |
-      #     echo "metro-cache=$HOME/.metro" >> $GITHUB_OUTPUT
-      #     echo "yarn-cache-dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
-      #     echo "tempdir=$TMPDIR" >> $GITHUB_OUTPUT
+      # Set path variables needed for caches
+      - name: Set workflow variables
+        id: workflow-variables
+        run: |
+          echo "metro-cache=$HOME/.metro" >> $GITHUB_OUTPUT
+          echo "yarn-cache-dir=$(yarn cache dir)" >> $GITHUB_OUTPUT
+          echo "tempdir=$TMPDIR" >> $GITHUB_OUTPUT
 
-      # - uses: actions/cache@v3
-      #   name: Yarn Cache
-      #   id: yarn-cache
-      #   with:
-      #     path: ${{ steps.workflow-variables.outputs.yarn-cache-dir }}
-      #     key: ${{ runner.os }}-yarn-v1-${{ hashFiles('yarn.lock') }}
-      #     restore-keys: ${{ runner.os }}-yarn-v1
+      - uses: actions/cache@v3
+        name: Yarn Cache
+        id: yarn-cache
+        with:
+          path: ${{ steps.workflow-variables.outputs.yarn-cache-dir }}
+          key: ${{ runner.os }}-yarn-v1-${{ hashFiles('yarn.lock') }}
+          restore-keys: ${{ runner.os }}-yarn-v1
 
-      # - name: Yarn Install
-      #   uses: nick-invision/retry@v2
-      #   with:
-      #     timeout_minutes: 10
-      #     retry_wait_seconds: 60
-      #     max_attempts: 3
-      #     command: DETOX_DISABLE_POSTINSTALL=1 yarn --no-audit --prefer-offline
+      - name: Yarn Install
+        uses: nick-invision/retry@v2
+        with:
+          timeout_minutes: 10
+          retry_wait_seconds: 60
+          max_attempts: 3
+          command: DETOX_DISABLE_POSTINSTALL=1 yarn --no-audit --prefer-offline
 
-      # - name: Cache pushy Emulator
-      #   uses: actions/cache@v3
-      #   with:
-      #     path: ~/.cache/pushy/emulators
-      #     key: pushy-emulators-v1-${{ github.run_id }}
-      #     restore-keys: pushy-emulators-v1
+      - name: Cache pushy Emulator
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pushy/emulators
+          key: pushy-emulators-v1-${{ github.run_id }}
+          restore-keys: pushy-emulators-v1
 
-      # - name: Start pushy Emulator
-      #   run: yarn tests:emulator:start-ci
+      - name: Start pushy Emulator
+        run: yarn tests:emulator:start-ci
 
-      # - uses: actions/cache@v3
-      #   name: Gradle Cache
-      #   with:
-      #     path: ~/.gradle/caches
-      #     key: ${{ runner.os }}-gradle-v1-${{ hashFiles('**/*.gradle*') }}
-      #     restore-keys: ${{ runner.os }}-gradle-v1
+      - uses: actions/cache@v3
+        name: Gradle Cache
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-v1-${{ hashFiles('**/*.gradle*') }}
+          restore-keys: ${{ runner.os }}-gradle-v1
 
-      #   # This appears to be 'Cache Size: ~1230 MB (1290026823 B)' based on watching action logs
-      #   # Repo limit is 10GB; branch caches are independent; branches may read default branch cache.
-      #   # We don't want branches to evict master branch snapshot, so save on master, read-only all else
-      # - name: AVD cache
-      #   uses: actions/cache@v3
-      #   id: avd-cache
-      #   with:
-      #     path: |
-      #       ~/.android/avd/*
-      #       ~/.android/adb*
-      #     key: avd-${{ matrix.api-level }}-${{ matrix.arch }}-${{matrix.target}}-v1-${{ github.event.inputs.clearCaches }}
-      #     restore-keys: |
-      #       avd-${{ matrix.api-level }}-${{ matrix.arch }}-${{matrix.target}}-v1
+        # This appears to be 'Cache Size: ~1230 MB (1290026823 B)' based on watching action logs
+        # Repo limit is 10GB; branch caches are independent; branches may read default branch cache.
+        # We don't want branches to evict master branch snapshot, so save on master, read-only all else
+      - name: AVD cache
+        uses: actions/cache@v3
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.api-level }}-${{ matrix.arch }}-${{matrix.target}}-v1-${{ github.event.inputs.clearCaches }}
+          restore-keys: |
+            avd-${{ matrix.api-level }}-${{ matrix.arch }}-${{matrix.target}}-v1
 
-      # - name: Clear Caches Optionally
-      #   if: "${{ github.event.inputs.clearCaches != '' }}"
-      #   shell: bash
-      #   run: |
-      #     du -sk ~/.gradle
-      #     du -sk ~/.android
-      #     rm -fr ~/.gradle
-      #     rm -fr ~/.android
-      #     du -sk ~/.gradle || echo ~/.gradle is gone
-      #     du -sk ~/.android || echo ~/.android is gone
+      - name: Clear Caches Optionally
+        if: "${{ github.event.inputs.clearCaches != '' }}"
+        shell: bash
+        run: |
+          du -sk ~/.gradle
+          du -sk ~/.android
+          rm -fr ~/.gradle
+          rm -fr ~/.android
+          du -sk ~/.gradle || echo ~/.gradle is gone
+          du -sk ~/.android || echo ~/.android is gone
 
       - name: Build Android App
         uses: nick-invision/retry@v2
@@ -139,65 +139,65 @@ jobs:
           max_attempts: 3
           command: yarn build:android-release
 
-      # - name: Metro Bundler Cache
-      #   uses: actions/cache@v3
-      #   with:
-      #     path: ${{ steps.workflow-variables.outputs.metro-cache }}
-      #     key: ${{ runner.os }}-metro-v1-${{ github.run_id }}
-      #     restore-keys: ${{ runner.os }}-metro-v1
+      - name: Metro Bundler Cache
+        uses: actions/cache@v3
+        with:
+          path: ${{ steps.workflow-variables.outputs.metro-cache }}
+          key: ${{ runner.os }}-metro-v1-${{ github.run_id }}
+          restore-keys: ${{ runner.os }}-metro-v1
 
-      # - name: AVD Boot and Snapshot Creation
-      #   # Only generate a snapshot with a cache miss
-      #   # Comment the if out to generate snapshots on branch for performance testing
-      #   if: "${{ github.event.inputs.clearCaches != '' || (steps.avd-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master') }}"
-      #   uses: reactivecircus/android-emulator-runner@v2
-      #   with:
-      #     api-level: ${{ matrix.api-level }}
-      #     avd-name: TestingAVD
-      #     force-avd-creation: false
-      #     target: ${{ matrix.target }}
-      #     arch: ${{ matrix.arch }}
-      #     emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-      #     sdcard-path-or-size: 100M
-      #     disable-animations: true
-      #     # Give the emulator a little time to run and do first boot stuff before taking snapshot
-      #     script: |
-      #       $ANDROID_HOME/platform-tools/adb logcat '*:D' -d > adb-snapshot-log.txt
-      #       $ANDROID_HOME/platform-tools/adb logcat --clear
-      #       echo "Generated AVD snapshot for caching."
+      - name: AVD Boot and Snapshot Creation
+        # Only generate a snapshot with a cache miss
+        # Comment the if out to generate snapshots on branch for performance testing
+        if: "${{ github.event.inputs.clearCaches != '' || (steps.avd-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master') }}"
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          avd-name: TestingAVD
+          force-avd-creation: false
+          target: ${{ matrix.target }}
+          arch: ${{ matrix.arch }}
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          sdcard-path-or-size: 100M
+          disable-animations: true
+          # Give the emulator a little time to run and do first boot stuff before taking snapshot
+          script: |
+            $ANDROID_HOME/platform-tools/adb logcat '*:D' -d > adb-snapshot-log.txt
+            $ANDROID_HOME/platform-tools/adb logcat --clear
+            echo "Generated AVD snapshot for caching."
 
-      #   # This step is separate so pure install time may be calculated as a step
-      # - name: Emulator Snapshot After Firstboot Warmup
-      #   # Only generate a snapshot for saving with a cache miss
-      #   # Switch the if statements via comment if generating snapshots for performance testing
-      #   # if: matrix.first-boot-delay != '0'
-      #   if: "${{ github.event.inputs.clearCaches != '' || (steps.avd-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master') }}"
-      #   env:
-      #     FIRST_BOOT_DELAY: ${{ matrix.first-boot-delay }}
-      #   uses: reactivecircus/android-emulator-runner@v2
-      #   with:
-      #     api-level: ${{ matrix.api-level }}
-      #     avd-name: TestingAVD
-      #     force-avd-creation: false
-      #     target: ${{ matrix.target }}
-      #     arch: ${{ matrix.arch }}
-      #     emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-      #     sdcard-path-or-size: 100M
-      #     disable-animations: true
-      #     # Give the emulator a little time to run and do first boot stuff before taking snapshot
-      #     # The zygote restart makes sure zygote has correct heap size as a workaround for android emulator init bug
-      #     script: |
-      #       $ANDROID_HOME/platform-tools/adb shell su root "setprop ctl.restart zygote"
-      #       sleep $FIRST_BOOT_DELAY
-      #       $ANDROID_HOME/platform-tools/adb logcat '*:D' -d > adb-warmup-log.txt
-      #       $ANDROID_HOME/platform-tools/adb logcat --clear
-      #       echo "First boot warmup completed."
+        # This step is separate so pure install time may be calculated as a step
+      - name: Emulator Snapshot After Firstboot Warmup
+        # Only generate a snapshot for saving with a cache miss
+        # Switch the if statements via comment if generating snapshots for performance testing
+        # if: matrix.first-boot-delay != '0'
+        if: "${{ github.event.inputs.clearCaches != '' || (steps.avd-cache.outputs.cache-hit != 'true' && github.ref == 'refs/heads/master') }}"
+        env:
+          FIRST_BOOT_DELAY: ${{ matrix.first-boot-delay }}
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          avd-name: TestingAVD
+          force-avd-creation: false
+          target: ${{ matrix.target }}
+          arch: ${{ matrix.arch }}
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          sdcard-path-or-size: 100M
+          disable-animations: true
+          # Give the emulator a little time to run and do first boot stuff before taking snapshot
+          # The zygote restart makes sure zygote has correct heap size as a workaround for android emulator init bug
+          script: |
+            $ANDROID_HOME/platform-tools/adb shell su root "setprop ctl.restart zygote"
+            sleep $FIRST_BOOT_DELAY
+            $ANDROID_HOME/platform-tools/adb logcat '*:D' -d > adb-warmup-log.txt
+            $ANDROID_HOME/platform-tools/adb logcat --clear
+            echo "First boot warmup completed."
 
-      # - name: Test Tapper
-      #   # Run this outside the emulator runner so the emulator runner does not wait on it for cleanup
-      #   run: |
-      #     nohup sh -c "until false; do $ANDROID_HOME/platform-tools/adb shell input tap 100 800; sleep 0.2; done" &
-      #   shell: bash
+      - name: Test Tapper
+        # Run this outside the emulator runner so the emulator runner does not wait on it for cleanup
+        run: |
+          nohup sh -c "until false; do $ANDROID_HOME/platform-tools/adb shell input tap 100 800; sleep 0.2; done" &
+        shell: bash
 
       - name: Detox Tests
         uses: reactivecircus/android-emulator-runner@v2
