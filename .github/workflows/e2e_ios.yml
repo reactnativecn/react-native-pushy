@@ -116,7 +116,7 @@ jobs:
           timeout_minutes: 10
           retry_wait_seconds: 30
           max_attempts: 3
-         run: |
+        run: |
            cd ios && pod install && cd ..
 
       - name: Cache Firestore Emulator
