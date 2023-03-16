@@ -112,8 +112,8 @@ jobs:
 
       - name: Pod Install
         run: |
-        gem update cocoapods xcodeproj
-        cd ios && pod install && cd ..
+          gem update cocoapods xcodeproj
+          cd ios && pod install && cd ..
 
       - name: Cache Firestore Emulator
         uses: actions/cache@v3
