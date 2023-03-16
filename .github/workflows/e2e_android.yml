@@ -215,4 +215,4 @@ jobs:
           script: |
             $ANDROID_HOME/platform-tools/adb devices
             nohup sh -c "$ANDROID_HOME/platform-tools/adb logcat '*:D' > adb-log.txt" &
-            sudo yarn test:android-release
+            yarn test:android-release
