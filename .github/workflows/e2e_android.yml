@@ -146,18 +146,18 @@ jobs:
           key: ${{ runner.os }}-metro-v1-${{ github.run_id }}
           restore-keys: ${{ runner.os }}-metro-v1
 
-      - name: Pre-fetch Javascript bundle
-        # Prebuild the bundle so that's fast when the app starts.
-        run: |
-          nohup yarn tests:packager:jet-ci &
-          printf 'Waiting for packager to come online'
-          until curl --output /dev/null --silent --head --fail http://localhost:8081/status; do
-            printf '.'
-            sleep 2
-          done
-          echo "Packager is online! Preparing javascript bundle..."
-          curl --output /dev/null --silent --head --fail "http://localhost:8081/index.bundle?platform=android&dev=true&minify=false&inlineSourceMap=true"
-          echo "...javascript bundle ready."
+      # - name: Pre-fetch Javascript bundle
+      #   # Prebuild the bundle so that's fast when the app starts.
+      #   run: |
+      #     nohup yarn tests:packager:jet-ci &
+      #     printf 'Waiting for packager to come online'
+      #     until curl --output /dev/null --silent --head --fail http://localhost:8081/status; do
+      #       printf '.'
+      #       sleep 2
+      #     done
+      #     echo "Packager is online! Preparing javascript bundle..."
+      #     curl --output /dev/null --silent --head --fail "http://localhost:8081/index.bundle?platform=android&dev=true&minify=false&inlineSourceMap=true"
+      #     echo "...javascript bundle ready."
 
       - name: AVD Boot and Snapshot Creation
         # Only generate a snapshot with a cache miss
