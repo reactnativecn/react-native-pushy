@@ -148,7 +148,7 @@ jobs:
           export SKIP_BUNDLING=1
           export RCT_NO_LAUNCH_PACKAGER=1
           set -o pipefail
-          yarn build:ios-release
+          yarn build:ios-debug
           ccache -s
         shell: bash
 
@@ -179,4 +179,4 @@ jobs:
 
       - name: Detox Test
         timeout-minutes: 60
-        run: yarn test:ios-release
+        run: yarn test:ios-debug

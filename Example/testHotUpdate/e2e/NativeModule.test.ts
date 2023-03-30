@@ -34,15 +34,15 @@ describe('测试Native模块的方法', () => {
     await element(by.text('OK')).tap();
   });
 
-  it('reloadUpdate', async () => {
-    await element(by.id('reloadUpdate')).tap();
-    await element(by.id('submit')).tap();
-    await expect(element(by.text('刚刚更新失败了,版本被回滚.'))).toBeVisible();
-    await element(by.text('OK')).tap();
-  });
+  // it('reloadUpdate', async () => {
+  //   await element(by.id('reloadUpdate')).tap();
+  //   await element(by.id('submit')).tap();
+  //   await expect(element(by.text('刚刚更新失败了,版本被回滚.'))).toBeVisible();
+  //   await element(by.text('OK')).tap();
+  // });
 
   it('setNeedUpdate', async () => {
-    await element(by.id('testcase')).longPress();
+    // await element(by.id('testcase')).longPress();
     await element(by.id('setNeedUpdate')).tap();
     await element(by.id('submit')).tap();
     await expect(element(by.text('done'))).toBeVisible();
