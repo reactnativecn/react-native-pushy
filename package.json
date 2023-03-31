@@ -15,7 +15,7 @@
     "build:android-debug": "cd Example/testHotUpdate && yarn && detox build --configuration android.emu.debug",
     "build:android-release": "cd Example/testHotUpdate && yarn && detox build --configuration android.emu.release",
     "test:android-release": "export ANDROID_SDK_ROOT=/Users/runner/Library/Android/sdk && cd Example/testHotUpdate && ./node_modules/.bin/nyc yarn detox test --configuration android.emu.release",
-    "test:android-debug": "detox test --configuration android.emu.debug",
+    "test:android-debug": "export ANDROID_SDK_ROOT=/Users/runner/Library/Android/sdk && cd Example/testHotUpdate && detox test --configuration android.emu.debug",
     "e2e:ios": "npm run build:ios-release && npm run test:ios-release",
     "e2e:android": "npm run build:android-release && npm run test:android-release",
     "tests:emulator:prepare": "cd .github/workflows/scripts/functions && yarn && yarn build",
