@@ -4,9 +4,6 @@ on: push
 jobs:
   e2e-android:
     runs-on: macos-latest
-    env:
-      DETOX_CONFIGURATION: android.emu.debug
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
@@ -37,7 +34,7 @@ jobs:
             ${{ runner.os }}-detox-build
 
       - name: Detox build
-        run: cd Example/testHotUpdate && yarn detox build --configuration ${{ env.DETOX_CONFIGURATION }}
+        run: yarn build:android-debug
 
       - name: Get device name
         id: device
@@ -49,7 +46,7 @@ jobs:
           api-level: 31
           arch: x86_64
           avd-name: ${{ steps.device.outputs.AVD_NAME }}
-          script: cd Example/testHotUpdate &&  yarn detox test --configuration ${{ env.DETOX_CONFIGURATION }} --headless --record-logs all
+          script: yarn test:android-debug
 
       - name: Upload artifacts
         if: failure()
