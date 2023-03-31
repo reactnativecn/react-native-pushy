@@ -4,9 +4,9 @@ on: push
 jobs:
   e2e-android:
     runs-on: macos-latest
-    # steps:
-    #   - name: Checkout repository
-    #     uses: actions/checkout@v3
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
     #   - name: Setup Node.js
     #     uses: actions/setup-node@v3
