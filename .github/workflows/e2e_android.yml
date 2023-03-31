@@ -37,7 +37,7 @@ jobs:
             ${{ runner.os }}-detox-build
 
       - name: Detox build
-        run: yarn detox build --configuration ${{ env.DETOX_CONFIGURATION }}
+        run: cd Example/testHotUpdate && yarn detox build --configuration ${{ env.DETOX_CONFIGURATION }}
 
       - name: Get device name
         id: device
@@ -49,7 +49,7 @@ jobs:
           api-level: 31
           arch: x86_64
           avd-name: ${{ steps.device.outputs.AVD_NAME }}
-          script: yarn detox test --configuration ${{ env.DETOX_CONFIGURATION }} --headless --record-logs all
+          script:cd Example/testHotUpdate &&  yarn detox test --configuration ${{ env.DETOX_CONFIGURATION }} --headless --record-logs all
 
       - name: Upload artifacts
         if: failure()
