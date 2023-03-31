@@ -8,33 +8,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-    #   - name: Setup Node.js
-    #     uses: actions/setup-node@v3
-    #     with:
-    #       cache: yarn
-    #       node-version-file: .nvmrc
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          cache: yarn
+          node-version-file: .nvmrc
 
-    #   - name: Install Yarn dependencies
-    #     run: yarn --frozen-lockfile --prefer-offline
+      - name: Install Yarn dependencies
+        run: yarn --frozen-lockfile --prefer-offline
 
-    #   - name: Setup Java
-    #     uses: actions/setup-java@v3
-    #     with:
-    #       cache: gradle
-    #       distribution: temurin
-    #       java-version: 17
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          cache: gradle
+          distribution: temurin
+          java-version: 17
 
-    #   - name: Cache Detox build
-    #     id: cache-detox-build
-    #     uses: actions/cache@v3
-    #     with:
-    #       path: android/app/build
-    #       key: ${{ runner.os }}-detox-build
-    #       restore-keys: |
-    #         ${{ runner.os }}-detox-build
+      - name: Cache Detox build
+        id: cache-detox-build
+        uses: actions/cache@v3
+        with:
+          path: android/app/build
+          key: ${{ runner.os }}-detox-build
+          restore-keys: |
+            ${{ runner.os }}-detox-build
 
-    #   - name: Detox build
-    #     run: yarn build:android-debug
+      - name: Detox build
+        run: yarn build:android-debug
 
       - name: Get device name
         id: device
