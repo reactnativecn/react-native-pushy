@@ -35,7 +35,7 @@ jobs:
       # Set up tool versions
       - uses: actions/setup-node@v3
         with:
-          node-version: 16
+          node-version: 18
 
       - name: Configure JDK 1.11
         uses: actions/setup-java@v3
