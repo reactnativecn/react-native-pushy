@@ -8,11 +8,11 @@
     "start": "react-native start",
     "test": "jest",
     "test:e2e": "detox test --configuration android.emu.debug",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "postinstall": "patch-package"
   },
   "dependencies": {
     "patch-package": "^6.5.1",
-    "postinstall": "patch-package",
     "postinstall-postinstall": "^2.1.0",
     "react": "18.0.0",
     "react-native": "0.69.8",

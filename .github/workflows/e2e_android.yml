@@ -34,7 +34,7 @@ jobs:
             ${{ runner.os }}-detox-build
 
       - name: Detox build
-        run: yarn build:android-debug
+        run: yarn build:android-release
 
       - name: Get device name
         id: device
@@ -46,4 +46,4 @@ jobs:
           api-level: 31
           arch: x86_64
           avd-name: ${{ steps.device.outputs.AVD_NAME }}
-          script: yarn test:android-debug
+          script: yarn test:android-release
