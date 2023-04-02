@@ -1,0 +1,328 @@
+--------- beginning of main
+12-09 10:38:51.957  6301  6301 I .awesomeproject: Late-enabling -Xcheck:jni
+12-09 10:38:52.065  6301  6301 D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10159; state: ENABLED
+--------- beginning of system
+12-09 10:38:52.073  6301  6301 W ActivityThread: Package uses different ABI(s) than its instrumentation: package[com.awesomeproject]: arm64-v8a, null instrumentation[com.awesomeproject.test]: null, null
+12-09 10:38:52.082  6301  6301 W .awesomeproject: ClassLoaderContext classpath size mismatch. expected=0, found=1 (PCL[] | PCL[/system/framework/android.test.runner.jar*2256426886])
+12-09 10:38:52.083  6301  6301 W .awesomeproject: ClassLoaderContext classpath size mismatch. expected=0, found=2 (PCL[] | PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951])
+12-09 10:38:52.083  6301  6301 W ziparchive: Unable to open '/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.dm': No such file or directory
+12-09 10:38:52.083  6301  6301 W ziparchive: Unable to open '/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.dm': No such file or directory
+12-09 10:38:52.176  6301  6301 W ziparchive: Unable to open '/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.dm': No such file or directory
+12-09 10:38:52.176  6301  6301 W ziparchive: Unable to open '/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.dm': No such file or directory
+12-09 10:38:52.301  6301  6301 V GraphicsEnvironment: ANGLE Developer option for 'com.awesomeproject' set to: 'default'
+12-09 10:38:52.302  6301  6301 V GraphicsEnvironment: ANGLE GameManagerService for com.awesomeproject: false
+12-09 10:38:52.302  6301  6301 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+12-09 10:38:52.303  6301  6301 D ApplicationLoaders: Returning zygote-cached class loader: /system/framework/android.test.base.jar
+12-09 10:38:52.304  6301  6301 D ApplicationLoaders: Returning zygote-cached class loader: /system/framework/android.test.base.jar
+12-09 10:38:52.305  6301  6301 W .awesomeproject: ClassLoaderContext shared library size mismatch. Expected=0, found=2 (PCL[] | PCL[]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]})
+12-09 10:38:52.305  6301  6301 W .awesomeproject: ClassLoaderContext shared library size mismatch. Expected=0, found=3 (PCL[] | PCL[]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]#PCL[/system/framework/android.test.runner.jar*2256426886]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]}};PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951:/system/framework/android.test.base.jar*1628045882:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk*3488107038:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes2.dex*3802597924:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes3.dex*1113348705:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes4.dex*1609470516:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk*4280308006:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes2.dex*2432524843:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes3.dex*2242498629:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes4.dex*3363425476:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes5.dex*3428091317:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes6.dex*1896867339:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes7.dex*616740603])
+12-09 10:38:52.306  6301  6301 W .awesomeproject: ClassLoaderContext classpath size mismatch. expected=0, found=1 (PCL[] | PCL[/system/framework/android.test.runner.jar*2256426886]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]#PCL[/system/framework/android.test.runner.jar*2256426886]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]}};PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951:/system/framework/android.test.base.jar*1628045882:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk*3488107038:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes2.dex*3802597924:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes3.dex*1113348705:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes4.dex*1609470516:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk*4280308006:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes2.dex*2432524843:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes3.dex*2242498629:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes4.dex*3363425476:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes5.dex*3428091317:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes6.dex*1896867339:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes7.dex*616740603])
+12-09 10:38:52.306  6301  6301 W .awesomeproject: ClassLoaderContext classpath size mismatch. expected=0, found=2 (PCL[] | PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]#PCL[/system/framework/android.test.runner.jar*2256426886]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]}};PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951:/system/framework/android.test.base.jar*1628045882:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk*3488107038:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes2.dex*3802597924:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes3.dex*1113348705:/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk!classes4.dex*1609470516:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk*4280308006:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes2.dex*2432524843:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes3.dex*2242498629:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes4.dex*3363425476:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes5.dex*3428091317:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes6.dex*1896867339:/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.apk!classes7.dex*616740603])
+12-09 10:38:52.307  6301  6301 W ziparchive: Unable to open '/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.dm': No such file or directory
+12-09 10:38:52.307  6301  6301 W ziparchive: Unable to open '/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.dm': No such file or directory
+12-09 10:38:52.358  6301  6301 W ziparchive: Unable to open '/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.dm': No such file or directory
+12-09 10:38:52.361  6301  6301 W ziparchive: Unable to open '/data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/base.dm': No such file or directory
+12-09 10:38:52.485  6301  6301 D NetworkSecurityConfig: Using Network Security Config from resource network_security_config debugBuild: true
+12-09 10:38:52.486  6301  6301 D NetworkSecurityConfig: Using Network Security Config from resource network_security_config debugBuild: true
+12-09 10:38:52.494  6301  6301 I MonitoringInstr: Instrumentation started!
+12-09 10:38:52.497  6301  6301 V TestEventClient: No service name argument was given (testDiscoveryService, testRunEventService or orchestratorService)
+12-09 10:38:52.501  6301  6301 V fb-UnpackingSoSource: locked dso store /data/user/0/com.awesomeproject/lib-main
+12-09 10:38:52.502  6301  6301 V fb-UnpackingSoSource: deps mismatch on deps store: regenerating
+12-09 10:38:52.502  6301  6301 V fb-UnpackingSoSource: so store dirty: regenerating
+12-09 10:38:52.523  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libc++_shared.so: deferring to libdir
+12-09 10:38:52.523  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libevent-2.1.so: deferring to libdir
+12-09 10:38:52.523  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libevent_core-2.1.so: deferring to libdir
+12-09 10:38:52.524  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libevent_extra-2.1.so: deferring to libdir
+12-09 10:38:52.524  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libfabricjni.so: deferring to libdir
+12-09 10:38:52.524  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libfb.so: deferring to libdir
+12-09 10:38:52.524  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libfbjni.so: deferring to libdir
+12-09 10:38:52.524  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libflipper.so: deferring to libdir
+12-09 10:38:52.524  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libfolly_runtime.so: deferring to libdir
+12-09 10:38:52.524  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libglog.so: deferring to libdir
+12-09 10:38:52.524  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libglog_init.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libimagepipeline.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjsc.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjscexecutor.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjsi.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjsijniprofiler.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjsinspector.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/liblogger.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libmapbufferjni.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libnative-filters.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libnative-imagetranscoder.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_codegen_rncore.so: deferring to libdir
+12-09 10:38:52.525  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_config.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_debug.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_nativemodule_core.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_animations.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_attributedstring.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_componentregistry.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_core.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_debug.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_graphics.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_imagemanager.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_leakchecker.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_mapbuffer.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_mounting.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_runtimescheduler.so: deferring to libdir
+12-09 10:38:52.526  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_scheduler.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_telemetry.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_templateprocessor.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_textlayoutmanager.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_uimanager.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_utils.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreactnativeblob.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreactnativejni.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreactperfloggerjni.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librnupdate.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_image.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_root.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_scrollview.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_text.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_textinput.so: deferring to libdir
+12-09 10:38:52.527  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_unimplementedview.so: deferring to libdir
+12-09 10:38:52.528  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_view.so: deferring to libdir
+12-09 10:38:52.528  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libruntimeexecutor.so: deferring to libdir
+12-09 10:38:52.528  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libturbomodulejsijni.so: deferring to libdir
+12-09 10:38:52.528  6301  6301 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libyoga.so: deferring to libdir
+12-09 10:38:52.528  6301  6301 V fb-UnpackingSoSource: regenerating DSO store com.facebook.soloader.ApkSoSource
+12-09 10:38:52.528  6301  6301 V fb-UnpackingSoSource: Finished regenerating DSO store com.facebook.soloader.ApkSoSource
+12-09 10:38:52.528  6301  6301 V fb-UnpackingSoSource: starting syncer worker
+12-09 10:38:52.532  6301  6301 V fb-UnpackingSoSource: releasing dso store lock for /data/user/0/com.awesomeproject/lib-main (from syncer thread)
+12-09 10:38:52.532  6301  6301 V fb-UnpackingSoSource: not releasing dso store lock for /data/user/0/com.awesomeproject/lib-main (syncer thread started)
+12-09 10:38:52.537  6301  6301 D SoLoader: libjscexecutor.so not found on /data/data/com.awesomeproject/lib-main
+12-09 10:38:52.537  6301  6301 D SoLoader: libjscexecutor.so found on /data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/lib/arm64
+12-09 10:38:52.537  6301  6301 D SoLoader: Not resolving dependencies for libjscexecutor.so
+12-09 10:38:52.555  6301  6301 D JavaScriptCore.Version: 250230.2.1
+12-09 10:38:52.589  6301  6337 D SoLoader: libfbjni.so not found on /data/data/com.awesomeproject/lib-main
+12-09 10:38:52.589  6301  6337 D SoLoader: libfbjni.so found on /data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/lib/arm64
+12-09 10:38:52.589  6301  6337 D SoLoader: Not resolving dependencies for libfbjni.so
+12-09 10:38:52.590  6301  6337 D SoLoader: libflipper.so not found on /data/data/com.awesomeproject/lib-main
+12-09 10:38:52.590  6301  6337 D SoLoader: libflipper.so found on /data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/lib/arm64
+12-09 10:38:52.590  6301  6337 D SoLoader: Not resolving dependencies for libflipper.so
+12-09 10:38:52.613  6301  6341 D TrafficStats: tagSocket(76) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:52.619  6301  6341 W unknown:ReconnectingWebSocket: Couldn't connect to "ws://localhost:8081/message?device=sdk_gphone64_arm64%20-%2013%20-%20API%2033&app=com.awesomeproject&clientid=BridgeDevSupportManager", will silently retry
+12-09 10:38:52.624  6301  6340 D TrafficStats: tagSocket(76) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:52.625  6301  6340 W unknown:InspectorPackagerConnection: Couldn't connect to packager, will silently retry
+12-09 10:38:52.647  6301  6301 W .awesomeproject: Accessing hidden field Landroid/view/View;->mKeyedTags:Landroid/util/SparseArray; (unsupported, reflection, allowed)
+12-09 10:38:52.647  6301  6301 W .awesomeproject: Accessing hidden field Landroid/view/View;->mListenerInfo:Landroid/view/View$ListenerInfo; (unsupported, reflection, allowed)
+12-09 10:38:52.647  6301  6301 W .awesomeproject: Accessing hidden field Landroid/view/View$ListenerInfo;->mOnClickListener:Landroid/view/View$OnClickListener; (unsupported, reflection, allowed)
+12-09 10:38:52.649  6301  6301 I flipper : flipper: FlipperClient::addPlugin Inspector
+12-09 10:38:52.649  6301  6301 I flipper : flipper: FlipperClient::addPlugin React
+12-09 10:38:52.650  6301  6301 I flipper : flipper: FlipperClient::addPlugin Databases
+12-09 10:38:52.651  6301  6301 I flipper : flipper: FlipperClient::addPlugin Preferences
+12-09 10:38:52.651  6301  6301 I flipper : flipper: FlipperClient::addPlugin CrashReporter
+12-09 10:38:52.652  6301  6301 I flipper : flipper: FlipperClient::addPlugin Network
+12-09 10:38:52.668  6301  6327 I UsageTrackerFacilitator: Usage tracking enabled
+12-09 10:38:52.672  6301  6327 I TestRequestBuilder: Scanning classpath to find tests in paths [/data/app/~~NBtDrMKafAXRwXNMM0wsmw==/com.awesomeproject.test-X9J4e_Ib-0tdz_4JYDQP8A==/base.apk]
+12-09 10:38:52.672  6301  6327 W .awesomeproject: Opening an oat file without a class loader. Are you using the deprecated DexFile APIs?
+12-09 10:38:52.708  6301  6336 W System.err: SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
+12-09 10:38:52.798  6301  6336 W System.err: SLF4J: Defaulting to no-operation (NOP) logger implementation
+12-09 10:38:52.799  6301  6336 W System.err: SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
+12-09 10:38:52.828  6301  6347 D TrafficStats: tagSocket(96) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:52.874  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityHierarchyCheckResult; annotation class 6432
+12-09 10:38:52.874  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityHierarchyCheckResult; annotation class 6432
+12-09 10:38:52.874  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityHierarchyCheckResult; annotation class 6432
+12-09 10:38:52.874  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityHierarchyCheckResult; annotation class 6432
+12-09 10:38:52.875  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityViewCheckResult; annotation class 6432
+12-09 10:38:52.875  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/ClusteringUtils; annotation class 6432
+12-09 10:38:52.876  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/Question; annotation class 6432
+12-09 10:38:52.878  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/replacements/TextUtils; annotation class 6431
+12-09 10:38:52.879  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 10:38:52.879  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 10:38:52.879  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 10:38:52.880  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 10:38:52.880  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElementAndroid; annotation class 6432
+12-09 10:38:52.880  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElementAndroid; annotation class 6432
+12-09 10:38:52.880  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElementAndroid; annotation class 6432
+12-09 10:38:52.880  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElementAndroid; annotation class 6432
+12-09 10:38:52.881  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 10:38:52.881  6301  6327 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 10:38:53.070  6301  6327 D TestExecutor: Adding listener androidx.test.internal.runner.listener.LogRunListener
+12-09 10:38:53.071  6301  6327 D TestExecutor: Adding listener androidx.test.internal.runner.listener.InstrumentationResultPrinter
+12-09 10:38:53.071  6301  6327 D TestExecutor: Adding listener androidx.test.internal.runner.listener.ActivityFinisherRunListener
+12-09 10:38:53.072  6301  6327 I TestRunner: run started: 1 tests
+12-09 10:38:53.073  6301  6327 I TestRunner: started: runDetoxTests(com.awesomeproject.DetoxTest)
+12-09 10:38:53.077  6301  6327 D EventInjectionStrategy: Creating injection strategy with input manager.
+12-09 10:38:53.077  6301  6327 W .awesomeproject: Accessing hidden method Landroid/hardware/input/InputManager;->getInstance()Landroid/hardware/input/InputManager; (unsupported, reflection, allowed)
+12-09 10:38:53.077  6301  6327 W .awesomeproject: Accessing hidden method Landroid/hardware/input/InputManager;->injectInputEvent(Landroid/view/InputEvent;I)Z (unsupported, reflection, allowed)
+12-09 10:38:53.078  6301  6327 W .awesomeproject: Accessing hidden field Landroid/hardware/input/InputManager;->INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH:I (unsupported, reflection, allowed)
+12-09 10:38:53.080  6301  6327 W .awesomeproject: Accessing hidden field Ljava/lang/reflect/Field;->accessFlags:I (unsupported, reflection, allowed)
+12-09 10:38:53.196  6301  6351 D libEGL  : loaded /vendor/lib64/egl/libEGL_emulation.so
+12-09 10:38:53.200  6301  6351 D libEGL  : loaded /vendor/lib64/egl/libGLESv1_CM_emulation.so
+12-09 10:38:53.201  6301  6351 D libEGL  : loaded /vendor/lib64/egl/libGLESv2_emulation.so
+12-09 10:38:53.202  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: PRE_ON_CREATE
+12-09 10:38:53.282  6301  6301 W .awesomeproject: Accessing hidden method Landroid/view/View;->computeFitSystemWindows(Landroid/graphics/Rect;Landroid/graphics/Rect;)Z (unsupported, reflection, allowed)
+12-09 10:38:53.282  6301  6301 W .awesomeproject: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (unsupported, reflection, allowed)
+12-09 10:38:53.290  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: CREATED
+12-09 10:38:53.292  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: STARTED
+12-09 10:38:53.293  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: RESUMED
+12-09 10:38:53.295  6301  6354 D TrafficStats: tagSocket(98) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:53.307  6301  6354 W unknown:ReactNative: The packager does not seem to be running as we got an IOException requesting its status: Failed to connect to /192.168.1.8:8888
+12-09 10:38:53.319  6301  6301 W unknown:ReactNative: Packager connection already open, nooping.
+12-09 10:38:53.327  6301  6350 D HostConnection: createUnique: call
+12-09 10:38:53.330  6301  6350 D HostConnection: HostConnection::get() New Host Connection established 0xb4000077d3ba7910, tid 6350
+12-09 10:38:53.344  6301  6350 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_native_sync_v3 ANDROID_EMU_native_sync_v4 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_has_shared_slots_host_memory_allocator ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_vulkan_queue_submit_with_commands ANDROID_EMU_sync_buffer_data ANDROID_EMU_read_color_buffer_dma ANDROID_EMU_hwc_multi_configs GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_0 
+12-09 10:38:53.387  6301  6350 W OpenGLRenderer: Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+12-09 10:38:53.387  6301  6350 W OpenGLRenderer: Failed to initialize 101010-2 format, error = EGL_SUCCESS
+12-09 10:38:53.391  6301  6350 D EGL_emulation: eglCreateContext: 0xb4000077d3ba6c50: maj 3 min 0 rcv 3
+12-09 10:38:53.393  6301  6350 D EGL_emulation: eglMakeCurrent: 0xb4000077d3ba6c50: ver 3 0 (tinfo 0x79f25a4080) (first time)
+12-09 10:38:53.423  6301  6350 I Gralloc4: mapper 4.x is not supported
+12-09 10:38:53.424  6301  6350 D HostConnection: createUnique: call
+12-09 10:38:53.425  6301  6350 D HostConnection: HostConnection::get() New Host Connection established 0xb4000077d3ba7a90, tid 6350
+12-09 10:38:53.427  6301  6350 D goldfish-address-space: allocate: Ask for block of size 0x100
+12-09 10:38:53.427  6301  6350 D goldfish-address-space: allocate: ioctl allocate returned offset 0x1f3ff8000 size 0x8000
+12-09 10:38:53.428  6301  6350 W Gralloc4: allocator 4.x is not supported
+12-09 10:38:53.430  6301  6350 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_native_sync_v3 ANDROID_EMU_native_sync_v4 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_has_shared_slots_host_memory_allocator ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_vulkan_queue_submit_with_commands ANDROID_EMU_sync_buffer_data ANDROID_EMU_read_color_buffer_dma ANDROID_EMU_hwc_multi_configs GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_0 
+12-09 10:38:53.473  6301  6350 W Parcel  : Expecting binder but got null!
+12-09 10:38:53.489  6301  6327 I Detox   : Detox server connection details: url=ws://localhost:62876, sessionId=e3cdc0ce-8b7a-d3e9-b295-b9429e00fb31
+12-09 10:38:53.510  6301  6359 D SoLoader: libreactnativejni.so not found on /data/data/com.awesomeproject/lib-main
+12-09 10:38:53.511  6301  6359 D SoLoader: libreactnativejni.so found on /data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/lib/arm64
+12-09 10:38:53.515  6301  6359 D SoLoader: Not resolving dependencies for libreactnativejni.so
+12-09 10:38:53.524  6301  6361 I DetoxDispatcher: Handling action '_init' (ID #0)...
+12-09 10:38:53.525  6301  6361 I Detox   : Connecting to server...
+12-09 10:38:53.525  6301  6361 I DetoxWSClient: At connectToServer
+12-09 10:38:53.540  6301  6363 D TrafficStats: tagSocket(123) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:53.658  6301  6359 W unknown:ReactContext: initializeMessageQueueThreads() is called.
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: Exception in native call
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: java.lang.RuntimeException: Unable to load script. Make sure you're either running Metro (run 'npx react-native start') or that your bundle 'index.android.bundle' is packaged correctly for release.
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: 	at com.facebook.react.bridge.CatalystInstanceImpl.jniLoadScriptFromAssets(Native Method)
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: 	at com.facebook.react.bridge.CatalystInstanceImpl.loadScriptFromAssets(CatalystInstanceImpl.java:248)
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: 	at com.facebook.react.bridge.JSBundleLoader$1.loadScript(JSBundleLoader.java:29)
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: 	at com.facebook.react.bridge.CatalystInstanceImpl.runJSBundle(CatalystInstanceImpl.java:277)
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: 	at com.facebook.react.ReactInstanceManager.createReactContext(ReactInstanceManager.java:1404)
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: 	at com.facebook.react.ReactInstanceManager.access$1200(ReactInstanceManager.java:136)
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: 	at com.facebook.react.ReactInstanceManager$5.run(ReactInstanceManager.java:1108)
+12-09 10:38:53.695  6301  6359 E unknown:ReactNative: 	at java.lang.Thread.run(Thread.java:1012)
+12-09 10:38:53.708  6301  6301 D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10159; state: ENABLED
+12-09 10:38:53.715  6301  6301 D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10159; state: DISABLED
+12-09 10:38:53.715  6301  6301 D CompatibilityChangeReporter: Compat change id reported: 37756858; UID 10159; state: ENABLED
+12-09 10:38:53.820  6301  6350 W Parcel  : Expecting binder but got null!
+12-09 10:38:54.654  6301  6341 D TrafficStats: tagSocket(152) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:54.659  6301  6340 D TrafficStats: tagSocket(151) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:54.896  6301  6373 D TrafficStats: tagSocket(151) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:55.393  6301  6350 D EGL_emulation: app_time_stats: avg=314.53ms min=12.07ms max=1372.94ms count=5
+12-09 10:38:56.601  6301  6363 D DetoxWSClient: Retrying...
+12-09 10:38:56.602  6301  6363 I DetoxWSClient: At connectToServer
+12-09 10:38:56.620  6301  6377 D TrafficStats: tagSocket(145) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:56.668  6301  6341 D TrafficStats: tagSocket(145) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:56.670  6301  6340 D TrafficStats: tagSocket(149) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:56.921  6301  6378 D TrafficStats: tagSocket(145) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:57.928  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: PAUSED
+12-09 10:38:58.074  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: STOPPED
+12-09 10:38:58.689  6301  6340 D TrafficStats: tagSocket(77) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:58.936  6301  6387 D TrafficStats: tagSocket(110) with statsTag=0xffffffff, statsUid=-1
+12-09 10:38:59.625  6301  6377 D DetoxWSClient: Retrying...
+12-09 10:38:59.625  6301  6377 I DetoxWSClient: At connectToServer
+12-09 10:38:59.632  6301  6394 D TrafficStats: tagSocket(110) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:04.172  6301  6394 D DetoxWSClient: Retrying...
+12-09 10:39:04.173  6301  6394 I DetoxWSClient: At connectToServer
+12-09 10:39:04.187  6301  6438 D TrafficStats: tagSocket(110) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:08.692  6301  6438 D DetoxWSClient: Retrying...
+12-09 10:39:08.693  6301  6438 I DetoxWSClient: At connectToServer
+12-09 10:39:08.742  6301  6476 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:09.080  6301  6479 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:10.731  6301  6340 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:11.109  6301  6493 D TrafficStats: tagSocket(77) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:11.753  6301  6476 D DetoxWSClient: Retrying...
+12-09 10:39:11.754  6301  6476 I DetoxWSClient: At connectToServer
+12-09 10:39:11.941  6301  6505 D TrafficStats: tagSocket(77) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:11.972  6301  6505 D DetoxWSClient: At onOpen
+12-09 10:39:11.979  6301  6505 I DetoxWSClient: Sending out action 'login' (ID #0)
+12-09 10:39:11.981  6301  6505 I Detox   : Connected to server!
+12-09 10:39:11.983  6301  6505 D DetoxWSClient: Received action 'loginSuccess' (ID #0, params={"testerConnected":true,"appConnected":true})
+12-09 10:39:11.996  6301  6505 D DetoxWSClient: Received action 'isReady' (ID #-1000, params={})
+12-09 10:39:13.134  6301  6509 D TrafficStats: tagSocket(103) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:15.143  6301  6513 D TrafficStats: tagSocket(103) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:18.940  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: RESTARTED
+12-09 10:39:18.942  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: STARTED
+12-09 10:39:18.948  6301  6301 W unknown:ReactInstanceManager: Instance detached from instance manager
+12-09 10:39:18.991  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: RESUMED
+12-09 10:39:19.082  6301  6521 D TrafficStats: tagSocket(112) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:21.991  6301  6505 D DetoxWSClient: Received action 'currentStatus' (ID #1, params={})
+12-09 10:39:21.992  6301  6362 I DetoxDispatcher: Handling action 'currentStatus' (ID #1)...
+12-09 10:39:25.228  6301  6537 D TrafficStats: tagSocket(117) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:25.673  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: PAUSED
+12-09 10:39:25.751  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: STOPPED
+12-09 10:39:25.827  6301  6334 W .awesomeproject: Verification of void okhttp3.internal.ws.RealWebSocket$Close.<init>(int, okio.ByteString, long) took 119.340ms (83.79 bytecodes/s) (1464B approximate peak alloc)
+12-09 10:39:25.833  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@11031d4 in: DESTROYED
+12-09 10:39:27.276  6301  6550 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:28.308  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@26b66b0 in: PRE_ON_CREATE
+12-09 10:39:28.343  6301  6354 D TrafficStats: tagSocket(99) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:28.432  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@26b66b0 in: CREATED
+12-09 10:39:28.434  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@26b66b0 in: STARTED
+12-09 10:39:28.436  6301  6301 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@26b66b0 in: RESUMED
+12-09 10:39:28.524  6301  6350 W Parcel  : Expecting binder but got null!
+12-09 10:39:28.583  6301  6557 D TrafficStats: tagSocket(115) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:28.688  6301  6350 W Parcel  : Expecting binder but got null!
+12-09 10:39:29.291  6301  6560 D TrafficStats: tagSocket(144) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:29.744  6301  6562 W unknown:ReactContext: initializeMessageQueueThreads() is called.
+12-09 10:39:29.749  6301  6301 W unknown:ReactNative: Packager connection already open, nooping.
+12-09 10:39:29.770  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.drawer.ReactDrawerLayoutManager
+12-09 10:39:29.773  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.uimanager.LayoutShadowNode
+12-09 10:39:29.777  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollViewManager
+12-09 10:39:29.788  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactHorizontalScrollContainerViewManager
+12-09 10:39:29.790  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ReactProgressBarViewManager
+12-09 10:39:29.793  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.progressbar.ProgressBarShadowNode
+12-09 10:39:29.795  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.scroll.ReactScrollViewManager
+12-09 10:39:29.799  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.slider.ReactSliderManager
+12-09 10:39:29.809  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.slider.ReactSliderManager$ReactSliderShadowNode
+12-09 10:39:29.809  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager
+12-09 10:39:29.809  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.switchview.ReactSwitchManager$ReactSwitchShadowNode
+12-09 10:39:29.809  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.swiperefresh.SwipeRefreshLayoutManager
+12-09 10:39:29.810  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageViewManager
+12-09 10:39:29.810  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.frescosupport.FrescoBasedReactTextInlineImageShadowNode
+12-09 10:39:29.810  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.image.ReactImageManager
+12-09 10:39:29.811  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ReactModalHostManager
+12-09 10:39:29.811  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.modal.ModalHostShadowNode
+12-09 10:39:29.811  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactRawTextManager
+12-09 10:39:29.811  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactRawTextShadowNode
+12-09 10:39:29.811  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputManager
+12-09 10:39:29.825  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.textinput.ReactTextInputShadowNode
+12-09 10:39:29.826  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextViewManager
+12-09 10:39:29.826  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactTextShadowNode
+12-09 10:39:29.826  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.view.ReactViewManager
+12-09 10:39:29.827  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextViewManager
+12-09 10:39:29.827  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.text.ReactVirtualTextShadowNode
+12-09 10:39:29.827  6301  6564 W unknown:ViewManagerPropertyUpdater: Could not find generated setter for class com.facebook.react.views.unimplementedview.ReactUnimplementedViewManager
+12-09 10:39:29.868  6301  6564 W unknown:ReactContext: initializeMessageQueueThreads() is called.
+12-09 10:39:29.881  6301  6564 D SoLoader: libyoga.so not found on /data/data/com.awesomeproject/lib-main
+12-09 10:39:29.881  6301  6564 D SoLoader: libyoga.so found on /data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/lib/arm64
+12-09 10:39:29.881  6301  6564 D SoLoader: Not resolving dependencies for libyoga.so
+12-09 10:39:29.919  6301  6301 D DetoxRNLoading: Listener-proxy method called: onReactContextInitialized
+12-09 10:39:29.920  6301  6301 I DetoxRNLoading: Got new RN-context async'ly through listener
+12-09 10:39:29.923  6301  6301 D DetoxRNLoading: Listener-proxy method called: equals
+12-09 10:39:29.924  6301  6361 I DetoxRNIdleRes: Setting up Espresso Idling Resources for React Native
+12-09 10:39:29.944  6301  6361 D AsyncStorageIR: Checking whether a custom IR for Async-Storage is required... (legacy=false)
+12-09 10:39:29.966  6301  6361 D DetoxRNHelpers: Native RN module resolution (class com.reactnativecommunity.asyncstorage.AsyncStorageModule): no such class
+12-09 10:39:29.967  6301  6361 D AsyncStorageIR: Checking whether a custom IR for Async-Storage is required... (legacy=true)
+12-09 10:39:29.976  6301  6361 D AsyncStorageIR: IR for Async-Storage is required! (legacy=true)
+12-09 10:39:29.982  6301  6301 D AsyncStorageIRLegacy: Async-storage is busy!
+12-09 10:39:29.987  6301  6362 W .awesomeproject: Long monitor contention with owner detox.primary (6361) at void com.wix.detox.DetoxMain$initActionHandlers$1$1.handle(java.lang.String, long)(DetoxMain.kt:51) waiters=0 in void com.wix.detox.DetoxMain$initActionHandlers$2$1.handle(java.lang.String, long) for 7.995s
+12-09 10:39:29.989  6301  6362 I DetoxWSClient: Sending out action 'currentStatusResult' (ID #1)
+12-09 10:39:29.992  6301  6362 I DetoxDispatcher: Done with action 'currentStatus'
+12-09 10:39:29.992  6301  6361 I DetoxDispatcher: Done with action '_init'
+12-09 10:39:29.992  6301  6361 I DetoxDispatcher: Handling action 'isReady' (ID #-1000)...
+12-09 10:39:29.999  6301  6301 W .awesomeproject: Accessing hidden method Landroid/os/MessageQueue;->next()Landroid/os/Message; (unsupported, reflection, allowed)
+12-09 10:39:29.999  6301  6301 W .awesomeproject: Accessing hidden field Landroid/os/MessageQueue;->mMessages:Landroid/os/Message; (unsupported, reflection, allowed)
+12-09 10:39:30.000  6301  6301 W .awesomeproject: Accessing hidden method Landroid/os/Message;->recycleUnchecked()V (unsupported, reflection, allowed)
+12-09 10:39:30.018  6301  6564 I flipper : flipper: FlipperClient::addPlugin Fresco
+12-09 10:39:30.106  6301  6563 D SoLoader: libreactnativeblob.so not found on /data/data/com.awesomeproject/lib-main
+12-09 10:39:30.107  6301  6563 D SoLoader: libreactnativeblob.so found on /data/app/~~Bn4_NVJKwFtZ-gBt0S0euQ==/com.awesomeproject-G8nKm27Pj0aCcjJBjsoEIA==/lib/arm64
+12-09 10:39:30.107  6301  6563 D SoLoader: Not resolving dependencies for libreactnativeblob.so
+12-09 10:39:30.150  6301  6564 I WebViewFactory: Loading com.google.android.webview version 101.0.4951.74 (code 495157434)
+12-09 10:39:30.281  6301  6563 I ReactNativeJS: Running "AwesomeProject" with {"rootTag":1}
+12-09 10:39:30.301  6301  6563 I ReactNativeJS: Pushy: uuid: qx57jbzSjOxSDJI5DdgUX
+12-09 10:39:30.342  6301  6564 W .awesomeproject: Accessing hidden method Landroid/os/Trace;->isTagEnabled(J)Z (unsupported, reflection, allowed)
+12-09 10:39:30.342  6301  6564 W .awesomeproject: Accessing hidden method Landroid/os/Trace;->traceBegin(JLjava/lang/String;)V (unsupported, reflection, allowed)
+12-09 10:39:30.343  6301  6564 W .awesomeproject: Accessing hidden method Landroid/os/Trace;->traceEnd(J)V (unsupported, reflection, allowed)
+12-09 10:39:30.343  6301  6564 W .awesomeproject: Accessing hidden method Landroid/os/Trace;->asyncTraceBegin(JLjava/lang/String;I)V (unsupported, reflection, allowed)
+12-09 10:39:30.343  6301  6564 W .awesomeproject: Accessing hidden method Landroid/os/Trace;->asyncTraceEnd(JLjava/lang/String;I)V (unsupported, reflection, allowed)
+12-09 10:39:30.345  6301  6564 I cr_WVCFactoryProvider: Loaded version=101.0.4951.74 minSdkVersion=29 isBundle=false multiprocess=true packageId=2
+12-09 10:39:30.357  6301  6571 I cr_VariationsUtils: Failed reading seed file "/data/user/0/com.awesomeproject/app_webview/variations_seed_new"
+12-09 10:39:30.357  6301  6571 I cr_VariationsUtils: Failed reading seed file "/data/user/0/com.awesomeproject/app_webview/variations_seed"
+12-09 10:39:30.358  6301  6571 I cr_VariationsUtils: Requesting new seed from IVariationsSeedServer
+12-09 10:39:30.405  6301  6564 I cr_LibraryLoader: Successfully loaded native library
+12-09 10:39:30.407  6301  6564 I cr_CachingUmaRecorder: Flushed 8 samples from 8 histograms.
+12-09 10:39:30.482  6301  6577 D TrafficStats: tagSocket(145) with statsTag=0xffffffff, statsUid=-1
+12-09 10:39:30.499  6301  6578 D TrafficStats: tagSocket(146) with statsTag=0x

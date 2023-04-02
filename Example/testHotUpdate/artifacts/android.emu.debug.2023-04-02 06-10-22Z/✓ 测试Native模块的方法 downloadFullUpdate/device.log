@@ -1,0 +1,182 @@
+--------- beginning of main
+12-09 10:42:32.271  7106  7172 I DetoxWSClient: Sending out action 'invokeResult' (ID #44)
+12-09 10:42:32.272  7106  7172 I DetoxDispatcher: Done with action 'invoke'
+12-09 10:42:32.280  7106  7175 D DetoxWSClient: Received action 'invoke' (ID #45, params={"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxAssertion"},"method":"assertMatcher","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.Espresso"},"method":"onView","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForTestId","args":["done"]}}]}},{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForNot","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForSufficientlyVisible","args":[{"type":"Integer","value":75}]}}]}}]})
+12-09 10:42:32.280  7106  7172 I DetoxDispatcher: Handling action 'invoke' (ID #45)...
+12-09 10:42:32.281  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForTestId, [done]
+12-09 10:42:32.281  7106  7172 D Detox   : class androidx.test.espresso.Espresso, onView, [(view.getTag() is "done" and view has effective visibility <VISIBLE>)]
+12-09 10:42:32.282  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForSufficientlyVisible, [75]
+12-09 10:42:32.283  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForNot, [(view has effective visibility <VISIBLE> and view.getGlobalVisibleRect() covers at least <75> percent of the view's area)]
+12-09 10:42:32.283  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxAssertion, assertMatcher, [androidx.test.espresso.ViewInteraction@d63402e, not (view has effective visibility <VISIBLE> and view.getGlobalVisibleRect() covers at least <75> percent of the view's area)]
+12-09 10:42:32.291  7106  7106 I ViewInteraction: Checking 'MatchesViewAssertion(Detox){viewMatcher=not (view has effective visibility <VISIBLE> and view.getGlobalVisibleRect() covers at least <75> percent of the view's area)}' assertion on view (view.getTag() is "done" and view has effective visibility <VISIBLE>)
+12-09 10:42:32.291  7106  7172 I DetoxWSClient: Sending out action 'invokeResult' (ID #45)
+12-09 10:42:32.292  7106  7172 I DetoxDispatcher: Done with action 'invoke'
+12-09 10:42:32.368  7106  7175 D DetoxWSClient: Received action 'invoke' (ID #46, params={"target":{"type":"Class","value":"com.wix.detox.espresso.EspressoDetox"},"method":"perform","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.Espresso"},"method":"onView","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForTestId","args":["downloadFullUpdate"]}}]}},{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.action.ViewActions"},"method":"longClick","args":[]}}]})
+12-09 10:42:32.368  7106  7172 I DetoxDispatcher: Handling action 'invoke' (ID #46)...
+12-09 10:42:32.369  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForTestId, [downloadFullUpdate]
+12-09 10:42:32.370  7106  7172 D Detox   : class androidx.test.espresso.Espresso, onView, [(view.getTag() is "downloadFullUpdate" and view has effective visibility <VISIBLE>)]
+12-09 10:42:32.370  7106  7172 D Detox   : class androidx.test.espresso.action.ViewActions, longClick, []
+12-09 10:42:32.370  7106  7172 D Detox   : class com.wix.detox.espresso.EspressoDetox, perform, [androidx.test.espresso.ViewInteraction@26487cf, androidx.test.espresso.action.GeneralClickAction@f49155c]
+12-09 10:42:32.372  7106  7106 I ViewInteraction: Performing 'long click' action on view (view.getTag() is "downloadFullUpdate" and view has effective visibility <VISIBLE>)
+12-09 10:42:32.388  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:32.403  7106  7152 D EGL_emulation: app_time_stats: avg=804.64ms min=543.86ms max=1065.41ms count=2
+12-09 10:42:32.678  7106  7414 D TrafficStats: tagSocket(165) with statsTag=0xffffffff, statsUid=-1
+12-09 10:42:32.932  7106  7106 W UiControllerImpl: Waiting for: DYNAMIC_TASKS_HAVE_IDLED for 100 iterations.
+12-09 10:42:32.955  7106  7106 W UiControllerImpl: Waiting for: DYNAMIC_TASKS_HAVE_IDLED for 200 iterations.
+12-09 10:42:32.964  7106  7106 W UiControllerImpl: Waiting for: DYNAMIC_TASKS_HAVE_IDLED for 300 iterations.
+12-09 10:42:32.967  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:32.990  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:33.008  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.019  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.036  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.052  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.070  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.086  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.102  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.119  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.136  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.153  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.169  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.186  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.202  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.219  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.239  7106  7106 W MotionEvents: Overslept and turned a tap into a long press
+12-09 10:42:33.858  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:33.868  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.884  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.900  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.920  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.934  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.953  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.968  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:33.988  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.003  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.021  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.034  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.054  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.070  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.087  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.101  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.189  7106  7172 I DetoxWSClient: Sending out action 'invokeResult' (ID #46)
+12-09 10:42:34.190  7106  7172 I DetoxDispatcher: Done with action 'invoke'
+12-09 10:42:34.196  7106  7175 D DetoxWSClient: Received action 'invoke' (ID #47, params={"target":{"type":"Class","value":"com.wix.detox.espresso.EspressoDetox"},"method":"perform","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.Espresso"},"method":"onView","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForTestId","args":["submit"]}}]}},{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.action.ViewActions"},"method":"longClick","args":[]}}]})
+12-09 10:42:34.196  7106  7172 I DetoxDispatcher: Handling action 'invoke' (ID #47)...
+12-09 10:42:34.197  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForTestId, [submit]
+12-09 10:42:34.199  7106  7172 D Detox   : class androidx.test.espresso.Espresso, onView, [(view.getTag() is "submit" and view has effective visibility <VISIBLE>)]
+12-09 10:42:34.199  7106  7172 D Detox   : class androidx.test.espresso.action.ViewActions, longClick, []
+12-09 10:42:34.200  7106  7172 D Detox   : class com.wix.detox.espresso.EspressoDetox, perform, [androidx.test.espresso.ViewInteraction@5872706, androidx.test.espresso.action.GeneralClickAction@d13a1c7]
+12-09 10:42:34.202  7106  7106 I ViewInteraction: Performing 'long click' action on view (view.getTag() is "submit" and view has effective visibility <VISIBLE>)
+12-09 10:42:34.220  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:34.238  7106  7152 D EGL_emulation: app_time_stats: avg=107.94ms min=13.65ms max=1000.03ms count=17
+12-09 10:42:34.689  7106  7418 D TrafficStats: tagSocket(131) with statsTag=0xffffffff, statsUid=-1
+12-09 10:42:34.773  7106  7106 W UiControllerImpl: Waiting for: DYNAMIC_TASKS_HAVE_IDLED for 100 iterations.
+12-09 10:42:34.786  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:34.787  7106  7357 D TrafficStats: tagSocket(131) with statsTag=0xffffffff, statsUid=-1
+12-09 10:42:34.824  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.836  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.853  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.869  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.886  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.903  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.921  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.936  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.952  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.969  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:34.986  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.003  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.022  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.030  7106  7357 E pushy   : download task failed
+12-09 10:42:35.030  7106  7357 E pushy   : java.lang.Error: Server return code 403
+12-09 10:42:35.030  7106  7357 E pushy   : 	at cn.reactnative.modules.update.DownloadTask.downloadFile(DownloadTask.java:78)
+12-09 10:42:35.030  7106  7357 E pushy   : 	at cn.reactnative.modules.update.DownloadTask.doFullPatch(DownloadTask.java:230)
+12-09 10:42:35.030  7106  7357 E pushy   : 	at cn.reactnative.modules.update.DownloadTask.doInBackground(DownloadTask.java:474)
+12-09 10:42:35.030  7106  7357 E pushy   : 	at cn.reactnative.modules.update.DownloadTask.doInBackground(DownloadTask.java:36)
+12-09 10:42:35.030  7106  7357 E pushy   : 	at android.os.AsyncTask$3.call(AsyncTask.java:394)
+12-09 10:42:35.030  7106  7357 E pushy   : 	at java.util.concurrent.FutureTask.run(FutureTask.java:264)
+12-09 10:42:35.030  7106  7357 E pushy   : 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+12-09 10:42:35.030  7106  7357 E pushy   : 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+12-09 10:42:35.030  7106  7357 E pushy   : 	at java.lang.Thread.run(Thread.java:1012)
+12-09 10:42:35.036  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.070  7106  7106 W UiControllerImpl: Waiting for: DYNAMIC_TASKS_HAVE_IDLED for 100 iterations.
+12-09 10:42:35.081  7106  7106 W UiControllerImpl: Waiting for: DYNAMIC_TASKS_HAVE_IDLED for 200 iterations.
+12-09 10:42:35.096  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:35.108  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.121  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.133  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.150  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.166  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.185  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.201  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.218  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.233  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.250  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.267  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.283  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.300  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.319  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.335  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:35.354  7106  7106 W MotionEvents: Overslept and turned a tap into a long press
+12-09 10:42:35.972  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:35.984  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.001  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.018  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.033  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.050  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.067  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.086  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.101  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.117  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.135  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.153  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.168  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.188  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.203  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.217  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.305  7106  7172 I DetoxWSClient: Sending out action 'invokeResult' (ID #47)
+12-09 10:42:36.306  7106  7172 I DetoxDispatcher: Done with action 'invoke'
+12-09 10:42:36.313  7106  7175 D DetoxWSClient: Received action 'invoke' (ID #48, params={"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxAssertion"},"method":"waitForAssertMatcher","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.Espresso"},"method":"onView","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForText","args":["确认"]}}]}},{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForSufficientlyVisible","args":[{"type":"Integer","value":75}]}},{"type":"Double","value":10}]})
+12-09 10:42:36.314  7106  7172 I DetoxDispatcher: Handling action 'invoke' (ID #48)...
+12-09 10:42:36.315  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForText, [确认]
+12-09 10:42:36.315  7106  7172 D Detox   : class androidx.test.espresso.Espresso, onView, [(an instance of android.widget.TextView and view.getText() with or without transformation to match: is "确认" and view has effective visibility <VISIBLE>)]
+12-09 10:42:36.316  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForSufficientlyVisible, [75]
+12-09 10:42:36.317  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxAssertion, waitForAssertMatcher, [androidx.test.espresso.ViewInteraction@4d3c1ec, (view has effective visibility <VISIBLE> and view.getGlobalVisibleRect() covers at least <75> percent of the view's area), 10.0]
+12-09 10:42:36.320  7106  7106 I ViewInteraction: Checking 'MatchesViewAssertion(Detox){viewMatcher=(view has effective visibility <VISIBLE> and view.getGlobalVisibleRect() covers at least <75> percent of the view's area)}' assertion on view (an instance of android.widget.TextView and view.getText() with or without transformation to match: is "确认" and view has effective visibility <VISIBLE>)
+12-09 10:42:36.322  7106  7172 I DetoxWSClient: Sending out action 'invokeResult' (ID #48)
+12-09 10:42:36.323  7106  7172 I DetoxDispatcher: Done with action 'invoke'
+12-09 10:42:36.329  7106  7175 D DetoxWSClient: Received action 'invoke' (ID #49, params={"target":{"type":"Class","value":"com.wix.detox.espresso.EspressoDetox"},"method":"perform","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.Espresso"},"method":"onView","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForTestId","args":["done"]}}]}},{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.action.ViewActions"},"method":"longClick","args":[]}}]})
+12-09 10:42:36.329  7106  7172 I DetoxDispatcher: Handling action 'invoke' (ID #49)...
+12-09 10:42:36.330  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForTestId, [done]
+12-09 10:42:36.330  7106  7172 D Detox   : class androidx.test.espresso.Espresso, onView, [(view.getTag() is "done" and view has effective visibility <VISIBLE>)]
+12-09 10:42:36.330  7106  7172 D Detox   : class androidx.test.espresso.action.ViewActions, longClick, []
+12-09 10:42:36.331  7106  7172 D Detox   : class com.wix.detox.espresso.EspressoDetox, perform, [androidx.test.espresso.ViewInteraction@bc7a9b5, androidx.test.espresso.action.GeneralClickAction@b6984a]
+12-09 10:42:36.333  7106  7106 I ViewInteraction: Performing 'long click' action on view (view.getTag() is "done" and view has effective visibility <VISIBLE>)
+12-09 10:42:36.340  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:36.358  7106  7152 D EGL_emulation: app_time_stats: avg=117.73ms min=13.68ms max=1251.56ms count=18
+12-09 10:42:36.906  7106  7106 W UiControllerImpl: Waiting for: DYNAMIC_TASKS_HAVE_IDLED for 100 iterations.
+12-09 10:42:36.914  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:36.922  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.943  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.950  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.970  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:36.986  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.000  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.018  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.035  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.050  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.066  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.083  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.100  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.117  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.133  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.150  7106  7106 I Detox   : AnimatedModule is busy.
+12-09 10:42:37.176  7106  7106 W MotionEvents: Overslept and turned a tap into a long press
+12-09 10:42:37.791  7106  7106 I Detox   : UIManagerModule is busy
+12-09 10:42:37.874  7106  7172 I DetoxWSClient: Sending out action 'invokeResult' (ID #49)
+12-09 10:42:37.875  7106  7172 I DetoxDispatcher: Done with action 'invoke'
+12-09 10:42:37.883  7106  7175 D DetoxWSClient: Received action 'invoke' (ID #50, params={"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxAssertion"},"method":"assertMatcher","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"androidx.test.espresso.Espresso"},"method":"onView","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForTestId","args":["done"]}}]}},{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForNot","args":[{"type":"Invocation","value":{"target":{"type":"Class","value":"com.wix.detox.espresso.DetoxMatcher"},"method":"matcherForSufficientlyVisible","args":[{"type":"Integer","value":75}]}}]}}]})
+12-09 10:42:37.884  7106  7172 I DetoxDispatcher: Handling action 'invoke' (ID #50)...
+12-09 10:42:37.885  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForTestId, [done]
+12-09 10:42:37.886  7106  7172 D Detox   : class androidx.test.espresso.Espresso, onView, [(view.getTag() is "done" and view has effective visibility <VISIBLE>)]
+12-09 10:42:37.886  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForSufficientlyVisible, [75]
+12-09 10:42:37.887  7106  7172 D Detox   : class com.wix.detox.espresso.DetoxMatcher, matcherForNot, [(view has effective visibility <VISIBLE> and view.getGlobalVisibleRect() covers at least <75> percent of the view's area)]
+12-09 10:42:37.888  710
