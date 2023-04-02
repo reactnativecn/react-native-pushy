@@ -1,16 +1,16 @@
-/** @type {import('jest').Config} */
+/** @type {import('@jest/types').Config.InitialOptions} */
 module.exports = {
-  maxWorkers: 1,
-  globalSetup: './globalSetup.ts',
-  globalTeardown: 'detox/runners/jest/globalTeardown',
-  testEnvironment: 'detox/runners/jest/testEnvironment',
-  setupFilesAfterEnv: ['./setup.ts'],
-  testRunner: 'jest-circus/runner',
+  rootDir: '..',
+  testMatch: ['<rootDir>/e2e/**/*.test.js'],
   testTimeout: 120000,
+  maxWorkers: 1,
   testMatch: ['**/*.test.ts'],
   transform: {
     '\\.tsx?$': 'ts-jest',
   },
+  globalSetup: 'detox/runners/jest/globalSetup',
+  globalTeardown: 'detox/runners/jest/globalTeardown',
   reporters: ['detox/runners/jest/reporter'],
+  testEnvironment: 'detox/runners/jest/testEnvironment',
   verbose: true,
 };

@@ -1,0 +1,270 @@
+--------- beginning of main
+12-09 14:40:08.705 20108 20108 I .awesomeproject: Late-enabling -Xcheck:jni
+12-09 14:40:08.746 20108 20108 D CompatibilityChangeReporter: Compat change id reported: 171979766; UID 10184; state: ENABLED
+--------- beginning of system
+12-09 14:40:08.751 20108 20108 W ActivityThread: Package uses different ABI(s) than its instrumentation: package[com.awesomeproject]: arm64-v8a, null instrumentation[com.awesomeproject.test]: null, null
+12-09 14:40:08.753 20108 20108 W .awesomeproject: ClassLoaderContext classpath size mismatch. expected=0, found=1 (PCL[] | PCL[/system/framework/android.test.runner.jar*2256426886])
+12-09 14:40:08.754 20108 20108 W .awesomeproject: ClassLoaderContext classpath size mismatch. expected=0, found=2 (PCL[] | PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951])
+12-09 14:40:08.754 20108 20108 W ziparchive: Unable to open '/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.dm': No such file or directory
+12-09 14:40:08.754 20108 20108 W ziparchive: Unable to open '/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.dm': No such file or directory
+12-09 14:40:08.815 20108 20108 W ziparchive: Unable to open '/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.dm': No such file or directory
+12-09 14:40:08.815 20108 20108 W ziparchive: Unable to open '/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.dm': No such file or directory
+12-09 14:40:08.886 20108 20108 V GraphicsEnvironment: ANGLE Developer option for 'com.awesomeproject' set to: 'default'
+12-09 14:40:08.886 20108 20108 V GraphicsEnvironment: ANGLE GameManagerService for com.awesomeproject: false
+12-09 14:40:08.886 20108 20108 V GraphicsEnvironment: Neither updatable production driver nor prerelease driver is supported.
+12-09 14:40:08.887 20108 20108 D ApplicationLoaders: Returning zygote-cached class loader: /system/framework/android.test.base.jar
+12-09 14:40:08.888 20108 20108 D ApplicationLoaders: Returning zygote-cached class loader: /system/framework/android.test.base.jar
+12-09 14:40:08.888 20108 20108 W .awesomeproject: ClassLoaderContext shared library size mismatch. Expected=0, found=2 (PCL[] | PCL[]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]})
+12-09 14:40:08.889 20108 20108 W .awesomeproject: ClassLoaderContext shared library size mismatch. Expected=0, found=3 (PCL[] | PCL[]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]#PCL[/system/framework/android.test.runner.jar*2256426886]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]}};PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951:/system/framework/android.test.base.jar*1628045882:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk*3488107038:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes2.dex*3802597924:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes3.dex*1113348705:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes4.dex*1609470516:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk*4280308006:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes2.dex*2341650508:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes3.dex*2242498629:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes4.dex*1939924932:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes5.dex*3428091317:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes6.dex*1896867339:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes7.dex*616740603])
+12-09 14:40:08.889 20108 20108 W .awesomeproject: ClassLoaderContext classpath size mismatch. expected=0, found=1 (PCL[] | PCL[/system/framework/android.test.runner.jar*2256426886]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]#PCL[/system/framework/android.test.runner.jar*2256426886]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]}};PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951:/system/framework/android.test.base.jar*1628045882:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk*3488107038:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes2.dex*3802597924:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes3.dex*1113348705:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes4.dex*1609470516:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk*4280308006:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes2.dex*2341650508:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes3.dex*2242498629:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes4.dex*1939924932:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes5.dex*3428091317:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes6.dex*1896867339:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes7.dex*616740603])
+12-09 14:40:08.889 20108 20108 W .awesomeproject: ClassLoaderContext classpath size mismatch. expected=0, found=2 (PCL[] | PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]#PCL[/system/framework/android.test.runner.jar*2256426886]{PCL[/system/framework/android.test.base.jar*1628045882]#PCL[/system/framework/android.test.mock.jar*849501951]}};PCL[/system/framework/android.test.runner.jar*2256426886:/system/framework/android.test.mock.jar*849501951:/system/framework/android.test.base.jar*1628045882:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk*3488107038:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes2.dex*3802597924:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes3.dex*1113348705:/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk!classes4.dex*1609470516:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk*4280308006:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes2.dex*2341650508:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes3.dex*2242498629:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes4.dex*1939924932:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes5.dex*3428091317:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes6.dex*1896867339:/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.apk!classes7.dex*616740603])
+12-09 14:40:08.889 20108 20108 W ziparchive: Unable to open '/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.dm': No such file or directory
+12-09 14:40:08.889 20108 20108 W ziparchive: Unable to open '/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.dm': No such file or directory
+12-09 14:40:08.940 20108 20108 W ziparchive: Unable to open '/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.dm': No such file or directory
+12-09 14:40:08.940 20108 20108 W ziparchive: Unable to open '/data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/base.dm': No such file or directory
+12-09 14:40:09.014 20108 20108 D NetworkSecurityConfig: Using Network Security Config from resource network_security_config debugBuild: true
+12-09 14:40:09.014 20108 20108 D NetworkSecurityConfig: Using Network Security Config from resource network_security_config debugBuild: true
+12-09 14:40:09.018 20108 20108 I MonitoringInstr: Instrumentation started!
+12-09 14:40:09.020 20108 20108 V TestEventClient: No service name argument was given (testDiscoveryService, testRunEventService or orchestratorService)
+12-09 14:40:09.021 20108 20108 V fb-UnpackingSoSource: locked dso store /data/user/0/com.awesomeproject/lib-main
+12-09 14:40:09.022 20108 20108 V fb-UnpackingSoSource: deps mismatch on deps store: regenerating
+12-09 14:40:09.022 20108 20108 V fb-UnpackingSoSource: so store dirty: regenerating
+12-09 14:40:09.032 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libc++_shared.so: deferring to libdir
+12-09 14:40:09.032 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libevent-2.1.so: deferring to libdir
+12-09 14:40:09.032 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libevent_core-2.1.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libevent_extra-2.1.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libfabricjni.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libfb.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libfbjni.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libflipper.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libfolly_runtime.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libglog.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libglog_init.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libimagepipeline.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjsc.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjscexecutor.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjsi.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjsijniprofiler.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libjsinspector.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/liblogger.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libmapbufferjni.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libnative-filters.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libnative-imagetranscoder.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_codegen_rncore.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_config.so: deferring to libdir
+12-09 14:40:09.033 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_debug.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_nativemodule_core.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_animations.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_attributedstring.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_componentregistry.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_core.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_debug.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_graphics.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_imagemanager.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_leakchecker.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_mapbuffer.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_mounting.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_runtimescheduler.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_scheduler.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_telemetry.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_templateprocessor.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_textlayoutmanager.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_render_uimanager.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreact_utils.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreactnativeblob.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreactnativejni.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libreactperfloggerjni.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librnupdate.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_image.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_root.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_scrollview.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_text.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_textinput.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_unimplementedview.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/librrc_view.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libruntimeexecutor.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libturbomodulejsijni.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 D ApkSoSource: not allowing consideration of lib/arm64-v8a/libyoga.so: deferring to libdir
+12-09 14:40:09.034 20108 20108 V fb-UnpackingSoSource: regenerating DSO store com.facebook.soloader.ApkSoSource
+12-09 14:40:09.034 20108 20108 V fb-UnpackingSoSource: Finished regenerating DSO store com.facebook.soloader.ApkSoSource
+12-09 14:40:09.034 20108 20108 V fb-UnpackingSoSource: starting syncer worker
+12-09 14:40:09.037 20108 20108 V fb-UnpackingSoSource: releasing dso store lock for /data/user/0/com.awesomeproject/lib-main (from syncer thread)
+12-09 14:40:09.037 20108 20108 V fb-UnpackingSoSource: not releasing dso store lock for /data/user/0/com.awesomeproject/lib-main (syncer thread started)
+12-09 14:40:09.039 20108 20108 D SoLoader: libjscexecutor.so not found on /data/data/com.awesomeproject/lib-main
+12-09 14:40:09.039 20108 20108 D SoLoader: libjscexecutor.so found on /data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/lib/arm64
+12-09 14:40:09.039 20108 20108 D SoLoader: Not resolving dependencies for libjscexecutor.so
+12-09 14:40:09.046 20108 20108 D JavaScriptCore.Version: 250230.2.1
+12-09 14:40:09.072 20108 20130 D SoLoader: libfbjni.so not found on /data/data/com.awesomeproject/lib-main
+12-09 14:40:09.072 20108 20130 D SoLoader: libfbjni.so found on /data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/lib/arm64
+12-09 14:40:09.072 20108 20130 D SoLoader: Not resolving dependencies for libfbjni.so
+12-09 14:40:09.073 20108 20130 D SoLoader: libflipper.so not found on /data/data/com.awesomeproject/lib-main
+12-09 14:40:09.073 20108 20130 D SoLoader: libflipper.so found on /data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/lib/arm64
+12-09 14:40:09.073 20108 20130 D SoLoader: Not resolving dependencies for libflipper.so
+12-09 14:40:09.106 20108 20108 W .awesomeproject: Accessing hidden field Landroid/view/View;->mKeyedTags:Landroid/util/SparseArray; (unsupported, reflection, allowed)
+12-09 14:40:09.106 20108 20108 W .awesomeproject: Accessing hidden field Landroid/view/View;->mListenerInfo:Landroid/view/View$ListenerInfo; (unsupported, reflection, allowed)
+12-09 14:40:09.106 20108 20108 W .awesomeproject: Accessing hidden field Landroid/view/View$ListenerInfo;->mOnClickListener:Landroid/view/View$OnClickListener; (unsupported, reflection, allowed)
+12-09 14:40:09.108 20108 20108 I flipper : flipper: FlipperClient::addPlugin Inspector
+12-09 14:40:09.110 20108 20108 I flipper : flipper: FlipperClient::addPlugin React
+12-09 14:40:09.110 20108 20108 I flipper : flipper: FlipperClient::addPlugin Databases
+12-09 14:40:09.112 20108 20108 I flipper : flipper: FlipperClient::addPlugin Preferences
+12-09 14:40:09.112 20108 20108 I flipper : flipper: FlipperClient::addPlugin CrashReporter
+12-09 14:40:09.113 20108 20108 I flipper : flipper: FlipperClient::addPlugin Network
+12-09 14:40:09.117 20108 20135 D TrafficStats: tagSocket(86) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:09.124 20108 20134 D TrafficStats: tagSocket(85) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:09.138 20108 20125 I UsageTrackerFacilitator: Usage tracking enabled
+12-09 14:40:09.141 20108 20125 I TestRequestBuilder: Scanning classpath to find tests in paths [/data/app/~~JbluuSx6QTkqb_6NTsHF9w==/com.awesomeproject.test-hBD1JykP08ciZhLfSyPoEw==/base.apk]
+12-09 14:40:09.141 20108 20125 W .awesomeproject: Opening an oat file without a class loader. Are you using the deprecated DexFile APIs?
+12-09 14:40:09.291 20108 20129 W .awesomeproject: Verification of void org.slf4j.LoggerFactory.replayEvents() took 160.243ms (374.43 bytecodes/s) (2800B approximate peak alloc)
+12-09 14:40:09.298 20108 20129 W System.err: SLF4J: Failed to load class "org.slf4j.impl.StaticLoggerBinder".
+12-09 14:40:09.303 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityHierarchyCheckResult; annotation class 6432
+12-09 14:40:09.303 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityHierarchyCheckResult; annotation class 6432
+12-09 14:40:09.303 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityHierarchyCheckResult; annotation class 6432
+12-09 14:40:09.303 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityHierarchyCheckResult; annotation class 6432
+12-09 14:40:09.303 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/AccessibilityViewCheckResult; annotation class 6432
+12-09 14:40:09.304 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/ClusteringUtils; annotation class 6432
+12-09 14:40:09.304 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/Question; annotation class 6432
+12-09 14:40:09.306 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/replacements/TextUtils; annotation class 6431
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElementAndroid; annotation class 6432
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElementAndroid; annotation class 6432
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElementAndroid; annotation class 6432
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElementAndroid; annotation class 6432
+12-09 14:40:09.308 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 14:40:09.309 20108 20125 W .awesomeproject: Unable to resolve Lcom/google/android/apps/common/testing/accessibility/framework/uielement/ViewHierarchyElement; annotation class 6432
+12-09 14:40:09.322 20108 20129 W System.err: SLF4J: Defaulting to no-operation (NOP) logger implementation
+12-09 14:40:09.331 20108 20129 W System.err: SLF4J: See http://www.slf4j.org/codes.html#StaticLoggerBinder for further details.
+12-09 14:40:09.375 20108 20153 D TrafficStats: tagSocket(96) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:09.506 20108 20125 D TestExecutor: Adding listener androidx.test.internal.runner.listener.LogRunListener
+12-09 14:40:09.506 20108 20125 D TestExecutor: Adding listener androidx.test.internal.runner.listener.InstrumentationResultPrinter
+12-09 14:40:09.506 20108 20125 D TestExecutor: Adding listener androidx.test.internal.runner.listener.ActivityFinisherRunListener
+12-09 14:40:09.506 20108 20125 I TestRunner: run started: 1 tests
+12-09 14:40:09.507 20108 20125 I TestRunner: started: runDetoxTests(com.awesomeproject.DetoxTest)
+12-09 14:40:09.512 20108 20125 D EventInjectionStrategy: Creating injection strategy with input manager.
+12-09 14:40:09.512 20108 20125 W .awesomeproject: Accessing hidden method Landroid/hardware/input/InputManager;->getInstance()Landroid/hardware/input/InputManager; (unsupported, reflection, allowed)
+12-09 14:40:09.512 20108 20125 W .awesomeproject: Accessing hidden method Landroid/hardware/input/InputManager;->injectInputEvent(Landroid/view/InputEvent;I)Z (unsupported, reflection, allowed)
+12-09 14:40:09.512 20108 20125 W .awesomeproject: Accessing hidden field Landroid/hardware/input/InputManager;->INJECT_INPUT_EVENT_MODE_WAIT_FOR_FINISH:I (unsupported, reflection, allowed)
+12-09 14:40:09.514 20108 20125 W .awesomeproject: Accessing hidden field Ljava/lang/reflect/Field;->accessFlags:I (unsupported, reflection, allowed)
+12-09 14:40:09.557 20108 20158 D libEGL  : loaded /vendor/lib64/egl/libEGL_emulation.so
+12-09 14:40:09.622 20108 20158 D libEGL  : loaded /vendor/lib64/egl/libGLESv1_CM_emulation.so
+12-09 14:40:09.625 20108 20158 D libEGL  : loaded /vendor/lib64/egl/libGLESv2_emulation.so
+12-09 14:40:09.644 20108 20108 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@fcceb27 in: PRE_ON_CREATE
+12-09 14:40:09.711 20108 20108 W .awesomeproject: Accessing hidden method Landroid/view/View;->computeFitSystemWindows(Landroid/graphics/Rect;Landroid/graphics/Rect;)Z (unsupported, reflection, allowed)
+12-09 14:40:09.711 20108 20108 W .awesomeproject: Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (unsupported, reflection, allowed)
+12-09 14:40:09.711 20108 20108 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@fcceb27 in: CREATED
+12-09 14:40:09.712 20108 20108 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@fcceb27 in: STARTED
+12-09 14:40:09.713 20108 20108 D LifecycleMonitor: Lifecycle status change: com.awesomeproject.MainActivity@fcceb27 in: RESUMED
+12-09 14:40:09.719 20108 20108 W unknown:ReactNative: Packager connection already open, nooping.
+12-09 14:40:09.723 20108 20157 D HostConnection: createUnique: call
+12-09 14:40:09.724 20108 20157 D HostConnection: HostConnection::get() New Host Connection established 0xb4000077d3ba7910, tid 20157
+12-09 14:40:09.726 20108 20157 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_native_sync_v3 ANDROID_EMU_native_sync_v4 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_has_shared_slots_host_memory_allocator ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_vulkan_queue_submit_with_commands ANDROID_EMU_sync_buffer_data ANDROID_EMU_read_color_buffer_dma ANDROID_EMU_hwc_multi_configs GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_0 
+12-09 14:40:09.727 20108 20157 W OpenGLRenderer: Failed to choose config with EGL_SWAP_BEHAVIOR_PRESERVED, retrying without...
+12-09 14:40:09.728 20108 20157 W OpenGLRenderer: Failed to initialize 101010-2 format, error = EGL_SUCCESS
+12-09 14:40:09.728 20108 20157 D EGL_emulation: eglCreateContext: 0xb4000077d3ba6c50: maj 3 min 0 rcv 3
+12-09 14:40:09.729 20108 20157 D EGL_emulation: eglMakeCurrent: 0xb4000077d3ba6c50: ver 3 0 (tinfo 0x79f25a4080) (first time)
+12-09 14:40:09.745 20108 20157 I Gralloc4: mapper 4.x is not supported
+12-09 14:40:09.746 20108 20157 D HostConnection: createUnique: call
+12-09 14:40:09.746 20108 20157 D HostConnection: HostConnection::get() New Host Connection established 0xb4000077d3ba7a90, tid 20157
+12-09 14:40:09.746 20108 20157 D goldfish-address-space: allocate: Ask for block of size 0x100
+12-09 14:40:09.746 20108 20157 D goldfish-address-space: allocate: ioctl allocate returned offset 0x1efff8000 size 0x8000
+12-09 14:40:09.747 20108 20157 W Gralloc4: allocator 4.x is not supported
+12-09 14:40:09.752 20108 20157 D HostConnection: HostComposition ext ANDROID_EMU_CHECKSUM_HELPER_v1 ANDROID_EMU_native_sync_v2 ANDROID_EMU_native_sync_v3 ANDROID_EMU_native_sync_v4 ANDROID_EMU_dma_v1 ANDROID_EMU_direct_mem ANDROID_EMU_host_composition_v1 ANDROID_EMU_host_composition_v2 ANDROID_EMU_vulkan ANDROID_EMU_deferred_vulkan_commands ANDROID_EMU_vulkan_null_optional_strings ANDROID_EMU_vulkan_create_resources_with_requirements ANDROID_EMU_YUV_Cache ANDROID_EMU_vulkan_ignored_handles ANDROID_EMU_has_shared_slots_host_memory_allocator ANDROID_EMU_vulkan_free_memory_sync ANDROID_EMU_vulkan_shader_float16_int8 ANDROID_EMU_vulkan_async_queue_submit ANDROID_EMU_vulkan_queue_submit_with_commands ANDROID_EMU_sync_buffer_data ANDROID_EMU_read_color_buffer_dma ANDROID_EMU_hwc_multi_configs GL_OES_EGL_image_external_essl3 GL_OES_vertex_array_object GL_KHR_texture_compression_astc_ldr ANDROID_EMU_host_side_tracing ANDROID_EMU_gles_max_version_3_0 
+12-09 14:40:09.758 20108 20161 D TrafficStats: tagSocket(109) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:09.763 20108 20157 W Parcel  : Expecting binder but got null!
+12-09 14:40:09.786 20108 20125 I Detox   : Detox server connection details: url=ws://localhost:55801, sessionId=85295354-1163-f241-e2d5-6b40862968db
+12-09 14:40:09.793 20108 20165 I DetoxDispatcher: Handling action '_init' (ID #0)...
+12-09 14:40:09.796 20108 20165 I Detox   : Connecting to server...
+12-09 14:40:09.796 20108 20165 I DetoxWSClient: At connectToServer
+12-09 14:40:09.805 20108 20108 D CompatibilityChangeReporter: Compat change id reported: 210923482; UID 10184; state: DISABLED
+12-09 14:40:09.805 20108 20108 D CompatibilityChangeReporter: Compat change id reported: 37756858; UID 10184; state: ENABLED
+12-09 14:40:09.811 20108 20167 D TrafficStats: tagSocket(124) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:09.830 20108 20157 W Parcel  : Expecting binder but got null!
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: Could not parse DebugServerException from: {"originModulePath":"/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js","targetModuleName":"react-native-update","message":"Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m","errors":[{"description":"Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m"}],"name":"Error","stack":"Error: Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m\n    at ModuleResolver.resolveDependency (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/node-haste/DependencyGraph/ModuleResolution.js:158:15)\n    at DependencyGraph.resolveDependency (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/node-haste/DependencyGraph.js:231:43)\n    at Object.resolve (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/lib/transformHelpers.js:129:24)\n    at resolve (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/DeltaBundler/traverseDependencies.js:396:33)\n    at /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: org.json.JSONException: No value for filename
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at org.json.JSONObject.get(JSONObject.java:398)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at org.json.JSONObject.getString(JSONObject.java:559)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.common.DebugServerException.parse(DebugServerException.java:77)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.processBundleResult(BundleDownloader.java:251)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.access$200(BundleDownloader.java:34)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader$2.onChunkComplete(BundleDownloader.java:193)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.devsupport.MultipartStreamReader.emitChunk(MultipartStreamReader.java:70)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.devsupport.MultipartStreamReader.readAllParts(MultipartStreamReader.java:152)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.processMultipartResponse(BundleDownloader.java:177)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.access$100(BundleDownloader.java:34)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader$1.onResponse(BundleDownloader.java:147)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+12-09 14:40:09.841 20108 20161 W unknown:ReactNative: 	at java.lang.Thread.run(Thread.java:1012)
+12-09 14:40:09.842 20108 20161 E unknown:ReactNative: Unable to download JS bundle
+12-09 14:40:09.842 20108 20161 E unknown:ReactNative: com.facebook.react.common.DebugServerException: The development server returned response error code: 500
+12-09 14:40:09.842 20108 20161 E unknown:ReactNative: 
+12-09 14:40:09.842 20108 20161 E unknown:ReactNative: URL: http://localhost:8081/index.bundle?platform=android&dev=true&minify=false&app=com.awesomeproject&modulesOnly=false&runModule=true
+12-09 14:40:09.842 20108 20161 E unknown:ReactNative: 
+12-09 14:40:09.842 20108 20161 E unknown:ReactNative: Body:
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: {"originModulePath":"/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js","targetModuleName":"react-native-update","message":"Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m","errors":[{"description":"Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m"}],"name":"Error","stack":"Error: Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m\n    at ModuleResolver.resolveDependency (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/node-haste/DependencyGraph/ModuleResolution.js:158:15)\n    at DependencyGraph.resolveDependency (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/node-haste/DependencyGraph.js:231:43)\n    at Object.resolve (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/lib/transformHelpers.js:129:24)\n    at resolve (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/DeltaBundler/traverseDependencies.js:396:33)\n    at /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/DeltaBundler/traverseDependencies
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.processBundleResult(BundleDownloader.java:264)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.access$200(BundleDownloader.java:34)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader$2.onChunkComplete(BundleDownloader.java:193)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at com.facebook.react.devsupport.MultipartStreamReader.emitChunk(MultipartStreamReader.java:70)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at com.facebook.react.devsupport.MultipartStreamReader.readAllParts(MultipartStreamReader.java:152)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.processMultipartResponse(BundleDownloader.java:177)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.access$100(BundleDownloader.java:34)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader$1.onResponse(BundleDownloader.java:147)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+12-09 14:40:09.843 20108 20161 E unknown:ReactNative: 	at java.lang.Thread.run(Thread.java:1012)
+12-09 14:40:09.845 20108 20167 D DetoxWSClient: At onOpen
+12-09 14:40:09.845 20108 20167 I DetoxWSClient: Sending out action 'login' (ID #0)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: Exception in native call
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: com.facebook.react.common.DebugServerException: The development server returned response error code: 500
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: URL: http://localhost:8081/index.bundle?platform=android&dev=true&minify=false&app=com.awesomeproject&modulesOnly=false&runModule=true
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: Body:
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: {"originModulePath":"/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js","targetModuleName":"react-native-update","message":"Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m","errors":[{"description":"Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m"}],"name":"Error","stack":"Error: Unable to resolve module react-native-update from /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/src/index.js: react-native-update could not be found within the project or in these directories:\n  node_modules\n  ../../node_modules\n  ../../../../../node_modules\n\u001b[0m \u001b[90m 23 |\u001b[39m   downloadAndInstallApk\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 24 |\u001b[39m   cInfo\u001b[33m,\u001b[39m\u001b[0m\n\u001b[0m\u001b[31m\u001b[1m>\u001b[22m\u001b[39m\u001b[90m 25 |\u001b[39m } \u001b[36mfrom\u001b[39m \u001b[32m'react-native-update'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m    |\u001b[39m         \u001b[31m\u001b[1m^\u001b[22m\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 26 |\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 27 |\u001b[39m \u001b[36mimport\u001b[39m \u001b[33mTestConsole\u001b[39m \u001b[36mfrom\u001b[39m \u001b[32m'./TestConsole'\u001b[39m\u001b[33m;\u001b[39m\u001b[0m\n\u001b[0m \u001b[90m 28 |\u001b[39m\u001b[0m\n    at ModuleResolver.resolveDependency (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/node-haste/DependencyGraph/ModuleResolution.js:158:15)\n    at DependencyGraph.resolveDependency (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/node-haste/DependencyGraph.js:231:43)\n    at Object.resolve (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/lib/transformHelpers.js:129:24)\n    at resolve (/Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/DeltaBundler/traverseDependencies.js:396:33)\n    at /Users/arvinh/Desktop/wooza/react-native-pushy/Example/testHotUpdate/node_modules/metro/src/DeltaBundler/traverseDependencies
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.processBundleResult(BundleDownloader.java:264)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.access$200(BundleDownloader.java:34)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader$2.onChunkComplete(BundleDownloader.java:193)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at com.facebook.react.devsupport.MultipartStreamReader.emitChunk(MultipartStreamReader.java:70)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at com.facebook.react.devsupport.MultipartStreamReader.readAllParts(MultipartStreamReader.java:152)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.processMultipartResponse(BundleDownloader.java:177)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader.access$100(BundleDownloader.java:34)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at com.facebook.react.devsupport.BundleDownloader$1.onResponse(BundleDownloader.java:147)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at okhttp3.internal.connection.RealCall$AsyncCall.run(RealCall.kt:519)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1137)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:637)
+12-09 14:40:09.859 20108 20108 E unknown:ReactNative: 	at java.lang.Thread.run(Thread.java:1012)
+12-09 14:40:09.862 20108 20108 D CompatibilityChangeReporter: Compat change id reported: 171228096; UID 10184; state: ENABLED
+12-09 14:40:09.904 20108 20157 W Parcel  : Expecting binder but got null!
+12-09 14:40:09.905 20108 20167 I Detox   : Connected to server!
+12-09 14:40:09.906 20108 20167 D DetoxWSClient: Received action 'loginSuccess' (ID #0, params={"testerConnected":true,"appConnected":true})
+12-09 14:40:09.910 20108 20167 D DetoxWSClient: Received action 'isReady' (ID #-1000, params={})
+12-09 14:40:10.179 20108 20134 D SoLoader: libreactnativejni.so not found on /data/data/com.awesomeproject/lib-main
+12-09 14:40:10.180 20108 20134 D SoLoader: libreactnativejni.so found on /data/app/~~sJBymP1pJHzMrTfEnUzLyQ==/com.awesomeproject-o0qibQ9IJbng_NpEZc31Ow==/lib/arm64
+12-09 14:40:10.180 20108 20134 D SoLoader: Not resolving dependencies for libreactnativejni.so
+12-09 14:40:11.388 20108 20175 D TrafficStats: tagSocket(142) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:11.505 20108 20157 D EGL_emulation: app_time_stats: avg=399.92ms min=3.80ms max=1219.56ms count=4
+12-09 14:40:13.406 20108 20177 D TrafficStats: tagSocket(133) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:15.422 20108 20179 D TrafficStats: tagSocket(133) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:19.880 20108 20167 D DetoxWSClient: Received action 'currentStatus' (ID #1, params={})
+12-09 14:40:19.881 20108 20166 I DetoxDispatcher: Handling action 'currentStatus' (ID #1)...
+12-09 14:40:25.484 20108 20185 D TrafficStats: tagSocket(144) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:27.505 20108 20187 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:29.524 20108 20189 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:31.536 20108 20191 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:41.586 20108 20199 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:43.598 20108 20201 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:45.608 20108 20207 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:47.619 20108 20209 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:57.669 20108 20215 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:40:59.679 20108 20217 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:41:01.693 20108 20219 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:41:03.701 20108 20221 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:41:13.742 20108 20227 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:41:15.753 20108 20229 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:41:17.766 20108 20231 D TrafficStats: tagSocket(5) with statsTag=0xffffffff, statsUid=-1
+12-09 14:41:19.783 20108 20233 D TrafficStats: t

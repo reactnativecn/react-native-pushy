@@ -3,14 +3,12 @@
 import {useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   TextInput,
   Button,
   StyleSheet,
   SafeAreaView,
   Text,
-  ScrollView,
   View,
   TouchableOpacity,
 } from 'react-native';
@@ -19,11 +17,31 @@ import {PushyModule} from 'react-native-update';
 const Hash = '9D5CE6EBA420717BE7E7D308B11F8207681B066C951D68F3994D19828F342474';
 const UUID = '00000000-0000-0000-0000-000000000000';
 const DownloadUrl =
-  'http://cos.pgyer.com/697913e94d7441f20c686e2b0996a1aa.apk?sign=363b035b7ef52c199c268abfacee3712&t=1678603669&response-content-disposition=attachment%3Bfilename%3DtestHotupdate_1.0.apk';
+  'http://cos.pgyer.com/697913e94d7441f20c686e2b0996a1aa.apk?sign=7a8f11b1df82cba45c8ac30b1acec88c&t=1680404102&response-content-disposition=attachment%3Bfilename%3DtestHotupdate_1.0.apk';
+
+
+  const CustomDialog = ({title, visible, onConfirm}) => {
+    if (!visible) {
+      return null;
+    }
+  
+    return (
+      <View style={styles.overlay}>
+        <View style={styles.dialog}>
+          <Text style={styles.title}>{title}</Text>
+          <TouchableOpacity testID='done' style={styles.button} onLongPress={onConfirm}>
+            <Text style={styles.buttonText}>确认</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
 export default function TestConsole({visible}) {
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
   const [options, setOptions] = useState();
+  const [alertVisible, setAlertVisible] = useState(false);
+  const [alertMsg, setAlertMsg] = useState('');
   const NativeTestMethod = useMemo(() => {
     return [
       {
@@ -71,6 +89,7 @@ export default function TestConsole({visible}) {
         name: 'markSuccess',
         invoke: () => {
           setText('markSuccess');
+          setOptions(undefined);
         },
       },
       {
@@ -111,11 +130,12 @@ export default function TestConsole({visible}) {
         <TouchableOpacity
           key={i}
           testID={NativeTestMethod[i].name}
-          onPress={() => {
+          onLongPress={() => {
             NativeTestMethod[i].invoke();
           }}
-          style={{width: 10, height: 10}}
-        />,
+        >
+        <Text>{NativeTestMethod[i].name}</Text>
+        </TouchableOpacity>,
       );
     }
     return <View>{views}</View>;
@@ -143,10 +163,11 @@ export default function TestConsole({visible}) {
           onChangeText={setText}
         />
         {running && <ActivityIndicator />}
-        <Button
-          title="执行"
+        <TouchableOpacity
+        style={{backgroundColor:'rgb(0,140,237)', justifyContent: 'center',
+        alignItems: 'center',paddingTop:10,paddingBottom:10,marginBottom:5}}
           testID="submit"
-          onPress={async () => {
+          onLongPress={async () => {
             setRunning(true);
             try {
               const inputs = text.split('\n');
@@ -167,19 +188,65 @@ export default function TestConsole({visible}) {
                 }
                 await PushyModule[methodName](...params);
               }
-              Alert.alert('done');
+              setAlertVisible(true);
+              setAlertMsg('done');
             } catch (e) {
-              Alert.alert(e.message);
+              setAlertVisible(true);
+              setAlertMsg(e.message);
             }
             setRunning(false);
           }}
-        />
-        <ScrollView style={{marginTop: 15}}>
-          <Button title="重置" onPress={() => setText('')} />
-
+        >
+          <Text style={{color:'white'}}>执行</Text>
+        </TouchableOpacity>
+         <Button title="重置" onPress={() => setText('')} />
           {renderTestView()}
-        </ScrollView>
+          <CustomDialog
+            title={alertMsg}
+            visible={alertVisible}
+            onConfirm={()=>{setAlertVisible(false)}}
+      />
       </SafeAreaView>
     </Modal>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dialog: {
+    backgroundColor: 'white',
+    borderRadius: 10,
+    padding: 20,
+    width: '80%',
+    alignItems: 'center',
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 20,
+  },
+  button: {
+    backgroundColor: '#2196F3',
+    borderRadius: 5,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+  },
+  buttonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+});
