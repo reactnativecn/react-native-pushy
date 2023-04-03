@@ -43,4 +43,6 @@ npm-debug.log
 
 Example/**/.update
 Example/**/.pushy
+Example/testHotUpdate/artifacts
+
 yarn-error.log
