@@ -170,6 +170,7 @@ export default class App extends Component {
         </TouchableOpacity>
 
         <TouchableOpacity
+          testID="testcase"
           style={{marginTop: 15}}
           onLongPress={() => {
             this.setState({showTestConsole: true});

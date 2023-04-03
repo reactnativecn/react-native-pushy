@@ -169,7 +169,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void reloadUpdate(ReadableMap options) {
+    public void reloadUpdate(ReadableMap options, final Promise promise) {
         final String hash = options.getString("hash");
 
         UiThreadUtil.runOnUiThread(new Runnable() {
@@ -191,6 +191,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
                         loadField.setAccessible(true);
                         loadField.set(instanceManager, loader);
                     } catch (Throwable err) {
+                        promise.reject(err);
                         Field jsBundleField = instanceManager.getClass().getDeclaredField("mJSBundleFile");
                         jsBundleField.setAccessible(true);
                         jsBundleField.set(instanceManager, UpdateContext.getBundleUrl(application));
@@ -198,11 +199,14 @@ public class UpdateModule extends ReactContextBaseJavaModule {
 
                     try {
                         instanceManager.recreateReactContextInBackground();
+                        promise.resolve(null);
                     } catch (Throwable err) {
                         activity.recreate();
+                        promise.reject(err);
                     }
 
                 } catch (Throwable err) {
+                    promise.reject(err);
                     Log.e("pushy", "switchVersion failed", err);
                 }
             }
