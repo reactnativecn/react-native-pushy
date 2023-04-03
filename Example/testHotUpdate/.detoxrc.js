@@ -1,12 +1,19 @@
 /** @type {Detox.DetoxConfig} */
 module.exports = {
+  logger: {
+    level: process.env.CI ? 'debug' : undefined,
+  },
   testRunner: {
     args: {
-      $0: 'jest',
       config: 'e2e/jest.config.js',
+      maxWorkers: process.env.CI ? 2 : undefined,
+      _: ['e2e'],
     },
-    jest: {
-      setupTimeout: 240000,
+  },
+  artifacts: {
+    plugins: {
+      log: process.env.CI ? 'failing' : undefined,
+      screenshot: process.env.CI ? 'failing' : undefined,
     },
   },
   apps: {
