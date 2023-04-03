@@ -20,7 +20,8 @@ module.exports = {
     'ios.debug': {
       type: 'ios.app',
       binaryPath: 'ios/build/Build/Products/Debug-iphonesimulator/AwesomeProject.app',
-      "build": "xcodebuild -workspace ios/AwesomeProject.xcworkspace -UseNewBuildSystem=NO -scheme AwesomeProject -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build",
+      build: "xcodebuild -workspace ios/AwesomeProject.xcworkspace -UseNewBuildSystem=NO -scheme AwesomeProject -configuration Debug -sdk iphonesimulator -derivedDataPath ios/build",
+      start: "scripts/start-rn.sh ios",
     },
     'ios.release': {
       type: 'ios.app',
