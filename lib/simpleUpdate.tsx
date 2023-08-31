@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React, { PureComponent } from 'react';
 import { Platform, Alert, Linking, AppState } from 'react-native';
 
 import {
@@ -10,16 +10,25 @@ import {
   switchVersionLater,
   markSuccess,
   downloadAndInstallApk,
+  onEvents,
 } from './main';
+import { UpdateEventsListener } from './type';
 
-export function simpleUpdate(WrappedComponent, options = {}) {
-  const { appKey } = options;
+export function simpleUpdate(
+  WrappedComponent: JSX.Element,
+  options: { appKey?: string; onEvents?: UpdateEventsListener } = {},
+) {
+  const { appKey, onEvents: eventListeners } = options;
   if (!appKey) {
     throw new Error('appKey is required for simpleUpdate()');
   }
+  if (typeof eventListeners === 'function') {
+    onEvents(eventListeners);
+  }
+  // @ts-expect-error
   return __DEV__
     ? WrappedComponent
-    : class AppUpdate extends Component {
+    : class AppUpdate extends PureComponent {
         componentDidMount() {
           if (isRolledBack) {
             Alert.alert('抱歉', '刚刚更新遭遇错误，已为您恢复到更新前版本');

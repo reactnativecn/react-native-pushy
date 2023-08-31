@@ -1,8 +1,8 @@
 {
   "name": "react-native-update",
-  "version": "9.0.0-beta.0",
+  "version": "9.0.0-beta.1",
   "description": "react-native hot update",
-  "main": "lib/index.js",
+  "main": "lib/index.ts",
   "scripts": {
     "prepublish": "yarn submodule",
     "submodule": "git submodule update --init --recursive",

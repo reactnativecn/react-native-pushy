@@ -1,6 +1,6 @@
 let currentEndpoint = 'https://update.react-native.cn/api';
 
-function ping(url, rejectImmediate) {
+function ping(url: string, rejectImmediate?: boolean) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.onreadystatechange = (e) => {
@@ -20,12 +20,12 @@ function ping(url, rejectImmediate) {
   });
 }
 
-function logger(...args) {
-  // console.warn('pushy', ...args);
+function logger(...args: any[]) {
+  console.log('Pushy: ', ...args);
 }
 
-let backupEndpoints = [];
-let backupEndpointsQueryUrl =
+let backupEndpoints: string[] = [];
+let backupEndpointsQueryUrl: string | null =
   'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-pushy@master/endpoints.json';
 
 export async function tryBackupEndpoints() {
@@ -34,10 +34,10 @@ export async function tryBackupEndpoints() {
   }
   try {
     await ping(getStatusUrl(), true);
-    logger('current endpoint ok');
+    logger('current endpoint ok', currentEndpoint);
     return;
   } catch (e) {
-    logger('current endpoint failed');
+    logger('current endpoint failed', currentEndpoint);
   }
   if (!backupEndpoints.length && backupEndpointsQueryUrl) {
     try {
@@ -76,11 +76,21 @@ export function getCheckUrl(APPKEY, endpoint = currentEndpoint) {
   return `${endpoint}/checkUpdate/${APPKEY}`;
 }
 
-export function getReportUrl(endpoint = currentEndpoint) {
-  return `${endpoint}/report`;
-}
-
-export function setCustomEndpoints({ main, backups, backupQueryUrl }) {
+/**
+ * @param {string} main - The main api endpoint
+ * @param {string[]} [backups] - The back up endpoints.
+ * @param {string} [backupQueryUrl] - An url that return a json file containing an array of endpoint.
+ *                                    like: ["https://backup.api/1", "https://backup.api/2"]
+ */
+export function setCustomEndpoints({
+  main,
+  backups,
+  backupQueryUrl,
+}: {
+  main: string;
+  backups?: string[];
+  backupQueryUrl?: string;
+}) {
   currentEndpoint = main;
   backupEndpointsQueryUrl = null;
   if (Array.isArray(backups) && backups.length > 0) {

@@ -2,7 +2,6 @@ import {
   tryBackupEndpoints,
   getCheckUrl,
   setCustomEndpoints,
-  getReportUrl,
 } from './endpoint';
 import {
   NativeEventEmitter,
@@ -10,6 +9,12 @@ import {
   Platform,
   PermissionsAndroid,
 } from 'react-native';
+import {
+  EventType,
+  ProgressData,
+  UpdateAvailableResult,
+  UpdateEventsListener,
+} from './type';
 export { setCustomEndpoints };
 const {
   version: v,
@@ -45,15 +50,19 @@ if (Platform.OS === 'android' && !PushyConstants.isUsingBundleUrl) {
   );
 }
 
-function setLocalHashInfo(hash, info) {
+function setLocalHashInfo(hash: string, info: Record<string, any>) {
   PushyModule.setLocalHashInfo(hash, JSON.stringify(info));
 }
 
-async function getLocalHashInfo(hash) {
+async function getLocalHashInfo(hash: string) {
   return JSON.parse(await PushyModule.getLocalHashInfo(hash));
 }
 
-export async function getCurrentVersionInfo() {
+export async function getCurrentVersionInfo(): Promise<{
+  name?: string;
+  description?: string;
+  metaInfo?: string;
+}> {
   return currentVersion ? (await getLocalHashInfo(currentVersion)) || {} : {};
 }
 
@@ -64,33 +73,49 @@ if (!uuid) {
   PushyModule.setUuid(uuid);
 }
 
-function logger(text) {
-  console.log(`Pushy: ${text}`);
+function logger(...args: string[]) {
+  console.log('Pushy: ', ...args);
 }
 
-function report(hash, type) {
-  logger(type);
-  fetch(getReportUrl(), {
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      hash,
-      type,
+const noop = () => {};
+let reporter: UpdateEventsListener = noop;
+
+export function onEvents(customReporter: UpdateEventsListener) {
+  reporter = customReporter;
+  if (isRolledBack) {
+    report({
+      type: 'rollback',
+      data: {
+        rolledBackVersion,
+      },
+    });
+  }
+}
+
+function report({
+  type,
+  message = '',
+  data = {},
+}: {
+  type: EventType;
+  message?: string;
+  data?: Record<string, string | number>;
+}) {
+  logger(type + ' ' + message);
+  reporter({
+    type,
+    data: {
+      currentVersion,
       cInfo,
       packageVersion,
       buildTime,
-    }),
-  }).catch((_e) => {});
+      message,
+      ...data,
+    },
+  });
 }
 
 logger('uuid: ' + uuid);
-
-if (isRolledBack) {
-  report(rolledBackVersion, 'rollback');
-}
 
 export const cInfo = {
   pushy: require('../package.json').version,
@@ -100,13 +125,14 @@ export const cInfo = {
 };
 
 function assertRelease() {
+  // @ts-expect-error
   if (__DEV__) {
     throw new Error('react-native-update 只能在 RELEASE 版本中运行.');
   }
 }
 
 let checkingThrottling = false;
-export async function checkUpdate(APPKEY, isRetry) {
+export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
   assertRelease();
   if (checkingThrottling) {
     logger('repeated checking, ignored');
@@ -117,16 +143,14 @@ export async function checkUpdate(APPKEY, isRetry) {
     checkingThrottling = false;
   }, 3000);
   if (blockUpdate && blockUpdate.until > Date.now() / 1000) {
-    throw new Error(
-      `热更新已暂停，原因：${blockUpdate.reason}。请在"${new Date(
+    return report({
+      type: 'errorChecking',
+      message: `热更新已暂停，原因：${blockUpdate.reason}。请在"${new Date(
         blockUpdate.until * 1000,
       ).toLocaleString()}"之后重试。`,
-    );
+    });
   }
-  if (typeof APPKEY !== 'string') {
-    throw new Error('未检查到合法的APPKEY，请查看update.json文件是否正确生成');
-  }
-  logger('checking update');
+  report({ type: 'checking' });
   let resp;
   try {
     resp = await fetch(getCheckUrl(APPKEY), {
@@ -144,7 +168,10 @@ export async function checkUpdate(APPKEY, isRetry) {
     });
   } catch (e) {
     if (isRetry) {
-      throw new Error('无法连接更新服务器，请检查网络连接后重试');
+      return report({
+        type: 'errorChecking',
+        message: '无法连接更新服务器，请检查网络连接后重试',
+      });
     }
     await tryBackupEndpoints();
     return checkUpdate(APPKEY, true);
@@ -153,13 +180,15 @@ export async function checkUpdate(APPKEY, isRetry) {
   checkOperation(result.op);
 
   if (resp.status !== 200) {
-    throw new Error(result.message);
+    return report({ type: 'errorChecking', message: result.message });
   }
 
   return result;
 }
 
-function checkOperation(op) {
+function checkOperation(
+  op: { type: string; reason: string; duration: number }[],
+) {
   if (!Array.isArray(op)) {
     return;
   }
@@ -175,8 +204,13 @@ function checkOperation(op) {
 }
 
 let downloadingThrottling = false;
-let downloadedHash;
-export async function downloadUpdate(options, eventListeners) {
+let downloadedHash: string;
+export async function downloadUpdate(
+  options: UpdateAvailableResult,
+  eventListeners?: {
+    onDownloadProgress?: (data: ProgressData) => void;
+  },
+) {
   assertRelease();
   if (!options.update) {
     return;
@@ -212,6 +246,7 @@ export async function downloadUpdate(options, eventListeners) {
     }
   }
   let succeeded = false;
+  report({ type: 'downloading' });
   if (options.diffUrl) {
     logger('downloading diff');
     try {
@@ -251,8 +286,7 @@ export async function downloadUpdate(options, eventListeners) {
   }
   progressHandler && progressHandler.remove();
   if (!succeeded) {
-    report(options.hash, 'error');
-    throw new Error('all update attempts failed');
+    return report({ type: 'errorUpdate', data: { newVersion: options.hash } });
   }
   setLocalHashInfo(options.hash, {
     name: options.name,
@@ -263,7 +297,7 @@ export async function downloadUpdate(options, eventListeners) {
   return options.hash;
 }
 
-function assertHash(hash) {
+function assertHash(hash: string) {
   if (!downloadedHash) {
     logger(`no downloaded hash`);
     return;
@@ -275,7 +309,7 @@ function assertHash(hash) {
   return true;
 }
 
-export function switchVersion(hash) {
+export function switchVersion(hash: string) {
   assertRelease();
   if (assertHash(hash)) {
     logger('switchVersion: ' + hash);
@@ -283,7 +317,7 @@ export function switchVersion(hash) {
   }
 }
 
-export function switchVersionLater(hash) {
+export function switchVersionLater(hash: string) {
   assertRelease();
   if (assertHash(hash)) {
     logger('switchVersionLater: ' + hash);
@@ -300,21 +334,30 @@ export function markSuccess() {
   }
   marked = true;
   PushyModule.markSuccess();
-  report(currentVersion, 'success');
+  report({ type: 'markSuccess' });
 }
 
-export async function downloadAndInstallApk({ url, onDownloadProgress }) {
-  logger('downloadAndInstallApk');
-  if (Platform.OS === 'android' && Platform.Version <= 23) {
+export async function downloadAndInstallApk({
+  url,
+  onDownloadProgress,
+}: {
+  url: string;
+  onDownloadProgress?: (data: ProgressData) => void;
+}) {
+  if (Platform.OS !== 'android') {
+    return;
+  }
+  report({ type: 'downloadingApk' });
+  if (Platform.Version <= 23) {
     try {
       const granted = await PermissionsAndroid.request(
         PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
       );
       if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-        return;
+        return report({ type: 'rejectStoragePermission' });
       }
     } catch (err) {
-      console.warn(err);
+      return report({ type: 'errorStoragePermission' });
     }
   }
   let hash = Date.now().toString();
@@ -322,7 +365,7 @@ export async function downloadAndInstallApk({ url, onDownloadProgress }) {
   if (onDownloadProgress) {
     progressHandler = eventEmitter.addListener(
       'RCTPushyDownloadProgress',
-      (progressData) => {
+      (progressData: ProgressData) => {
         if (progressData.hash === hash) {
           onDownloadProgress(progressData);
         }
@@ -333,6 +376,8 @@ export async function downloadAndInstallApk({ url, onDownloadProgress }) {
     url,
     target: 'update.apk',
     hash,
+  }).catch(() => {
+    report({ type: 'errowDownloadAndInstallApk' });
   });
   progressHandler && progressHandler.remove();
 }
