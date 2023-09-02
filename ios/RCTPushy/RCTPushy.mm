@@ -53,7 +53,6 @@ typedef NS_ENUM(NSInteger, PushyType) {
 };
 
 static BOOL ignoreRollback = false;
-static BOOL isUsingBundleUrl = false;
 
 @implementation RCTPushy {
     RCTPushyManager *_fileManager;
@@ -66,7 +65,6 @@ RCT_EXPORT_MODULE(RCTPushy);
 
 + (NSURL *)bundleURL
 {
-    isUsingBundleUrl = true;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     
     NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
@@ -163,7 +161,6 @@ RCT_EXPORT_MODULE(RCTPushy);
     ret[@"uuid"] = [defaults objectForKey:keyUuid];
     NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
     ret[@"currentVersion"] = [pushyInfo objectForKey:paramCurrentVersion];
-    ret[@"isUsingBundleUrl"] = @(isUsingBundleUrl);
     
     // clear isFirstTimemarked
     if (ret[@"isFirstTime"]) {

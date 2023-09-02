@@ -44,7 +44,7 @@ export const buildTime = PushyConstants.buildTime;
 let blockUpdate = PushyConstants.blockUpdate;
 let uuid = PushyConstants.uuid;
 
-if (!PushyConstants.isUsingBundleUrl) {
+if (Platform.OS === 'android' && !PushyConstants.isUsingBundleUrl) {
   throw new Error(
     'react-native-update模块无法加载，请对照文档检查Bundle URL的配置',
   );
@@ -125,6 +125,7 @@ export const cInfo = {
 };
 
 function assertRelease() {
+  // @ts-expect-error
   if (__DEV__) {
     throw new Error('react-native-update 只能在 RELEASE 版本中运行.');
   }
