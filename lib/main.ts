@@ -125,7 +125,6 @@ export const cInfo = {
 };
 
 function assertRelease() {
-  // @ts-expect-error
   if (__DEV__) {
     throw new Error('react-native-update 只能在 RELEASE 版本中运行.');
   }
