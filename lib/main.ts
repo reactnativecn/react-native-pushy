@@ -10,6 +10,7 @@ import {
   PermissionsAndroid,
 } from 'react-native';
 import {
+  CheckResult,
   EventType,
   ProgressData,
   UpdateAvailableResult,
@@ -130,24 +131,23 @@ function assertRelease() {
   }
 }
 
-let checkingThrottling = false;
+let lastChecking = Date.now();
 export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
   assertRelease();
-  if (checkingThrottling) {
+  const now = Date.now();
+  if (now - lastChecking < 1000 * 5) {
     logger('repeated checking, ignored');
     return;
   }
-  checkingThrottling = true;
-  setTimeout(() => {
-    checkingThrottling = false;
-  }, 3000);
+  lastChecking = now;
   if (blockUpdate && blockUpdate.until > Date.now() / 1000) {
-    return report({
+    report({
       type: 'errorChecking',
       message: `热更新已暂停，原因：${blockUpdate.reason}。请在"${new Date(
         blockUpdate.until * 1000,
       ).toLocaleString()}"之后重试。`,
     });
+    return;
   }
   report({ type: 'checking' });
   let resp;
@@ -167,19 +167,26 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
     });
   } catch (e) {
     if (isRetry) {
-      return report({
+      report({
         type: 'errorChecking',
         message: '无法连接更新服务器，请检查网络连接后重试',
       });
+      return;
     }
     await tryBackupEndpoints();
     return checkUpdate(APPKEY, true);
   }
-  const result = await resp.json();
+  const result: CheckResult = await resp.json();
+  // @ts-ignore
   checkOperation(result.op);
 
   if (resp.status !== 200) {
-    return report({ type: 'errorChecking', message: result.message });
+    report({
+      type: 'errorChecking',
+      //@ts-ignore
+      message: result.message,
+    });
+    return;
   }
 
   return result;
