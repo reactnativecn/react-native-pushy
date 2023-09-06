@@ -132,7 +132,7 @@ function assertRelease() {
 }
 
 let lastChecking = Date.now();
-let lastResult: CheckResult;
+let lastResult: CheckResult = {};
 export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
   assertRelease();
   const now = Date.now();
@@ -148,7 +148,7 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
         blockUpdate.until * 1000,
       ).toLocaleString()}"之后重试。`,
     });
-    return;
+    return lastResult;
   }
   report({ type: 'checking' });
   let resp;
@@ -172,12 +172,13 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
         type: 'errorChecking',
         message: '无法连接更新服务器，请检查网络连接后重试',
       });
-      return;
+      return lastResult;
     }
     await tryBackupEndpoints();
     return checkUpdate(APPKEY, true);
   }
   const result: CheckResult = await resp.json();
+
   lastResult = result;
   // @ts-ignore
   checkOperation(result.op);
@@ -188,7 +189,7 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
       //@ts-ignore
       message: result.message,
     });
-    return;
+    return lastResult;
   }
 
   return result;

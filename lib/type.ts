@@ -26,7 +26,8 @@ export interface UpdateAvailableResult {
 export type CheckResult =
   | ExpiredResult
   | UpTodateResult
-  | UpdateAvailableResult;
+  | UpdateAvailableResult
+  | {};
 
 export interface ProgressData {
   hash: string;
