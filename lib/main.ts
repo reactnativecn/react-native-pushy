@@ -132,12 +132,12 @@ function assertRelease() {
 }
 
 let lastChecking = Date.now();
-let lastResult:CheckResult;
+let lastResult: CheckResult;
 export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
   assertRelease();
   const now = Date.now();
   if (lastResult && now - lastChecking < 1000 * 60) {
-    logger('repeated checking, ignored');
+    // logger('repeated checking, ignored');
     return lastResult;
   }
   lastChecking = now;
