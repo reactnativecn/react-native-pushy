@@ -131,14 +131,15 @@ function assertRelease() {
   }
 }
 
-let lastChecking = Date.now();
-let lastResult: CheckResult = {};
+let lastChecking;
+const empty = {};
+let lastResult: CheckResult;
 export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
   assertRelease();
   const now = Date.now();
-  if (lastResult && now - lastChecking < 1000 * 60) {
+  if (lastResult && lastChecking && now - lastChecking < 1000 * 60) {
     // logger('repeated checking, ignored');
-    return lastResult;
+    return lastResult || empty;
   }
   lastChecking = now;
   if (blockUpdate && blockUpdate.until > Date.now() / 1000) {
@@ -148,7 +149,7 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
         blockUpdate.until * 1000,
       ).toLocaleString()}"之后重试。`,
     });
-    return lastResult;
+    return lastResult || empty;
   }
   report({ type: 'checking' });
   let resp;
@@ -172,7 +173,7 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
         type: 'errorChecking',
         message: '无法连接更新服务器，请检查网络连接后重试',
       });
-      return lastResult;
+      return lastResult || empty;
     }
     await tryBackupEndpoints();
     return checkUpdate(APPKEY, true);
