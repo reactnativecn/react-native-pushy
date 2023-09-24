@@ -139,7 +139,7 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
   const now = Date.now();
   if (lastResult && lastChecking && now - lastChecking < 1000 * 60) {
     // logger('repeated checking, ignored');
-    return lastResult || empty;
+    return lastResult;
   }
   lastChecking = now;
   if (blockUpdate && blockUpdate.until > Date.now() / 1000) {
@@ -190,7 +190,6 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
       //@ts-ignore
       message: result.message,
     });
-    return lastResult;
   }
 
   return result;
