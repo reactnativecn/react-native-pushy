@@ -16,20 +16,20 @@ import {
   switchVersionLater,
   markSuccess,
   downloadAndInstallApk,
-  onEvents,
+  onPushyEvents,
 } from './main';
 import { UpdateEventsListener } from './type';
 
 export function simpleUpdate(
   WrappedComponent: ComponentType,
-  options: { appKey?: string; onEvents?: UpdateEventsListener } = {},
+  options: { appKey?: string; onPushyEvents?: UpdateEventsListener } = {},
 ) {
-  const { appKey, onEvents: eventListeners } = options;
+  const { appKey, onPushyEvents: eventListeners } = options;
   if (!appKey) {
     throw new Error('appKey is required for simpleUpdate()');
   }
   if (typeof eventListeners === 'function') {
-    onEvents(eventListeners);
+    onPushyEvents(eventListeners);
   }
   return __DEV__
     ? WrappedComponent

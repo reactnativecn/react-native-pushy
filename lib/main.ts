@@ -73,7 +73,7 @@ if (!uuid) {
 const noop = () => {};
 let reporter: UpdateEventsListener = noop;
 
-export function onEvents(customReporter: UpdateEventsListener) {
+export function onPushyEvents(customReporter: UpdateEventsListener) {
   reporter = customReporter;
   if (isRolledBack) {
     report({
