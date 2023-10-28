@@ -2,7 +2,7 @@
   "name": "react-native-update",
   "version": "8.2.0",
   "description": "react-native hot update",
-  "main": "lib/index.js",
+  "main": "lib/index.ts",
   "scripts": {
     "prepublish": "yarn submodule",
     "submodule": "git submodule update --init --recursive",
@@ -25,10 +25,16 @@
     "url": "https://github.com/reactnativecn/react-native-pushy/issues"
   },
   "peerDependencies": {
-    "react-native": ">=0.27.0"
+    "react-native": ">=0.57.0"
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy#readme",
   "dependencies": {
     "nanoid": "^3.3.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.8.9",
+    "@types/react": "^18.2.33",
+    "react-native": "^0.72.6",
+    "typescript": "^5.2.2"
   }
 }
