@@ -1,5 +1,5 @@
 import {
-  tryBackupEndpoints,
+  updateBackupEndpoints,
   getCheckUrl,
   setCustomEndpoints,
 } from './endpoint';
@@ -16,6 +16,7 @@ import {
   UpdateAvailableResult,
   UpdateEventsListener,
 } from './type';
+import { assertRelease, logger } from './utils';
 export { setCustomEndpoints };
 const {
   version: v,
@@ -74,10 +75,6 @@ if (!uuid) {
   PushyModule.setUuid(uuid);
 }
 
-function logger(...args: string[]) {
-  console.log('Pushy: ', ...args);
-}
-
 const noop = () => {};
 let reporter: UpdateEventsListener = noop;
 
@@ -125,16 +122,10 @@ export const cInfo = {
   uuid,
 };
 
-function assertRelease() {
-  if (__DEV__) {
-    throw new Error('react-native-update 只能在 RELEASE 版本中运行.');
-  }
-}
-
 let lastChecking;
 const empty = {};
 let lastResult: CheckResult;
-export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
+export async function checkUpdate(APPKEY: string) {
   assertRelease();
   const now = Date.now();
   if (lastResult && lastChecking && now - lastChecking < 1000 * 60) {
@@ -152,31 +143,44 @@ export async function checkUpdate(APPKEY: string, isRetry?: boolean) {
     return lastResult || empty;
   }
   report({ type: 'checking' });
+  const fetchPayload = {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      packageVersion,
+      hash: currentVersion,
+      buildTime,
+      cInfo,
+    }),
+  };
   let resp;
   try {
-    resp = await fetch(getCheckUrl(APPKEY), {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        packageVersion,
-        hash: currentVersion,
-        buildTime,
-        cInfo,
-      }),
-    });
+    resp = await fetch(getCheckUrl(APPKEY), fetchPayload);
   } catch (e) {
-    if (isRetry) {
-      report({
-        type: 'errorChecking',
-        message: '无法连接更新服务器，请检查网络连接后重试',
-      });
-      return lastResult || empty;
+    report({
+      type: 'errorChecking',
+      message: '无法连接主更新服务器，尝试备用节点',
+    });
+    const backupEndpoints = await updateBackupEndpoints();
+    if (backupEndpoints) {
+      try {
+        resp = await Promise.race(
+          backupEndpoints.map((endpoint) =>
+            fetch(getCheckUrl(APPKEY, endpoint), fetchPayload),
+          ),
+        );
+      } catch {}
     }
-    await tryBackupEndpoints();
-    return checkUpdate(APPKEY, true);
+  }
+  if (!resp) {
+    report({
+      type: 'errorChecking',
+      message: '无法连接更新服务器，请检查网络连接后重试',
+    });
+    return lastResult || empty;
   }
   const result: CheckResult = await resp.json();
 
