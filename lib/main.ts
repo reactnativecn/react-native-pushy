@@ -322,10 +322,12 @@ function assertHash(hash: string) {
   return true;
 }
 
+let applyingUpdate = false;
 export function switchVersion(hash: string) {
   assertRelease();
-  if (assertHash(hash)) {
+  if (assertHash(hash) && !applyingUpdate) {
     logger('switchVersion: ' + hash);
+    applyingUpdate = true;
     PushyModule.reloadUpdate({ hash });
   }
 }
