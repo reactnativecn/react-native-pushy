@@ -1,5 +1,7 @@
 package cn.reactnative.modules.update;
 
+import android.util.Log;
+
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
@@ -10,11 +12,14 @@ import java.util.Enumeration;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+
 public class SafeZipFile extends ZipFile {
 
     public SafeZipFile(File file) throws IOException {
         super(file);
     }
+
+    private static final int BUFFER_SIZE = 8192;
 
     @Override
     public Enumeration<? extends ZipEntry> entries() {
@@ -43,40 +48,46 @@ public class SafeZipFile extends ZipFile {
                  * avoid ZipperDown
                  */
                 if (null != name && (name.contains("../") || name.contains("..\\"))) {
-                    throw new SecurityException("illegal entry: " + entry.getName());
+                    throw new SecurityException("illegal entry: " + name);
                 }
             }
             return entry;
         }
     }
 
-    public void unzipToFile(ZipEntry entry, File output) throws IOException {
-        InputStream inputStream = null;
-        try {
-            inputStream = getInputStream(entry);
-            writeOutInputStream(output, inputStream);
-        } finally {
-            if (inputStream != null) {
-                inputStream.close();
+    public void unzipToPath(ZipEntry ze, File targetPath) throws IOException {
+        String name = ze.getName();
+        File target = new File(targetPath, name);
+
+        // Fixing a Zip Path Traversal Vulnerability
+        // https://support.google.com/faqs/answer/9294009
+        String canonicalPath = target.getCanonicalPath();
+        if (!canonicalPath.startsWith(targetPath.getCanonicalPath() + File.separator)) {
+            throw new SecurityException("Illegal name: " + name);
+        }
+
+        if (UpdateContext.DEBUG) {
+            Log.d("RNUpdate", "Unzipping " + name);
+        }
+
+        if (ze.isDirectory()) {
+            target.mkdirs();
+            return;
+        }
+        unzipToFile(ze, target);
+    }
+
+    public void unzipToFile(ZipEntry ze, File target) throws IOException {
+        try (InputStream inputStream = getInputStream(ze)) {
+            try (BufferedOutputStream output = new BufferedOutputStream(new FileOutputStream(target));
+                 BufferedInputStream input = new BufferedInputStream(inputStream)) {
+                byte[] buffer = new byte[BUFFER_SIZE];
+                int n;
+                while ((n = input.read(buffer, 0, BUFFER_SIZE)) >= 0) {
+                    output.write(buffer, 0, n);
+                }
             }
         }
     }
 
-    private void writeOutInputStream(File file, InputStream inputStream) throws IOException {
-        BufferedOutputStream output = null;
-        try {
-            output = new BufferedOutputStream(
-                    new FileOutputStream(file));
-            BufferedInputStream input = new BufferedInputStream(inputStream);
-            byte b[] = new byte[8192];
-            int n;
-            while ((n = input.read(b, 0, 8192)) >= 0) {
-                output.write(b, 0, n);
-            }
-        } finally {
-            if (output != null) {
-                output.close();
-            }
-        }
-    }
 }

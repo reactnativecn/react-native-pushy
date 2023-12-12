@@ -237,19 +237,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         while (entries.hasMoreElements()) {
             ZipEntry ze = entries.nextElement();
 
-            String fn = ze.getName();
-            File fmd = new File(param.unzipDirectory, fn);
-
-            if (UpdateContext.DEBUG) {
-                Log.d("RNUpdate", "Unzipping " + fn);
-            }
-
-            if (ze.isDirectory()) {
-                fmd.mkdirs();
-                continue;
-            }
-
-            zipFile.unzipToFile(ze, fmd);
+            zipFile.unzipToPath(ze, param.unzipDirectory);
         }
 
         zipFile.close();
@@ -324,8 +312,15 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                     } else {
                         target = copyList.get((from));
                     }
-                    target.add(new File(param.unzipDirectory, to));
-                    //copyFromResource(from, new File(param.unzipDirectory, to));
+                    File toFile = new File(param.unzipDirectory, to);
+
+                    // Fixing a Zip Path Traversal Vulnerability
+                    // https://support.google.com/faqs/answer/9294009
+                    String canonicalPath = toFile.getCanonicalPath();
+                    if (!canonicalPath.startsWith(param.unzipDirectory.getCanonicalPath() + File.separator)) {
+                        throw new SecurityException("Illegal name: " + to);
+                    }
+                    target.add(toFile);
                 }
                 continue;
             }
@@ -339,18 +334,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 fout.close();
                 continue;
             }
-            File fmd = new File(param.unzipDirectory, fn);
 
-            if (UpdateContext.DEBUG) {
-                Log.d("RNUpdate", "Unzipping " + fn);
-            }
 
-            if (ze.isDirectory()) {
-                fmd.mkdirs();
-                continue;
-            }
-
-            zipFile.unzipToFile(ze, fmd);
+            zipFile.unzipToPath(ze, param.unzipDirectory);
         }
 
         zipFile.close();
@@ -419,18 +405,8 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 fout.close();
                 continue;
             }
-            File fmd = new File(param.unzipDirectory, fn);
 
-            if (UpdateContext.DEBUG) {
-                Log.d("RNUpdate", "Unzipping " + fn);
-            }
-
-            if (ze.isDirectory()) {
-                fmd.mkdirs();
-                continue;
-            }
-
-            zipFile.unzipToFile(ze, fmd);
+            zipFile.unzipToPath(ze, param.unzipDirectory);
         }
 
         zipFile.close();
