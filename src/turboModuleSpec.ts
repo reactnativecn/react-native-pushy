@@ -9,14 +9,12 @@ export interface Spec extends TurboModule {
     isFirstTime: boolean;
     rolledBackVersion: string;
     buildTime: string;
-    blockUpdate: Object;
     uuid: string;
     isUsingBundleUrl: boolean;
   };
   setLocalHashInfo(hash: string, info: string): Promise<void>;
   getLocalHashInfo(hash: string): Promise<string>;
   setUuid(uuid: string): Promise<void>;
-  setBlockUpdate(options: { reason: string; until: number }): Promise<void>;
   reloadUpdate(options: { hash: string }): Promise<void>;
   setNeedUpdate(options: { hash: string }): Promise<void>;
   markSuccess(): Promise<void>;

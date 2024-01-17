@@ -1,18 +1,15 @@
 export interface ExpiredResult {
-  upToDate?: false;
   expired: true;
   downloadUrl: string;
 }
 
 export interface UpTodateResult {
-  expired?: false;
   upToDate: true;
   paused?: 'app' | 'package';
 }
 
 export interface UpdateAvailableResult {
-  expired?: false;
-  upToDate?: false;
+  upToDate: false;
   update: true;
   name: string; // version name
   hash: string;
@@ -62,10 +59,25 @@ export interface EventData {
   newVersion?: string;
   [key: string]: any;
 }
-export type UpdateEventsListener = ({
+export type UpdateEventsLogger = ({
   type,
   data,
 }: {
   type: EventType;
   data: EventData;
 }) => void;
+
+export interface PushyServerConfig {
+  main: string;
+  backups?: string[];
+  queryUrl?: string;
+}
+export interface PushyOptions {
+  appKey: string;
+  server?: PushyServerConfig;
+  logger?: UpdateEventsLogger;
+  useAlert?: boolean;
+  strategy?: 'onAppStart' | 'onAppResume' | 'both';
+  autoMarkSuccess?: boolean;
+  dismissErrorAfter?: number;
+}
