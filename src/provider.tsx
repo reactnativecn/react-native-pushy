@@ -67,14 +67,14 @@ export const PushyProvider = ({
         stateListener.current && stateListener.current.remove();
         showAlert('Download complete', 'Do you want to apply the update now?', [
           {
-            text: 'Later',
+            text: '下次再说',
             style: 'cancel',
             onPress: () => {
               client.switchVersionLater(hash);
             },
           },
           {
-            text: 'Now',
+            text: '立即更新',
             style: 'default',
             onPress: () => {
               client.switchVersion(hash);
@@ -106,7 +106,7 @@ export const PushyProvider = ({
         'A full update is required to download and install to continue.',
         [
           {
-            text: 'OK',
+            text: '更新',
             onPress: () => {
               if (downloadUrl) {
                 if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
@@ -121,14 +121,12 @@ export const PushyProvider = ({
       );
     } else if ('update' in info) {
       showAlert(
-        `Version ${info.name} available`,
-        `What's new\n
-	  ${info.description}
-	  `,
+        '提示',
+        '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: '取消', style: 'cancel' },
           {
-            text: 'OK',
+            text: '确定',
             style: 'default',
             onPress: () => {
               doUpdate(info as UpdateAvailableResult);

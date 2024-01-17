@@ -44,7 +44,7 @@ export class Pushy {
 
   constructor(options: PushyOptions) {
     if (!options.appKey) {
-      throw new Error('appKey is required for withUpdates()');
+      throw new Error('appKey is required');
     }
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
