@@ -41,17 +41,22 @@ export class Pushy {
 
   marked = false;
   applyingUpdate = false;
+  version = cInfo.pushy;
 
   constructor(options: PushyOptions) {
     if (!options.appKey) {
       throw new Error('appKey is required');
     }
+    this.setOptions(options);
+  }
+
+  setOptions = (options: Partial<PushyOptions>) => {
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
         this.options[key] = value;
       }
     }
-  }
+  };
 
   getCheckUrl = (endpoint: string = this.options.server!.main) => {
     return `${endpoint}/checkUpdate/${this.options.appKey}`;

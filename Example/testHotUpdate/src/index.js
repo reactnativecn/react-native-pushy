@@ -1,188 +1,122 @@
-import React, {Component} from 'react';
+import React, {useState} from 'react';
 import {
   StyleSheet,
   Platform,
   Text,
   View,
-  Alert,
   TouchableOpacity,
-  Linking,
   Image,
+  Switch,
 } from 'react-native';
-
-import {
-  isFirstTime,
-  isRolledBack,
-  packageVersion,
-  currentVersion,
-  checkUpdate,
-  downloadUpdate,
-  switchVersion,
-  switchVersionLater,
-  markSuccess,
-  downloadAndInstallApk,
-  cInfo,
-} from 'react-native-update';
+import {Icon, PaperProvider} from 'react-native-paper';
+import {Snackbar, Banner} from 'react-native-paper';
 
 import TestConsole from './TestConsole';
 
 import _updateConfig from '../update.json';
+import {PushyProvider} from '../../../src/provider';
+import {Pushy} from '../../../src/client';
+import {usePushy} from '../../../src/context';
 const {appKey} = _updateConfig[Platform.OS];
-export default class App extends Component {
-  state = {
-    received: 0,
-    total: 0,
-    showTestConsole: false,
-  };
-  componentDidMount() {
-    if (isRolledBack) {
-      Alert.alert('提示', '刚刚更新失败了,版本被回滚.');
-    } else if (isFirstTime) {
-      Alert.alert(
-        '提示',
-        '这是当前版本第一次启动,是否要模拟启动失败?将回滚到上一版本',
-        [
-          {
-            text: '是',
-            onPress: () => {
-              throw new Error('模拟启动失败,请重启应用');
-            },
-          },
-          {
-            text: '否',
-            onPress: () => {
-              markSuccess();
-            },
-          },
-        ],
-      );
-    }
-  }
-  doUpdate = async info => {
-    try {
-      const hash = await downloadUpdate(info, {
-        onDownloadProgress: ({received, total}) => {
-          this.setState({
-            received,
-            total,
+
+function App() {
+  const {
+    client,
+    checkUpdate,
+    downloadUpdate,
+    switchVersionLater,
+    switchVersion,
+    updateInfo,
+    progress: {received, total} = {},
+  } = usePushy();
+  const [useDefaultAlert, setUseDefaultAlert] = useState(true);
+  const [showUpdateBanner, setShowUpdateBanner] = useState(false);
+  const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
+  const snackbarVisible =
+    showUpdateSnackbar &&
+    updateInfo &&
+    updateInfo.updateAvailable &&
+    !useDefaultAlert;
+  return (
+    <View style={styles.container}>
+      <Text style={styles.welcome}>欢迎使用Pushy热更新服务</Text>
+      <Switch
+        value={useCustomUi}
+        onValueChange={v => {
+          setUseDefaultAlert(v);
+          client.setOptions({
+            showAlert: v,
           });
-        },
-      });
-      if (!hash) {
-        return;
-      }
-      Alert.alert('提示', '下载完毕,是否重启应用?', [
-        {
-          text: '是',
-          onPress: () => {
-            switchVersion(hash);
-          },
-        },
-        {text: '否'},
-        {
-          text: '下次启动时',
-          onPress: () => {
-            switchVersionLater(hash);
-          },
-        },
-      ]);
-    } catch (err) {
-      Alert.alert('更新失败', err.message);
-    }
-  };
+        }}>
+        {useDefaultAlert ? '当前使用' : '当前不使用'}默认的alert更新提示
+      </Switch>
+      <Image
+        resizeMode={'contain'}
+        source={require('./assets/shezhi.png')}
+        style={styles.image}
+      />
+      <Text style={styles.instructions}>
+        这是版本一 {'\n'}
+        当前原生包版本号: {packageVersion}
+        {'\n'}
+        当前热更新版本Hash: {currentVersion || '(空)'}
+        {'\n'}
+      </Text>
+      <Text>
+        下载进度：{received} / {total}
+      </Text>
+      <TouchableOpacity onPress={checkUpdate}>
+        <Text style={styles.instructions}>点击这里检查更新</Text>
+      </TouchableOpacity>
 
-  checkUpdate = async () => {
-    let info;
-    try {
-      info = await checkUpdate(appKey);
-    } catch (err) {
-      Alert.alert('更新检查失败', err.message);
-      return;
-    }
-    if (info.expired) {
-      Alert.alert('提示', '您的应用版本已更新，点击确定下载安装新版本', [
-        {
-          text: '确定',
-          onPress: () => {
-            if (info.downloadUrl) {
-              // apk可直接下载安装
-              if (
-                Platform.OS === 'android' &&
-                info.downloadUrl.endsWith('.apk')
-              ) {
-                downloadAndInstallApk({
-                  url: info.downloadUrl,
-                  onDownloadProgress: ({received, total}) => {
-                    this.setState({
-                      received,
-                      total,
-                    });
-                  },
-                });
-              } else {
-                Linking.openURL(info.downloadUrl);
-              }
-            }
+      <TouchableOpacity
+        testID="testcase"
+        style={{marginTop: 15}}
+        onLongPress={() => {
+          this.setState({showTestConsole: true});
+        }}>
+        <Text style={styles.instructions}>
+          react-native-update版本：{client.version}
+        </Text>
+      </TouchableOpacity>
+      <TestConsole visible={showTestConsole} />
+      <Snackbar
+        visible={snackbarVisible}
+        onDismiss={() => {
+          setShowUpdateSnackbar(false);
+        }}
+        action={{
+          label: '更新',
+          onPress: async () => {
+            setShowUpdateSnackbar(false);
+            await downloadUpdate();
+            setShowUpdateBanner(true);
           },
-        },
-      ]);
-    } else if (info.upToDate) {
-      Alert.alert('提示', '您的应用版本已是最新.');
-    } else {
-      Alert.alert(
-        '提示',
-        '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
-        [
+        }}>
+        有新版本({updateInfo.version})可用，是否更新？
+      </Snackbar>
+      <Banner
+        visible={showUpdateBanner}
+        actions={[
           {
-            text: '是',
+            label: '立即重启',
+            onPress: switchVersion,
+          },
+          {
+            label: '下次再说',
             onPress: () => {
-              this.doUpdate(info);
+              switchVersionLater();
+              setShowUpdateBanner(false);
             },
           },
-          {text: '否'},
-        ],
-      );
-    }
-  };
-
-  render() {
-    const {received, total, showTestConsole} = this.state;
-    return (
-      <View style={styles.container}>
-        <Text style={styles.welcome}>欢迎使用热更新服务</Text>
-        <Image
-          resizeMode={'contain'}
-          source={require('./assets/shezhi.png')}
-          style={styles.image}
-        />
-        <Text style={styles.instructions}>
-          这是版本一 {'\n'}
-          当前原生包版本号: {packageVersion}
-          {'\n'}
-          当前热更新版本Hash: {currentVersion || '(空)'}
-          {'\n'}
-        </Text>
-        <Text>
-          下载进度：{received} / {total}
-        </Text>
-        <TouchableOpacity onPress={this.checkUpdate}>
-          <Text style={styles.instructions}>点击这里检查更新</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          testID="testcase"
-          style={{marginTop: 15}}
-          onLongPress={() => {
-            this.setState({showTestConsole: true});
-          }}>
-          <Text style={styles.instructions}>
-            react-native-update版本：{cInfo.pushy}
-          </Text>
-        </TouchableOpacity>
-        <TestConsole visible={showTestConsole} />
-      </View>
-    );
-  }
+        ]}
+        icon={({size}) => (
+          <Icon name="checkcircleo" size={size} color="#00f" />
+        )}>
+        更新已完成，是否立即重启？
+      </Banner>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -204,3 +138,18 @@ const styles = StyleSheet.create({
   },
   image: {},
 });
+
+const pushyClient = new Pushy({
+  appKey,
+  showAlert: false,
+});
+
+export default function Root() {
+  return (
+    <PushyProvider client={pushyClient}>
+      <PaperProvider>
+        <App />
+      </PaperProvider>
+    </PushyProvider>
+  );
+}

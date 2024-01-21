@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import { CheckResult, ProgressData } from './type';
+import { Pushy } from './client';
 
 const empty = {};
 const noop = () => {};
@@ -10,6 +11,7 @@ export const defaultContext = {
   switchVersionLater: noop,
   markSuccess: noop,
   dismissError: noop,
+  downloadUpdate: noop,
 };
 
 export const PushyContext = createContext<{
@@ -21,6 +23,8 @@ export const PushyContext = createContext<{
   updateInfo?: CheckResult;
   lastError?: Error;
   dismissError: () => void;
+  client?: Pushy;
+  downloadUpdate: () => void;
 }>(defaultContext);
 
 export const usePushy = () => useContext(PushyContext);
