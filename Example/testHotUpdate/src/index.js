@@ -8,15 +8,12 @@ import {
   Image,
   Switch,
 } from 'react-native';
-import {Icon, PaperProvider} from 'react-native-paper';
-import {Snackbar, Banner} from 'react-native-paper';
+import {Icon, PaperProvider, Snackbar, Banner} from 'react-native-paper';
 
 import TestConsole from './TestConsole';
 
 import _updateConfig from '../update.json';
-import {PushyProvider} from '../../../src/provider';
-import {Pushy} from '../../../src/client';
-import {usePushy} from '../../../src/context';
+import {PushyProvider, Pushy, usePushy} from 'react-native-update';
 const {appKey} = _updateConfig[Platform.OS];
 
 function App() {

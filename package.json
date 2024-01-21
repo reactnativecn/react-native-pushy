@@ -2,7 +2,7 @@
   "name": "react-native-update",
   "version": "9.1.6",
   "description": "react-native hot update",
-  "main": "lib/index.ts",
+  "main": "src/index.ts",
   "scripts": {
     "prepublish": "yarn submodule",
     "submodule": "git submodule update --init --recursive",
@@ -39,6 +39,7 @@
     "url": "https://github.com/reactnativecn/react-native-pushy/issues"
   },
   "peerDependencies": {
+    "react": ">=16.8.0",
     "react-native": ">=0.57.0"
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy#readme",
@@ -59,8 +60,8 @@
     "@types/react": "^18.2.46",
     "eslint": "^8.56.0",
     "prettier": "^2",
-    "react": "18.2.0",
-    "react-native": "0.73",
+    "react": "18.0.0",
+    "react-native": "0.69.8",
     "typescript": "^5.3.3",
     "@types/fs-extra": "^9.0.13",
     "@types/jest": "^29.2.1",

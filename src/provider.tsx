@@ -66,7 +66,7 @@ export const PushyProvider = ({
         return;
       }
       stateListener.current && stateListener.current.remove();
-      showAlert('Download complete', 'Do you want to apply the update now?', [
+      showAlert('提示', '下载完毕，是否立即更新?', [
         {
           text: '下次再说',
           style: 'cancel',
@@ -84,7 +84,7 @@ export const PushyProvider = ({
       ]);
     } catch (err) {
       setLastError(err);
-      showAlert('Failed to update', err.message);
+      showAlert('更新失败', err.message);
     }
   }, [client, showAlert, updateInfo]);
 
@@ -94,30 +94,26 @@ export const PushyProvider = ({
       info = await client.checkUpdate();
     } catch (err) {
       setLastError(err);
-      showAlert('Failed to check update', err.message);
+      showAlert('更新检查失败', err.message);
       return;
     }
     setUpdateInfo(info);
     if ('expired' in info) {
       const { downloadUrl } = info;
-      showAlert(
-        'Major update',
-        'A full update is required to download and install to continue.',
-        [
-          {
-            text: '更新',
-            onPress: () => {
-              if (downloadUrl) {
-                if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
-                  client.downloadAndInstallApk(downloadUrl);
-                } else {
-                  Linking.openURL(downloadUrl);
-                }
+      showAlert('提示', '您的应用版本已更新，点击更新下载安装新版本', [
+        {
+          text: '更新',
+          onPress: () => {
+            if (downloadUrl) {
+              if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
+                client.downloadAndInstallApk(downloadUrl);
+              } else {
+                Linking.openURL(downloadUrl);
               }
-            },
+            }
           },
-        ],
-      );
+        },
+      ]);
     } else if ('update' in info) {
       showAlert(
         '提示',
