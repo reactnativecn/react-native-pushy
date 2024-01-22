@@ -24,9 +24,12 @@ function App() {
     switchVersionLater,
     switchVersion,
     updateInfo,
+    packageVersion,
+    currentHash,
     progress: {received, total} = {},
   } = usePushy();
   const [useDefaultAlert, setUseDefaultAlert] = useState(true);
+  const [showTestConsole, setShowTestConsole] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
   const snackbarVisible =
@@ -37,16 +40,20 @@ function App() {
   return (
     <View style={styles.container}>
       <Text style={styles.welcome}>欢迎使用Pushy热更新服务</Text>
-      <Switch
-        value={useCustomUi}
-        onValueChange={v => {
-          setUseDefaultAlert(v);
-          client.setOptions({
-            showAlert: v,
-          });
-        }}>
-        {useDefaultAlert ? '当前使用' : '当前不使用'}默认的alert更新提示
-      </Switch>
+      <View style={{flexDirection: 'row'}}>
+        <Text>
+          {useDefaultAlert ? '当前使用' : '当前不使用'}默认的alert更新提示
+        </Text>
+        <Switch
+          value={useDefaultAlert}
+          onValueChange={v => {
+            setUseDefaultAlert(v);
+            client.setOptions({
+              showAlert: v,
+            });
+          }}
+        />
+      </View>
       <Image
         resizeMode={'contain'}
         source={require('./assets/shezhi.png')}
@@ -56,7 +63,7 @@ function App() {
         这是版本一 {'\n'}
         当前原生包版本号: {packageVersion}
         {'\n'}
-        当前热更新版本Hash: {currentVersion || '(空)'}
+        当前热更新版本Hash: {currentHash || '(空)'}
         {'\n'}
       </Text>
       <Text>
@@ -70,28 +77,30 @@ function App() {
         testID="testcase"
         style={{marginTop: 15}}
         onLongPress={() => {
-          this.setState({showTestConsole: true});
+          setShowTestConsole(true);
         }}>
         <Text style={styles.instructions}>
           react-native-update版本：{client.version}
         </Text>
       </TouchableOpacity>
       <TestConsole visible={showTestConsole} />
-      <Snackbar
-        visible={snackbarVisible}
-        onDismiss={() => {
-          setShowUpdateSnackbar(false);
-        }}
-        action={{
-          label: '更新',
-          onPress: async () => {
+      {snackbarVisible && (
+        <Snackbar
+          visible={true}
+          onDismiss={() => {
             setShowUpdateSnackbar(false);
-            await downloadUpdate();
-            setShowUpdateBanner(true);
-          },
-        }}>
-        有新版本({updateInfo.version})可用，是否更新？
-      </Snackbar>
+          }}
+          action={{
+            label: '更新',
+            onPress: async () => {
+              setShowUpdateSnackbar(false);
+              await downloadUpdate();
+              setShowUpdateBanner(true);
+            },
+          }}>
+          <Text>有新版本({updateInfo.version})可用，是否更新？</Text>
+        </Snackbar>
+      )}
       <Banner
         visible={showUpdateBanner}
         actions={[
