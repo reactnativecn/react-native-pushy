@@ -13,7 +13,7 @@ import {
   Linking,
 } from 'react-native';
 import { Pushy } from './client';
-import { isFirstTime } from './core';
+import { currentVersion, isFirstTime, packageVersion } from './core';
 import { CheckResult } from './type';
 import { PushyContext } from './context';
 
@@ -176,6 +176,8 @@ export const PushyProvider = ({
         markSuccess,
         client,
         downloadUpdate,
+        packageVersion,
+        currentHash: currentVersion,
       }}
     >
       {children}

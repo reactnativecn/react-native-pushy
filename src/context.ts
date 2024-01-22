@@ -12,19 +12,23 @@ export const defaultContext = {
   markSuccess: noop,
   dismissError: noop,
   downloadUpdate: noop,
+  currentHash: '',
+  packageVersion: '',
 };
 
 export const PushyContext = createContext<{
   checkUpdate: () => void;
   switchVersion: () => void;
   switchVersionLater: () => void;
-  progress?: ProgressData;
   markSuccess: () => void;
+  dismissError: () => void;
+  downloadUpdate: () => void;
+  currentHash: string;
+  packageVersion: string;
+  client?: Pushy;
+  progress?: ProgressData;
   updateInfo?: CheckResult;
   lastError?: Error;
-  dismissError: () => void;
-  client?: Pushy;
-  downloadUpdate: () => void;
 }>(defaultContext);
 
 export const usePushy = () => useContext(PushyContext);
