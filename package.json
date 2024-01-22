@@ -40,7 +40,7 @@
   },
   "peerDependencies": {
     "react": ">=16.8.0",
-    "react-native": ">=0.57.0"
+    "react-native": ">=0.59.0"
   },
   "homepage": "https://github.com/reactnativecn/react-native-pushy#readme",
   "dependencies": {
