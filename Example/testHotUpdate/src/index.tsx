@@ -33,10 +33,7 @@ function App() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
   const snackbarVisible =
-    showUpdateSnackbar &&
-    updateInfo &&
-    updateInfo.updateAvailable &&
-    !useDefaultAlert;
+    showUpdateSnackbar && updateInfo?.update && !useDefaultAlert;
   return (
     <View style={styles.container}>
       <Text style={styles.welcome}>欢迎使用Pushy热更新服务</Text>
@@ -48,8 +45,8 @@ function App() {
           value={useDefaultAlert}
           onValueChange={v => {
             setUseDefaultAlert(v);
-            client.setOptions({
-              showAlert: v,
+            client?.setOptions({
+              useAlert: v,
             });
           }}
         />
@@ -80,7 +77,7 @@ function App() {
           setShowTestConsole(true);
         }}>
         <Text style={styles.instructions}>
-          react-native-update版本：{client.version}
+          react-native-update版本：{client?.version}
         </Text>
       </TouchableOpacity>
       <TestConsole visible={showTestConsole} />
@@ -98,7 +95,7 @@ function App() {
               setShowUpdateBanner(true);
             },
           }}>
-          <Text>有新版本({updateInfo.version})可用，是否更新？</Text>
+          <Text>有新版本({updateInfo.name})可用，是否更新？</Text>
         </Snackbar>
       )}
       <Banner
@@ -147,7 +144,6 @@ const styles = StyleSheet.create({
 
 const pushyClient = new Pushy({
   appKey,
-  showAlert: false,
 });
 
 export default function Root() {

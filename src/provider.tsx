@@ -45,19 +45,19 @@ export const PushyProvider = ({
   );
 
   const switchVersion = useCallback(() => {
-    if (updateInfo && 'hash' in updateInfo) {
+    if (updateInfo && updateInfo.hash) {
       client.switchVersion(updateInfo.hash);
     }
   }, [client, updateInfo]);
 
   const switchVersionLater = useCallback(() => {
-    if (updateInfo && 'hash' in updateInfo) {
+    if (updateInfo && updateInfo.hash) {
       client.switchVersionLater(updateInfo.hash);
     }
   }, [client, updateInfo]);
 
   const downloadUpdate = useCallback(async () => {
-    if (!updateInfo || !('update' in updateInfo)) {
+    if (!updateInfo || !updateInfo.update) {
       return;
     }
     try {
@@ -98,7 +98,7 @@ export const PushyProvider = ({
       return;
     }
     setUpdateInfo(info);
-    if ('expired' in info) {
+    if (info.expired) {
       const { downloadUrl } = info;
       showAlert('提示', '您的应用版本已更新，点击更新下载安装新版本', [
         {
@@ -114,7 +114,7 @@ export const PushyProvider = ({
           },
         },
       ]);
-    } else if ('update' in info) {
+    } else if (info.update) {
       showAlert(
         '提示',
         '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
