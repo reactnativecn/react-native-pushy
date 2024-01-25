@@ -1,30 +1,18 @@
-export interface ExpiredResult {
-  expired: true;
-  downloadUrl: string;
-}
-
-export interface UpTodateResult {
-  upToDate: true;
-  paused?: 'app' | 'package';
-}
-
-export interface UpdateAvailableResult {
-  upToDate: false;
-  update: true;
-  name: string; // version name
-  hash: string;
-  description: string;
-  metaInfo: string;
-  pdiffUrl: string;
+export interface CheckResult {
+  upToDate?: true;
+  expired?: true;
+  downloadUrl?: string;
+  update?: true;
+  name?: string; // version name
+  hash?: string;
+  description?: string;
+  metaInfo?: string;
+  pdiffUrl?: string;
   diffUrl?: string;
   updateUrl?: string;
+  paused?: 'app' | 'package';
+  message?: string;
 }
-
-export type CheckResult =
-  | ExpiredResult
-  | UpTodateResult
-  | UpdateAvailableResult
-  | {};
 
 export interface ProgressData {
   hash: string;
@@ -59,6 +47,7 @@ export interface EventData {
   newVersion?: string;
   [key: string]: any;
 }
+
 export type UpdateEventsLogger = ({
   type,
   data,
@@ -72,6 +61,7 @@ export interface PushyServerConfig {
   backups?: string[];
   queryUrl?: string;
 }
+
 export interface PushyOptions {
   appKey: string;
   server?: PushyServerConfig;

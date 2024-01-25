@@ -154,7 +154,6 @@ export class Pushy {
     if (resp.status !== 200) {
       report({
         type: 'errorChecking',
-        //@ts-ignore
         message: result.message,
       });
     }
@@ -187,11 +186,11 @@ export class Pushy {
     onDownloadProgress?: (data: ProgressData) => void,
   ) => {
     assertRelease();
-    if (!('update' in info)) {
-      return;
-    }
     const { hash, diffUrl, pdiffUrl, updateUrl, name, description, metaInfo } =
       info;
+    if (!info.update || !hash) {
+      return;
+    }
     if (rolledBackVersion === hash) {
       log(`rolledback hash ${rolledBackVersion}, ignored`);
       return;
