@@ -24,7 +24,7 @@ export const PushyProvider = ({
   client: Pushy;
   children: ReactNode;
 }) => {
-  const { strategy, useAlert } = client.options;
+  const { options } = client;
   const stateListener = useRef<NativeEventSubscription>();
   const [updateInfo, setUpdateInfo] = useState<CheckResult>();
   const [lastError, setLastError] = useState<Error>();
@@ -37,11 +37,11 @@ export const PushyProvider = ({
 
   const showAlert = useCallback(
     (...args: Parameters<typeof Alert.alert>) => {
-      if (useAlert) {
+      if (options.useAlert) {
         Alert.alert(...args);
       }
     },
-    [useAlert],
+    [options],
   );
 
   const switchVersion = useCallback(() => {
@@ -138,6 +138,7 @@ export const PushyProvider = ({
     if (isFirstTime) {
       markSuccess();
     }
+    const { strategy, dismissErrorAfter } = options;
     if (strategy === 'both' || strategy === 'onAppResume') {
       stateListener.current = AppState.addEventListener(
         'change',
@@ -152,7 +153,6 @@ export const PushyProvider = ({
       checkUpdate();
     }
     let dismissErrorTimer: ReturnType<typeof setTimeout>;
-    const { dismissErrorAfter } = client.options;
     if (typeof dismissErrorAfter === 'number' && dismissErrorAfter > 0) {
       dismissErrorTimer = setTimeout(() => {
         dismissError();
@@ -162,7 +162,7 @@ export const PushyProvider = ({
       stateListener.current && stateListener.current.remove();
       clearTimeout(dismissErrorTimer);
     };
-  }, [checkUpdate, client.options, dismissError, markSuccess, strategy]);
+  }, [checkUpdate, options, dismissError, markSuccess]);
 
   return (
     <PushyContext.Provider
