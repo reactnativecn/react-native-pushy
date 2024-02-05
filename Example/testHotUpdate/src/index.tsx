@@ -33,7 +33,8 @@ function App() {
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
   const snackbarVisible =
-    showUpdateSnackbar && updateInfo?.update && !useDefaultAlert;
+    !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
+
   return (
     <View style={styles.container}>
       <Text style={styles.welcome}>欢迎使用Pushy热更新服务</Text>
@@ -48,6 +49,7 @@ function App() {
             client?.setOptions({
               useAlert: v,
             });
+            setShowUpdateSnackbar(!v);
           }}
         />
       </View>
@@ -66,7 +68,11 @@ function App() {
       <Text>
         下载进度：{received} / {total}
       </Text>
-      <TouchableOpacity onPress={checkUpdate}>
+      <TouchableOpacity
+        onPress={() => {
+          checkUpdate();
+          setShowUpdateSnackbar(true);
+        }}>
         <Text style={styles.instructions}>点击这里检查更新</Text>
       </TouchableOpacity>
 
@@ -83,7 +89,7 @@ function App() {
       <TestConsole visible={showTestConsole} />
       {snackbarVisible && (
         <Snackbar
-          visible={true}
+          visible={snackbarVisible}
           onDismiss={() => {
             setShowUpdateSnackbar(false);
           }}
@@ -95,10 +101,13 @@ function App() {
               setShowUpdateBanner(true);
             },
           }}>
-          <Text>有新版本({updateInfo.name})可用，是否更新？</Text>
+          <Text style={{color: 'white'}}>
+            有新版本({updateInfo.name})可用，是否更新？
+          </Text>
         </Snackbar>
       )}
       <Banner
+        style={{position: 'absolute', top: 0}}
         visible={showUpdateBanner}
         actions={[
           {
