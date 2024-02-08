@@ -261,6 +261,7 @@ export class Pushy {
         data: { newVersion: hash },
       });
     }
+    log('downloaded hash:', hash);
     setLocalHashInfo(hash, {
       name,
       description,

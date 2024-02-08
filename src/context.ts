@@ -12,6 +12,7 @@ export const defaultContext = {
   markSuccess: noop,
   dismissError: noop,
   downloadUpdate: noop,
+  downloadAndInstallApk: noop,
   currentHash: '',
   packageVersion: '',
 };
@@ -23,6 +24,7 @@ export const PushyContext = createContext<{
   markSuccess: () => void;
   dismissError: () => void;
   downloadUpdate: () => void;
+  downloadAndInstallApk: (url: string) => void;
   currentHash: string;
   packageVersion: string;
   client?: Pushy;

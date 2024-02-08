@@ -107,7 +107,7 @@ function App() {
         </Snackbar>
       )}
       <Banner
-        style={{position: 'absolute', top: 0}}
+        style={{width: '100%', position: 'absolute', top: 0}}
         visible={showUpdateBanner}
         actions={[
           {

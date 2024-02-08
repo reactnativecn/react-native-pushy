@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { Pushy } from './client';
 import { currentVersion, isFirstTime, packageVersion } from './core';
-import { CheckResult } from './type';
+import { CheckResult, ProgressData } from './type';
 import { PushyContext } from './context';
 
 export const PushyProvider = ({
@@ -27,6 +27,7 @@ export const PushyProvider = ({
   const { options } = client;
   const stateListener = useRef<NativeEventSubscription>();
   const [updateInfo, setUpdateInfo] = useState<CheckResult>();
+  const [progress, setProgress] = useState<ProgressData>();
   const [lastError, setLastError] = useState<Error>();
 
   const dismissError = useCallback(() => {
@@ -61,7 +62,7 @@ export const PushyProvider = ({
       return;
     }
     try {
-      const hash = await client.downloadUpdate(updateInfo);
+      const hash = await client.downloadUpdate(updateInfo, setProgress);
       if (!hash) {
         return;
       }
@@ -88,6 +89,15 @@ export const PushyProvider = ({
     }
   }, [client, showAlert, updateInfo]);
 
+  const downloadAndInstallApk = useCallback(
+    (downloadUrl: string) => {
+      if (Platform.OS === 'android' && downloadUrl) {
+        client.downloadAndInstallApk(downloadUrl, setProgress);
+      }
+    },
+    [client],
+  );
+
   const checkUpdate = useCallback(async () => {
     let info: CheckResult;
     try {
@@ -106,7 +116,7 @@ export const PushyProvider = ({
           onPress: () => {
             if (downloadUrl) {
               if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
-                client.downloadAndInstallApk(downloadUrl);
+                downloadAndInstallApk(downloadUrl);
               } else {
                 Linking.openURL(downloadUrl);
               }
@@ -130,15 +140,15 @@ export const PushyProvider = ({
         ],
       );
     }
-  }, [client, downloadUpdate, showAlert]);
+  }, [client, downloadAndInstallApk, downloadUpdate, showAlert]);
 
   const markSuccess = client.markSuccess;
 
   useEffect(() => {
-    if (isFirstTime) {
+    const { strategy, dismissErrorAfter, autoMarkSuccess } = options;
+    if (isFirstTime && autoMarkSuccess) {
       markSuccess();
     }
-    const { strategy, dismissErrorAfter } = options;
     if (strategy === 'both' || strategy === 'onAppResume') {
       stateListener.current = AppState.addEventListener(
         'change',
@@ -178,6 +188,8 @@ export const PushyProvider = ({
         downloadUpdate,
         packageVersion,
         currentHash: currentVersion,
+        progress,
+        downloadAndInstallApk,
       }}
     >
       {children}
