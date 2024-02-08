@@ -16,7 +16,10 @@
     "postinstall-postinstall": "^2.1.0",
     "react": "18.0.0",
     "react-native": "0.69.8",
-    "react-native-update": "link:../.."
+    "react-native-paper": "^5.12.1",
+    "react-native-safe-area-context": "^4.8.2",
+    "react-native-update": "^10.0.0-beta.3",
+    "react-native-vector-icons": "^10.0.3"
   },
   "devDependencies": {
     "@babel/core": "^7.21.0",

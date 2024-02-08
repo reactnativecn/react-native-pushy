@@ -57,7 +57,7 @@ public class UpdateModule extends NativeUpdateSpec {
 
     @Override
     public void downloadFullUpdate(ReadableMap options, final Promise promise) {
-    UpdateModuleImpl.downloadFullUpdate(this.updateContext,options,promise);
+        UpdateModuleImpl.downloadFullUpdate(this.updateContext,options,promise);
     }
 
     @Override

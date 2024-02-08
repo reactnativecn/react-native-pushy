@@ -1,5 +1,5 @@
-export function logger(...args: any[]) {
-  console.log('Pushy: ', ...args);
+export function log(...args: any[]) {
+  console.log('pushy: ', ...args);
 }
 
 export function assertRelease() {
