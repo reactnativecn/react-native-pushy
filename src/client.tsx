@@ -31,6 +31,7 @@ export class Pushy {
     server: defaultServer,
     autoMarkSuccess: true,
     useAlert: true,
+    strategy: 'both',
   };
 
   lastChecking: number;
