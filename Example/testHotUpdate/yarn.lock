@@ -6231,10 +6231,10 @@ react-native-safe-area-context@^4.8.2:
   resolved "https://registry.yarnpkg.com/react-native-safe-area-context/-/react-native-safe-area-context-4.8.2.tgz#e6b3d8acf3c6afcb4b5db03a97f9c37df7668f65"
   integrity sha512-ffUOv8BJQ6RqO3nLml5gxJ6ab3EestPiyWekxdzO/1MQ7NF8fW1Mzh1C5QE9yq573Xefnc7FuzGXjtesZGv7cQ==
 
-react-native-update@^10.0.0-beta.3:
-  version "10.0.0-beta.3"
-  resolved "https://registry.yarnpkg.com/react-native-update/-/react-native-update-10.0.0-beta.3.tgz#cad099ebb40ff04b31ba2df13930517039e4fae3"
-  integrity sha512-Ak1ylgHbOUeaNsq3ItZGRenqqAwYKSTlB6T4sBn4PPNGaMmIMt6uIKKWrQqcNyc9WEy9LlFM6kSqQXBQdaVatw==
+react-native-update@^10.0.2:
+  version "10.0.2"
+  resolved "https://registry.yarnpkg.com/react-native-update/-/react-native-update-10.0.2.tgz#2bb01ab6e41e72bbbb535cebd34083b1fed69eb0"
+  integrity sha512-XkEPmTC3X6FV1eXq6uDyjfhXpAaug0HI48Mm+PkbMlXcgFjTrOmtuq7yuvemS2nPG2pwnrYQuGs0A6tE2aoRBA==
   dependencies:
     nanoid "^3.3.3"
 
