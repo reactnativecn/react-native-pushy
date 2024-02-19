@@ -31,10 +31,8 @@ export const PushyProvider = ({
   const [lastError, setLastError] = useState<Error>();
 
   const dismissError = useCallback(() => {
-    if (lastError) {
-      setLastError(undefined);
-    }
-  }, [lastError]);
+    setLastError(undefined);
+  }, []);
 
   const showAlert = useCallback(
     (...args: Parameters<typeof Alert.alert>) => {
