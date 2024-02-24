@@ -1,4 +1,4 @@
-import { CheckResult, PushyOptions, ProgressData } from './type';
+import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
 import { assertRelease, log } from './utils';
 import {
   EmitterSubscription,
@@ -12,9 +12,9 @@ import {
   pushyNativeEventEmitter,
   currentVersion,
   packageVersion,
-  report,
   rolledBackVersion,
   setLocalHashInfo,
+  isRolledBack,
 } from './core';
 
 const defaultServer = {
@@ -25,6 +25,8 @@ const defaultServer = {
 };
 
 const empty = {};
+const noop = () => {};
+
 export class Pushy {
   options: PushyOptions = {
     appKey: '',
@@ -32,6 +34,7 @@ export class Pushy {
     autoMarkSuccess: true,
     useAlert: true,
     strategy: 'both',
+    logger: noop,
   };
 
   lastChecking: number;
@@ -55,8 +58,43 @@ export class Pushy {
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
         this.options[key] = value;
+        if (key === 'logger') {
+          if (isRolledBack) {
+            this.report({
+              type: 'rollback',
+              data: {
+                rolledBackVersion,
+              },
+            });
+          }
+        }
       }
     }
+  };
+
+  report = ({
+    type,
+    message = '',
+    data = {},
+  }: {
+    type: EventType;
+    message?: string;
+    data?: Record<string, string | number>;
+  }) => {
+    log(type + ' ' + message);
+    const { logger = noop, appKey } = this.options;
+    logger({
+      type,
+      data: {
+        appKey,
+        currentVersion,
+        cInfo,
+        packageVersion,
+        buildTime,
+        message,
+        ...data,
+      },
+    });
   };
 
   getCheckUrl = (endpoint: string = this.options.server!.main) => {
@@ -79,7 +117,7 @@ export class Pushy {
     }
     this.marked = true;
     PushyModule.markSuccess();
-    report({ type: 'markSuccess' });
+    this.report({ type: 'markSuccess' });
   };
   switchVersion = (hash: string) => {
     assertRelease();
@@ -108,7 +146,7 @@ export class Pushy {
       return this.lastResult;
     }
     this.lastChecking = now;
-    report({ type: 'checking' });
+    this.report({ type: 'checking' });
     const fetchPayload = {
       method: 'POST',
       headers: {
@@ -126,7 +164,7 @@ export class Pushy {
     try {
       resp = await fetch(this.getCheckUrl(), fetchPayload);
     } catch (e) {
-      report({
+      this.report({
         type: 'errorChecking',
         message: 'Can not connect to update server. Trying backup endpoints.',
       });
@@ -142,7 +180,7 @@ export class Pushy {
       }
     }
     if (!resp) {
-      report({
+      this.report({
         type: 'errorChecking',
         message: 'Can not connect to update server. Please check your network.',
       });
@@ -153,7 +191,7 @@ export class Pushy {
     this.lastResult = result;
 
     if (resp.status !== 200) {
-      report({
+      this.report({
         type: 'errorChecking',
         message: result.message,
       });
@@ -214,7 +252,7 @@ export class Pushy {
       );
     }
     let succeeded = false;
-    report({ type: 'downloading' });
+    this.report({ type: 'downloading' });
     if (diffUrl) {
       log('downloading diff');
       try {
@@ -257,7 +295,7 @@ export class Pushy {
       delete this.progressHandlers[hash];
     }
     if (!succeeded) {
-      return report({
+      return this.report({
         type: 'errorUpdate',
         data: { newVersion: hash },
       });
@@ -278,17 +316,17 @@ export class Pushy {
     if (Platform.OS !== 'android') {
       return;
     }
-    report({ type: 'downloadingApk' });
+    this.report({ type: 'downloadingApk' });
     if (Platform.Version <= 23) {
       try {
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          return report({ type: 'rejectStoragePermission' });
+          return this.report({ type: 'rejectStoragePermission' });
         }
       } catch (err) {
-        return report({ type: 'errorStoragePermission' });
+        return this.report({ type: 'errorStoragePermission' });
       }
     }
     const progressKey = 'downloadingApk';
@@ -307,7 +345,7 @@ export class Pushy {
       target: 'update.apk',
       hash: progressKey,
     }).catch(() => {
-      report({ type: 'errowDownloadAndInstallApk' });
+      this.report({ type: 'errowDownloadAndInstallApk' });
     });
     if (this.progressHandlers[progressKey]) {
       this.progressHandlers[progressKey].remove();

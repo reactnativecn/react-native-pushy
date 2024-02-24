@@ -1,5 +1,4 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
-import { EventType, UpdateEventsLogger } from './type';
 import { log } from './utils';
 const {
   version: v,
@@ -56,44 +55,6 @@ export const pushyNativeEventEmitter = new NativeEventEmitter(PushyModule);
 if (!uuid) {
   uuid = require('nanoid/non-secure').nanoid();
   PushyModule.setUuid(uuid);
-}
-
-const noop = () => {};
-let reporter: UpdateEventsLogger = noop;
-
-export function onPushyEvents(customReporter: UpdateEventsLogger) {
-  reporter = customReporter;
-  if (isRolledBack) {
-    report({
-      type: 'rollback',
-      data: {
-        rolledBackVersion,
-      },
-    });
-  }
-}
-
-export function report({
-  type,
-  message = '',
-  data = {},
-}: {
-  type: EventType;
-  message?: string;
-  data?: Record<string, string | number>;
-}) {
-  log(type + ' ' + message);
-  reporter({
-    type,
-    data: {
-      currentVersion,
-      cInfo,
-      packageVersion,
-      buildTime,
-      message,
-      ...data,
-    },
-  });
 }
 
 log('uuid: ' + uuid);
