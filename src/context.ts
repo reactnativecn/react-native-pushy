@@ -2,28 +2,28 @@ import { createContext, useContext } from 'react';
 import { CheckResult, ProgressData } from './type';
 import { Pushy } from './client';
 
-const empty = {};
 const noop = () => {};
+const asyncNoop = () => Promise.resolve();
 
 export const defaultContext = {
-  checkUpdate: () => Promise.resolve(empty),
+  checkUpdate: asyncNoop,
   switchVersion: noop,
   switchVersionLater: noop,
   markSuccess: noop,
   dismissError: noop,
-  downloadUpdate: noop,
+  downloadUpdate: asyncNoop,
   downloadAndInstallApk: noop,
   currentHash: '',
   packageVersion: '',
 };
 
 export const PushyContext = createContext<{
-  checkUpdate: () => void;
+  checkUpdate: () => Promise<void>;
   switchVersion: () => void;
   switchVersionLater: () => void;
   markSuccess: () => void;
   dismissError: () => void;
-  downloadUpdate: () => void;
+  downloadUpdate: () => Promise<void>;
   downloadAndInstallApk: (url: string) => void;
   currentHash: string;
   packageVersion: string;
