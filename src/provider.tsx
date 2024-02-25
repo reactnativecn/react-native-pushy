@@ -13,7 +13,12 @@ import {
   Linking,
 } from 'react-native';
 import { Pushy } from './client';
-import { currentVersion, isFirstTime, packageVersion } from './core';
+import {
+  currentVersion,
+  isFirstTime,
+  packageVersion,
+  getCurrentVersionInfo,
+} from './core';
 import { CheckResult, ProgressData } from './type';
 import { PushyContext } from './context';
 
@@ -88,9 +93,9 @@ export const PushyProvider = ({
   }, [client, showAlert, updateInfo]);
 
   const downloadAndInstallApk = useCallback(
-    (downloadUrl: string) => {
+    async (downloadUrl: string) => {
       if (Platform.OS === 'android' && downloadUrl) {
-        client.downloadAndInstallApk(downloadUrl, setProgress);
+        await client.downloadAndInstallApk(downloadUrl, setProgress);
       }
     },
     [client],
@@ -188,6 +193,7 @@ export const PushyProvider = ({
         currentHash: currentVersion,
         progress,
         downloadAndInstallApk,
+        getCurrentVersionInfo,
       }}
     >
       {children}
