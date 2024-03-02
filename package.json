@@ -1,6 +1,6 @@
 {
   "name": "react-native-update",
-  "version": "10.1.3",
+  "version": "10.2.0",
   "description": "react-native hot update",
   "main": "src/index.ts",
   "scripts": {
