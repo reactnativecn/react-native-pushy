@@ -7,3 +7,18 @@ export function assertRelease() {
     throw new Error('react-native-update 只能在 RELEASE 版本中运行.');
   }
 }
+
+const ping = async (url: string) =>
+  fetch(url, {
+    method: 'HEAD',
+    redirect: 'follow',
+  }).then(({ status }) => status === 200);
+
+const canUseGoogle = ping('https://www.google.com');
+
+export const testUrls = async (urls?: string[]) => {
+  if (!urls?.length || (await canUseGoogle)) {
+    return null;
+  }
+  return Promise.race(urls.map((url) => ping(url).then(() => url)));
+};

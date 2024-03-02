@@ -8,8 +8,11 @@ export interface CheckResult {
   description?: string;
   metaInfo?: string;
   pdiffUrl?: string;
+  pdiffUrls?: string[];
   diffUrl?: string;
+  diffUrls?: string[];
   updateUrl?: string;
+  updateUrls?: string[];
   paused?: 'app' | 'package';
   message?: string;
 }

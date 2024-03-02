@@ -1,5 +1,5 @@
 import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
-import { assertRelease, log } from './utils';
+import { assertRelease, log, testUrls } from './utils';
 import {
   EmitterSubscription,
   PermissionsAndroid,
@@ -225,8 +225,18 @@ export class Pushy {
     onDownloadProgress?: (data: ProgressData) => void,
   ) => {
     assertRelease();
-    const { hash, diffUrl, pdiffUrl, updateUrl, name, description, metaInfo } =
-      info;
+    const {
+      hash,
+      diffUrl: _diffUrl,
+      diffUrls,
+      pdiffUrl: _pdiffUrl,
+      pdiffUrls,
+      updateUrl: _updateUrl,
+      updateUrls,
+      name,
+      description,
+      metaInfo,
+    } = info;
     if (!info.update || !hash) {
       return;
     }
@@ -253,6 +263,7 @@ export class Pushy {
     }
     let succeeded = false;
     this.report({ type: 'downloading' });
+    const diffUrl = (await testUrls(diffUrls)) || _diffUrl;
     if (diffUrl) {
       log('downloading diff');
       try {
@@ -266,6 +277,7 @@ export class Pushy {
         log(`diff error: ${e.message}, try pdiff`);
       }
     }
+    const pdiffUrl = (await testUrls(pdiffUrls)) || _pdiffUrl;
     if (!succeeded && pdiffUrl) {
       log('downloading pdiff');
       try {
@@ -278,6 +290,7 @@ export class Pushy {
         log(`pdiff error: ${e.message}, try full patch`);
       }
     }
+    const updateUrl = (await testUrls(updateUrls)) || _updateUrl;
     if (!succeeded && updateUrl) {
       log('downloading full patch');
       try {
