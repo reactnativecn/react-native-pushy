@@ -20,5 +20,7 @@ export const testUrls = async (urls?: string[]) => {
   if (!urls?.length || (await canUseGoogle)) {
     return null;
   }
-  return Promise.race(urls.map((url) => ping(url).then(() => url)));
+  return Promise.race(urls.map((url) => ping(url).then(() => url))).catch(
+    () => null,
+  );
 };
