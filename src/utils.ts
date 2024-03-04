@@ -9,10 +9,13 @@ export function assertRelease() {
 }
 
 const ping = async (url: string) =>
-  fetch(url, {
-    method: 'HEAD',
-    redirect: 'follow',
-  }).then(({ status }) => status === 200);
+  Promise.race([
+    fetch(url, {
+      method: 'HEAD',
+      redirect: 'follow',
+    }).then(({ status }) => status === 200),
+    new Promise<false>((r) => setTimeout(() => r(false), 2000)),
+  ]);
 
 const canUseGoogle = ping('https://www.google.com');
 
