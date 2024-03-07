@@ -38,7 +38,7 @@ export class Pushy {
   };
 
   lastChecking: number;
-  lastResult: CheckResult;
+  lastRespJson?: Promise<any>;
 
   progressHandlers: Record<string, EmitterSubscription> = {};
   downloadedHash: string;
@@ -139,11 +139,11 @@ export class Pushy {
     assertRelease();
     const now = Date.now();
     if (
-      this.lastResult &&
+      this.lastRespJson &&
       this.lastChecking &&
       now - this.lastChecking < 1000 * 5
     ) {
-      return this.lastResult;
+      return await this.lastRespJson;
     }
     this.lastChecking = now;
     this.report({ type: 'checking' });
@@ -184,11 +184,11 @@ export class Pushy {
         type: 'errorChecking',
         message: 'Can not connect to update server. Please check your network.',
       });
-      return this.lastResult || empty;
+      return this.lastRespJson ? await this.lastRespJson : empty;
     }
-    const result: CheckResult = await resp.json();
+    this.lastRespJson = resp.json();
 
-    this.lastResult = result;
+    const result: CheckResult = await this.lastRespJson;
 
     if (resp.status !== 200) {
       this.report({
