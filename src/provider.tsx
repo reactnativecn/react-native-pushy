@@ -148,6 +148,10 @@ export const PushyProvider = ({
   const markSuccess = client.markSuccess;
 
   useEffect(() => {
+    if (__DEV__) {
+      console.info('检测到在DEV环境，不会进行热更新检查');
+      return;
+    }
     const { strategy, dismissErrorAfter, autoMarkSuccess } = options;
     if (isFirstTime && autoMarkSuccess) {
       markSuccess();
