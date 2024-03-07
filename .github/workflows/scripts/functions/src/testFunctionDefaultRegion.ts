@@ -41,14 +41,17 @@ export const testFunctionDefaultRegion = functions.https.onCall(data => {
 
   const { type, asError, inputData } = data;
   if (!Object.hasOwnProperty.call(SAMPLE_DATA, type)) {
-    throw new functions.https.HttpsError('invalid-argument', 'Invalid test requested.');
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Invalid test requested.',
+    );
   }
 
   const outputData = SAMPLE_DATA[type];
 
   try {
     assert.deepEqual(outputData, inputData);
-  } catch (e) {
+  } catch (e: any) {
     console.error(e);
     throw new functions.https.HttpsError(
       'invalid-argument',

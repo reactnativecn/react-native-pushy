@@ -37,11 +37,11 @@ export class Pushy {
     logger: noop,
   };
 
-  lastChecking: number;
+  lastChecking?: number;
   lastRespJson?: Promise<any>;
 
   progressHandlers: Record<string, EmitterSubscription> = {};
-  downloadedHash: string;
+  downloadedHash?: string;
 
   marked = false;
   applyingUpdate = false;
@@ -57,6 +57,7 @@ export class Pushy {
   setOptions = (options: Partial<PushyOptions>) => {
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
+        // @ts-expect-error
         this.options[key] = value;
         if (key === 'logger') {
           if (isRolledBack) {
@@ -163,7 +164,7 @@ export class Pushy {
     let resp;
     try {
       resp = await fetch(this.getCheckUrl(), fetchPayload);
-    } catch (e) {
+    } catch (e: any) {
       this.report({
         type: 'errorChecking',
         message: 'Can not connect to update server. Trying backup endpoints.',
@@ -172,7 +173,7 @@ export class Pushy {
       if (backupEndpoints) {
         try {
           resp = await Promise.race(
-            backupEndpoints.map((endpoint) =>
+            backupEndpoints.map(endpoint =>
               fetch(this.getCheckUrl(endpoint), fetchPayload),
             ),
           );
@@ -214,7 +215,7 @@ export class Pushy {
             new Set([...(server.backups || []), ...remoteEndpoints]),
           );
         }
-      } catch (e) {
+      } catch (e: any) {
         log('failed to fetch endpoints from: ', server.queryUrl);
       }
     }
@@ -254,7 +255,7 @@ export class Pushy {
     if (onDownloadProgress) {
       this.progressHandlers[hash] = pushyNativeEventEmitter.addListener(
         'RCTPushyDownloadProgress',
-        (progressData) => {
+        progressData => {
           if (progressData.hash === hash) {
             onDownloadProgress(progressData);
           }
@@ -273,7 +274,7 @@ export class Pushy {
           originHash: currentVersion,
         });
         succeeded = true;
-      } catch (e) {
+      } catch (e: any) {
         log(`diff error: ${e.message}, try pdiff`);
       }
     }
@@ -286,7 +287,7 @@ export class Pushy {
           hash,
         });
         succeeded = true;
-      } catch (e) {
+      } catch (e: any) {
         log(`pdiff error: ${e.message}, try full patch`);
       }
     }
@@ -299,7 +300,7 @@ export class Pushy {
           hash,
         });
         succeeded = true;
-      } catch (e) {
+      } catch (e: any) {
         log(`full patch error: ${e.message}`);
       }
     }
@@ -338,7 +339,7 @@ export class Pushy {
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
           return this.report({ type: 'rejectStoragePermission' });
         }
-      } catch (err) {
+      } catch (e: any) {
         return this.report({ type: 'errorStoragePermission' });
       }
     }

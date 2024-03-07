@@ -190,7 +190,7 @@ export default function TestConsole({visible}) {
               }
               setAlertVisible(true);
               setAlertMsg('done');
-            } catch (e) {
+            } catch (e: any) {
               setAlertVisible(true);
               setAlertMsg(e.message);
             }

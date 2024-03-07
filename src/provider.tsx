@@ -86,9 +86,9 @@ export const PushyProvider = ({
           },
         },
       ]);
-    } catch (err) {
-      setLastError(err);
-      showAlert('更新失败', err.message);
+    } catch (e: any) {
+      setLastError(e);
+      showAlert('更新失败', e.message);
     }
   }, [client, showAlert, updateInfo]);
 
@@ -105,9 +105,9 @@ export const PushyProvider = ({
     let info: CheckResult;
     try {
       info = await client.checkUpdate();
-    } catch (err) {
-      setLastError(err);
-      showAlert('更新检查失败', err.message);
+    } catch (e: any) {
+      setLastError(e);
+      showAlert('更新检查失败', e.message);
       return;
     }
     setUpdateInfo(info);
@@ -159,7 +159,7 @@ export const PushyProvider = ({
     if (strategy === 'both' || strategy === 'onAppResume') {
       stateListener.current = AppState.addEventListener(
         'change',
-        (nextAppState) => {
+        nextAppState => {
           if (nextAppState === 'active') {
             checkUpdate();
           }
@@ -198,8 +198,7 @@ export const PushyProvider = ({
         progress,
         downloadAndInstallApk,
         getCurrentVersionInfo,
-      }}
-    >
+      }}>
       {children}
     </PushyContext.Provider>
   );
