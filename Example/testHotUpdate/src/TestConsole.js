@@ -19,23 +19,25 @@ const UUID = '00000000-0000-0000-0000-000000000000';
 const DownloadUrl =
   'http://cos.pgyer.com/697913e94d7441f20c686e2b0996a1aa.apk?sign=7a8f11b1df82cba45c8ac30b1acec88c&t=1680404102&response-content-disposition=attachment%3Bfilename%3DtestHotupdate_1.0.apk';
 
+const CustomDialog = ({title, visible, onConfirm}) => {
+  if (!visible) {
+    return null;
+  }
 
-  const CustomDialog = ({title, visible, onConfirm}) => {
-    if (!visible) {
-      return null;
-    }
-  
-    return (
-      <View style={styles.overlay}>
-        <View style={styles.dialog}>
-          <Text style={styles.title}>{title}</Text>
-          <TouchableOpacity testID='done' style={styles.button} onLongPress={onConfirm}>
-            <Text style={styles.buttonText}>确认</Text>
-          </TouchableOpacity>
-        </View>
+  return (
+    <View style={styles.overlay}>
+      <View style={styles.dialog}>
+        <Text style={styles.title}>{title}</Text>
+        <TouchableOpacity
+          testID="done"
+          style={styles.button}
+          onLongPress={onConfirm}>
+          <Text style={styles.buttonText}>确认</Text>
+        </TouchableOpacity>
       </View>
-    );
-  };
+    </View>
+  );
+};
 export default function TestConsole({visible}) {
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
@@ -132,9 +134,8 @@ export default function TestConsole({visible}) {
           testID={NativeTestMethod[i].name}
           onLongPress={() => {
             NativeTestMethod[i].invoke();
-          }}
-        >
-        <Text>{NativeTestMethod[i].name}</Text>
+          }}>
+          <Text>{NativeTestMethod[i].name}</Text>
         </TouchableOpacity>,
       );
     }
@@ -164,8 +165,14 @@ export default function TestConsole({visible}) {
         />
         {running && <ActivityIndicator />}
         <TouchableOpacity
-        style={{backgroundColor:'rgb(0,140,237)', justifyContent: 'center',
-        alignItems: 'center',paddingTop:10,paddingBottom:10,marginBottom:5}}
+          style={{
+            backgroundColor: 'rgb(0,140,237)',
+            justifyContent: 'center',
+            alignItems: 'center',
+            paddingTop: 10,
+            paddingBottom: 10,
+            marginBottom: 5,
+          }}
           testID="submit"
           onLongPress={async () => {
             setRunning(true);
@@ -190,22 +197,23 @@ export default function TestConsole({visible}) {
               }
               setAlertVisible(true);
               setAlertMsg('done');
-            } catch (e: any) {
+            } catch (e) {
               setAlertVisible(true);
               setAlertMsg(e.message);
             }
             setRunning(false);
-          }}
-        >
-          <Text style={{color:'white'}}>执行</Text>
+          }}>
+          <Text style={{color: 'white'}}>执行</Text>
         </TouchableOpacity>
-         <Button title="重置" onPress={() => setText('')} />
-          {renderTestView()}
-          <CustomDialog
-            title={alertMsg}
-            visible={alertVisible}
-            onConfirm={()=>{setAlertVisible(false)}}
-      />
+        <Button title="重置" onPress={() => setText('')} />
+        {renderTestView()}
+        <CustomDialog
+          title={alertMsg}
+          visible={alertVisible}
+          onConfirm={() => {
+            setAlertVisible(false);
+          }}
+        />
       </SafeAreaView>
     </Modal>
   );

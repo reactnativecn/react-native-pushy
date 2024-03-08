@@ -32,6 +32,7 @@ export const PushyProvider = ({
   const { options } = client;
   const stateListener = useRef<NativeEventSubscription>();
   const [updateInfo, setUpdateInfo] = useState<CheckResult>();
+  const updateInfoRef = useRef(updateInfo);
   const [progress, setProgress] = useState<ProgressData>();
   const [lastError, setLastError] = useState<Error>();
   const lastChecking = useRef(0);
@@ -61,37 +62,40 @@ export const PushyProvider = ({
     }
   }, [client, updateInfo]);
 
-  const downloadUpdate = useCallback(async () => {
-    if (!updateInfo || !updateInfo.update) {
-      return;
-    }
-    try {
-      const hash = await client.downloadUpdate(updateInfo, setProgress);
-      if (!hash) {
+  const downloadUpdate = useCallback(
+    async (info: CheckResult | undefined = updateInfoRef.current) => {
+      if (!info || !info.update) {
         return;
       }
-      stateListener.current && stateListener.current.remove();
-      showAlert('提示', '下载完毕，是否立即更新?', [
-        {
-          text: '下次再说',
-          style: 'cancel',
-          onPress: () => {
-            client.switchVersionLater(hash);
+      try {
+        const hash = await client.downloadUpdate(info, setProgress);
+        if (!hash) {
+          return;
+        }
+        stateListener.current && stateListener.current.remove();
+        showAlert('提示', '下载完毕，是否立即更新?', [
+          {
+            text: '下次再说',
+            style: 'cancel',
+            onPress: () => {
+              client.switchVersionLater(hash);
+            },
           },
-        },
-        {
-          text: '立即更新',
-          style: 'default',
-          onPress: () => {
-            client.switchVersion(hash);
+          {
+            text: '立即更新',
+            style: 'default',
+            onPress: () => {
+              client.switchVersion(hash);
+            },
           },
-        },
-      ]);
-    } catch (e: any) {
-      setLastError(e);
-      showAlert('更新失败', e.message);
-    }
-  }, [client, showAlert, updateInfo]);
+        ]);
+      } catch (e: any) {
+        setLastError(e);
+        showAlert('更新失败', e.message);
+      }
+    },
+    [client, showAlert],
+  );
 
   const downloadAndInstallApk = useCallback(
     async (downloadUrl: string) => {
@@ -116,6 +120,7 @@ export const PushyProvider = ({
       showAlert('更新检查失败', e.message);
       return;
     }
+    updateInfoRef.current = info;
     setUpdateInfo(info);
     if (info.expired) {
       const { downloadUrl } = info;
