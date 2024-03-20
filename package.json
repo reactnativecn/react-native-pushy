@@ -52,7 +52,7 @@
       {
         "name": "RCTPushySpec",
         "type": "modules",
-        "jsSrcsDir": "lib"
+        "jsSrcsDir": "src"
       }
     ]
   },
