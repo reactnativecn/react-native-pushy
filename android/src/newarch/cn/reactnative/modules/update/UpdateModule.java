@@ -14,7 +14,7 @@ import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
 
-public class UpdateModule extends NativeUpdateSpec {
+public class UpdateModule extends NativePushySpec {
     UpdateContext updateContext;
     public static ReactApplicationContext mContext;
     public UpdateModule(ReactApplicationContext reactContext, UpdateContext updateContext) {
