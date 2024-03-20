@@ -67,13 +67,6 @@ export default function TestConsole({visible}) {
         },
       },
       {
-        name: 'setBlockUpdate',
-        invoke: () => {
-          setText('setBlockUpdate');
-          setOptions({reason: 'application has been block', until: 1673082950});
-        },
-      },
-      {
         name: 'reloadUpdate',
         invoke: () => {
           setText('reloadUpdate');

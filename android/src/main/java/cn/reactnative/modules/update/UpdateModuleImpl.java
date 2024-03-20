@@ -192,23 +192,6 @@ public class UpdateModuleImpl {
         }
     }
 
-    public static void setBlockUpdate(UpdateContext updateContext, ReadableMap options,Promise promise) {
-        try {
-            final int until = options.getInt("until");
-            final String reason = options.getString("reason");
-            UiThreadUtil.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    updateContext.setBlockUpdate(until, reason);
-                }
-            });
-            promise.resolve(true);
-        }catch (Exception e){
-            promise.reject("执行报错:"+e.getMessage());
-        }
-
-    }
-
     public static void setUuid(UpdateContext updateContext, String uuid, Promise promise) {
         try {
             UiThreadUtil.runOnUiThread(new Runnable() {

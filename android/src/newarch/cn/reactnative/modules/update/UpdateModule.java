@@ -109,11 +109,6 @@ public class UpdateModule extends NativePushySpec {
     }
 
     @Override
-    public void setBlockUpdate(ReadableMap options,Promise promise) {
-        UpdateModuleImpl.setBlockUpdate(updateContext,options,promise);
-    }
-
-    @Override
     public void setUuid(final String uuid, Promise promise) {
         UpdateModuleImpl.setUuid(updateContext,uuid,promise);
     }

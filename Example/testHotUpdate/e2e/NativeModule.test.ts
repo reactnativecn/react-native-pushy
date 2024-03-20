@@ -28,14 +28,7 @@ describe('测试Native模块的方法', () => {
     await element(by.id('done')).longPress();
     await expect(element(by.id('done'))).toBeNotVisible();
   });
-
-  it('setBlockUpdate', async () => {
-    await element(by.id('setBlockUpdate')).longPress();
-    await element(by.id('submit')).longPress();
-    await expect(element(by.text('done'))).toBeVisible();
-    await element(by.id('done')).longPress();
-    await expect(element(by.id('done'))).toBeNotVisible();
-  });
+  
   if (device.getPlatform() === 'android') {
     it('reloadUpdate', async () => {
       await element(by.id('reloadUpdate')).longPress();

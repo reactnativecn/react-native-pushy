@@ -240,18 +240,6 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    public void setBlockUpdate(ReadableMap options) {
-        final int until = options.getInt("until");
-        final String reason = options.getString("reason");
-        UiThreadUtil.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                updateContext.setBlockUpdate(until, reason);
-            }
-        });
-    }
-
-    @ReactMethod
     public void setUuid(final String uuid) {
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override

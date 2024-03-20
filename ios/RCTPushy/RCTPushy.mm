@@ -192,24 +192,6 @@ RCT_EXPORT_MODULE(RCTPushy);
     return self;
 }
 
-RCT_EXPORT_METHOD(setBlockUpdate:(NSDictionary *)options
-                  resolver:(RCTPromiseResolveBlock)resolve
-                                    rejecter:(RCTPromiseRejectBlock)reject)
-{
-    // NSMutableDictionary *blockUpdateInfo = [NSMutableDictionary new];
-    // blockUpdateInfo[@"reason"] = options[@"reason"];
-    // blockUpdateInfo[@"until"] = options[@"until"];
-    @try {
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults setObject:options forKey:keyBlockUpdate];
-        [defaults synchronize];
-        resolve(@true);
-    }
-    @catch (NSException *exception) {
-        reject(@"执行报错", nil, nil);
-    }
-}
-
 RCT_EXPORT_METHOD(setUuid:(NSString *)uuid  resolver:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {

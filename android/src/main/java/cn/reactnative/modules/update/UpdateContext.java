@@ -166,13 +166,6 @@ public class UpdateContext {
         return sp.getString(key, null);
     }
 
-    public void setBlockUpdate(int until, String reason) {
-        SharedPreferences.Editor editor = sp.edit();
-        editor.putInt("blockUntil", until);
-        editor.putString("blockReason", reason);
-        editor.apply();
-    }
-
     public String getCurrentVersion() {
         return sp.getString("currentVersion", null);
     }
