@@ -48,13 +48,9 @@
     "nanoid": "^3.3.3"
   },
   "codegenConfig": {
-    "libraries": [
-      {
-        "name": "RCTPushySpec",
-        "type": "modules",
-        "jsSrcsDir": "src"
-      }
-    ]
+    "name": "RCTPushySpec",
+    "type": "modules",
+    "jsSrcsDir": "src"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
