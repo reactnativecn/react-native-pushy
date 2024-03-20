@@ -9,7 +9,7 @@ const isTurboModuleEnabled =
   global.__turboModuleProxy != null;
 
 export const PushyModule = isTurboModuleEnabled
-  ? require('./turboModuleSpec').default
+  ? require('./NativePushy').default
   : NativeModules.Pushy;
 
 if (!PushyModule) {
