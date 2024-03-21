@@ -69,13 +69,6 @@ public class UpdateContext {
         return context.getString(R.string.pushy_build_time);
     }
 
-    public Map getBlockUpdate() {
-        return new HashMap<String, Object>() {{
-            put("until", sp.getInt("blockUntil", 0));
-            put("reason", sp.getString("blockReason", null));
-        }};
-    }
-
     public boolean getIsUsingBundleUrl() {
         return isUsingBundleUrl;
     }

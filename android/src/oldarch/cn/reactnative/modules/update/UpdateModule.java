@@ -59,7 +59,6 @@ public class UpdateModule extends ReactContextBaseJavaModule {
         if (rolledBackVersion != null) {
             updateContext.clearRollbackMark();
         }
-        constants.put("blockUpdate", updateContext.getBlockUpdate());
         constants.put("uuid", updateContext.getKv("uuid"));
         return constants;
     }
