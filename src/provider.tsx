@@ -124,20 +124,20 @@ export const PushyProvider = ({
     setUpdateInfo(info);
     if (info.expired) {
       const { downloadUrl } = info;
-      showAlert('提示', '您的应用版本已更新，点击更新下载安装新版本', [
-        {
-          text: '更新',
-          onPress: () => {
-            if (downloadUrl) {
+      if (downloadUrl) {
+        showAlert('提示', '您的应用版本已更新，点击更新下载安装新版本', [
+          {
+            text: '更新',
+            onPress: () => {
               if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
                 downloadAndInstallApk(downloadUrl);
               } else {
                 Linking.openURL(downloadUrl);
               }
-            }
+            },
           },
-        },
-      ]);
+        ]);
+      }
     } else if (info.update) {
       showAlert(
         '提示',
