@@ -70,7 +70,7 @@ export interface PushyOptions {
   server?: PushyServerConfig;
   logger?: UpdateEventsLogger;
   useAlert?: boolean;
-  strategy?: 'onAppStart' | 'onAppResume' | 'both';
+  strategy?: 'onAppStart' | 'onAppResume' | 'both' | null;
   autoMarkSuccess?: boolean;
   dismissErrorAfter?: number;
 }
