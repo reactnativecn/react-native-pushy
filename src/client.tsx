@@ -35,6 +35,7 @@ export class Pushy {
     useAlert: true,
     strategy: 'both',
     logger: noop,
+    debug: false,
   };
 
   lastChecking?: number;
@@ -146,6 +147,12 @@ export class Pushy {
     }
   };
   checkUpdate = async () => {
+    if (__DEV__ && !this.options.debug) {
+      console.info(
+        '您当前处于开发环境且未启用debug，不会进行热更检查。如需在开发环境中调试热更，请在client中设置debug为true',
+      );
+      return;
+    }
     const now = Date.now();
     if (
       this.lastRespJson &&

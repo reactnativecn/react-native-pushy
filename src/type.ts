@@ -73,4 +73,5 @@ export interface PushyOptions {
   strategy?: 'onAppStart' | 'onAppResume' | 'both' | null;
   autoMarkSuccess?: boolean;
   dismissErrorAfter?: number;
+  debug?: boolean;
 }
