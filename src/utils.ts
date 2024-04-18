@@ -2,7 +2,6 @@ export function log(...args: any[]) {
   console.log('pushy: ', ...args);
 }
 
-
 const ping = async (url: string) =>
   Promise.race([
     fetch(url, {
