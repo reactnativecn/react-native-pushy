@@ -1,5 +1,5 @@
 import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
-import { assertRelease, log, testUrls } from './utils';
+import { log, testUrls } from './utils';
 import {
   EmitterSubscription,
   PermissionsAndroid,
@@ -112,8 +112,7 @@ export class Pushy {
     return true;
   };
   markSuccess = () => {
-    assertRelease();
-    if (this.marked) {
+    if (this.marked || __DEV__) {
       return;
     }
     this.marked = true;
@@ -121,7 +120,12 @@ export class Pushy {
     this.report({ type: 'markSuccess' });
   };
   switchVersion = (hash: string) => {
-    assertRelease();
+    if (__DEV__) {
+      console.warn(
+        '您调用了switchVersion方法，但是当前是开发环境，不会进行任何操作。',
+      );
+      return;
+    }
     if (this.assertHash(hash) && !this.applyingUpdate) {
       log('switchVersion: ' + hash);
       this.applyingUpdate = true;
@@ -130,14 +134,18 @@ export class Pushy {
   };
 
   switchVersionLater = (hash: string) => {
-    assertRelease();
+    if (__DEV__) {
+      console.warn(
+        '您调用了switchVersionLater方法，但是当前是开发环境，不会进行任何操作。',
+      );
+      return;
+    }
     if (this.assertHash(hash)) {
       log('switchVersionLater: ' + hash);
       PushyModule.setNeedUpdate({ hash });
     }
   };
   checkUpdate = async () => {
-    assertRelease();
     const now = Date.now();
     if (
       this.lastRespJson &&
@@ -148,18 +156,22 @@ export class Pushy {
     }
     this.lastChecking = now;
     this.report({ type: 'checking' });
+    const fetchBody = {
+      packageVersion,
+      hash: currentVersion,
+      buildTime,
+      cInfo,
+    };
+    if (__DEV__) {
+      delete fetchBody.buildTime;
+    }
     const fetchPayload = {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        packageVersion,
-        hash: currentVersion,
-        buildTime,
-        cInfo,
-      }),
+      body: JSON.stringify(fetchBody),
     };
     let resp;
     try {
@@ -225,7 +237,6 @@ export class Pushy {
     info: CheckResult,
     onDownloadProgress?: (data: ProgressData) => void,
   ) => {
-    assertRelease();
     const {
       hash,
       diffUrl: _diffUrl,
@@ -275,7 +286,11 @@ export class Pushy {
         });
         succeeded = true;
       } catch (e: any) {
-        log(`diff error: ${e.message}, try pdiff`);
+        if (__DEV__) {
+          succeeded = true;
+        } else {
+          log(`diff error: ${e.message}, try pdiff`);
+        }
       }
     }
     const pdiffUrl = (await testUrls(pdiffUrls)) || _pdiffUrl;
@@ -288,7 +303,11 @@ export class Pushy {
         });
         succeeded = true;
       } catch (e: any) {
-        log(`pdiff error: ${e.message}, try full patch`);
+        if (__DEV__) {
+          succeeded = true;
+        } else {
+          log(`pdiff error: ${e.message}, try full patch`);
+        }
       }
     }
     const updateUrl = (await testUrls(updateUrls)) || _updateUrl;
@@ -301,12 +320,19 @@ export class Pushy {
         });
         succeeded = true;
       } catch (e: any) {
-        log(`full patch error: ${e.message}`);
+        if (__DEV__) {
+          succeeded = true;
+        } else {
+          log(`full patch error: ${e.message}`);
+        }
       }
     }
     if (this.progressHandlers[hash]) {
       this.progressHandlers[hash].remove();
       delete this.progressHandlers[hash];
+    }
+    if (__DEV__) {
+      return hash;
     }
     if (!succeeded) {
       return this.report({
