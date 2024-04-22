@@ -159,8 +159,10 @@ export const PushyProvider = ({
   const markSuccess = client.markSuccess;
 
   useEffect(() => {
-    if (__DEV__) {
-      console.info('检测到在DEV环境，不会进行热更新检查');
+    if (__DEV__ && !options.debug) {
+      console.info(
+        '您当前处于开发环境且未启用debug，不会进行热更检查。如需在开发环境中调试热更，请在client中设置debug为true',
+      );
       return;
     }
     const { strategy, dismissErrorAfter, autoMarkSuccess } = options;
