@@ -1,10 +1,7 @@
 import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
 import { log, testUrls } from './utils';
-import {
-  EmitterSubscription,
-  PermissionsAndroid,
-  Platform,
-} from 'react-native';
+import { EmitterSubscription, Platform } from 'react-native';
+import type { PermissionsAndroidStatic } from 'react-native';
 import {
   PushyModule,
   buildTime,
@@ -26,6 +23,10 @@ const defaultServer = {
 
 const empty = {};
 const noop = () => {};
+
+if (Platform.OS === 'web') {
+  console.warn('react-native-update 不支持 web 端热更，不会执行操作');
+}
 
 export class Pushy {
   options: PushyOptions = {
@@ -149,8 +150,12 @@ export class Pushy {
   checkUpdate = async () => {
     if (__DEV__ && !this.options.debug) {
       console.info(
-        '您当前处于开发环境且未启用debug，不会进行热更检查。如需在开发环境中调试热更，请在client中设置debug为true',
+        '您当前处于开发环境且未启用 debug，不会进行热更检查。如需在开发环境中调试热更，请在 client 中设置 debug 为 true',
       );
+      return;
+    }
+    if (Platform.OS === 'web') {
+      console.warn('web 端不支持热更新检查');
       return;
     }
     const now = Date.now();
@@ -366,6 +371,8 @@ export class Pushy {
     this.report({ type: 'downloadingApk' });
     if (Platform.Version <= 23) {
       try {
+        const PermissionsAndroid =
+          require('react-native/Libraries/PermissionsAndroid/PermissionsAndroid') as PermissionsAndroidStatic;
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
         );
