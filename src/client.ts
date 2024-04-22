@@ -1,7 +1,7 @@
 import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
 import { log, testUrls } from './utils';
 import { EmitterSubscription, Platform } from 'react-native';
-import type { PermissionsAndroidStatic } from 'react-native';
+import { PermissionsAndroid } from './permissions';
 import {
   PushyModule,
   buildTime,
@@ -371,8 +371,6 @@ export class Pushy {
     this.report({ type: 'downloadingApk' });
     if (Platform.Version <= 23) {
       try {
-        const PermissionsAndroid =
-          require('react-native/Libraries/PermissionsAndroid/PermissionsAndroid') as PermissionsAndroidStatic;
         const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
         );

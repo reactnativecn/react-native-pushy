@@ -1,5 +1,5 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
-import { log } from './utils';
+import { EmptyModule, log } from './utils';
 const {
   version: v,
 } = require('react-native/Libraries/Core/ReactNativeVersion');
@@ -7,17 +7,6 @@ const RNVersion = `${v.major}.${v.minor}.${v.patch}`;
 const isTurboModuleEnabled =
   // @ts-expect-error
   global.__turboModuleProxy != null;
-
-const noop = () => {};
-class EmptyModule {
-  constructor() {
-    return new Proxy(this, {
-      get() {
-        return noop;
-      },
-    });
-  }
-}
 
 export const PushyModule =
   Platform.OS === 'web'

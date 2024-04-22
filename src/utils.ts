@@ -1,6 +1,18 @@
 import { Platform } from 'react-native';
+
 export function log(...args: any[]) {
   console.log('pushy: ', ...args);
+}
+
+const noop = () => {};
+export class EmptyModule {
+  constructor() {
+    return new Proxy(this, {
+      get() {
+        return noop;
+      },
+    });
+  }
 }
 
 const ping =
