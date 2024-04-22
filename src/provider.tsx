@@ -12,7 +12,7 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import { Pushy } from './client.native';
+import { Pushy } from './client';
 import {
   currentVersion,
   isFirstTime,

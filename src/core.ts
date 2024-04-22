@@ -8,9 +8,23 @@ const isTurboModuleEnabled =
   // @ts-expect-error
   global.__turboModuleProxy != null;
 
-export const PushyModule = isTurboModuleEnabled
-  ? require('./NativePushy').default
-  : NativeModules.Pushy;
+const noop = () => {};
+class EmptyModule {
+  constructor() {
+    return new Proxy(this, {
+      get() {
+        return noop;
+      },
+    });
+  }
+}
+
+export const PushyModule =
+  Platform.OS === 'web'
+    ? new EmptyModule()
+    : isTurboModuleEnabled
+    ? require('./NativePushy').default
+    : NativeModules.Pushy;
 
 if (!PushyModule) {
   throw new Error('react-native-update模块无法加载，请对照安装文档检查配置。');
