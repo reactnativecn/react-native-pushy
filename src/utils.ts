@@ -5,7 +5,7 @@ export function log(...args: any[]) {
 }
 
 const noop = () => {};
-export class EmptyModule {
+class EmptyModule {
   constructor() {
     return new Proxy(this, {
       get() {
@@ -14,6 +14,7 @@ export class EmptyModule {
     });
   }
 }
+export const emptyModule = new EmptyModule();
 
 const ping =
   Platform.OS === 'web'

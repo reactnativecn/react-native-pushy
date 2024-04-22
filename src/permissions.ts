@@ -1,4 +1,4 @@
 import type { PermissionsAndroidStatic } from 'react-native';
-import { EmptyModule } from './utils';
+import { emptyModule } from './utils';
 
-export const PermissionsAndroid = new EmptyModule() as PermissionsAndroidStatic;
+export const PermissionsAndroid = emptyModule as PermissionsAndroidStatic;

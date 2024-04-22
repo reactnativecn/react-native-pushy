@@ -1,5 +1,5 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
-import { EmptyModule, log } from './utils';
+import { emptyModule, log } from './utils';
 const {
   version: v,
 } = require('react-native/Libraries/Core/ReactNativeVersion');
@@ -10,7 +10,7 @@ const isTurboModuleEnabled =
 
 export const PushyModule =
   Platform.OS === 'web'
-    ? new EmptyModule()
+    ? emptyModule
     : isTurboModuleEnabled
     ? require('./NativePushy').default
     : NativeModules.Pushy;
