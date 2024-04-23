@@ -120,6 +120,9 @@ export const PushyProvider = ({
       showAlert('更新检查失败', e.message);
       return;
     }
+    if (!info) {
+      return;
+    }
     updateInfoRef.current = info;
     setUpdateInfo(info);
     if (info.expired) {

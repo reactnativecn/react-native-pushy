@@ -50,8 +50,10 @@ export class Pushy {
   version = cInfo.pushy;
 
   constructor(options: PushyOptions) {
-    if (!options.appKey) {
-      throw new Error('appKey is required');
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      if (!options.appKey) {
+        throw new Error('appKey is required');
+      }
     }
     this.setOptions(options);
   }
