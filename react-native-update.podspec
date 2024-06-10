@@ -22,7 +22,7 @@ Pod::Spec.new do |s|
   s.vendored_libraries = 'RCTPushy/libRCTPushy.a'
   s.pod_target_xcconfig = { 'USER_HEADER_SEARCH_PATHS' => '"$(SRCROOT)/../node_modules/react-native-update/ios"' }
   s.resource = 'ios/pushy_build_time.txt'
-  s.script_phase = { :name => 'Generate build time', :script => 'set -x;date +%s > ${PODS_ROOT}/../../node_modules/react-native-update/ios/pushy_build_time.txt', :execution_position => :before_compile }
+  s.script_phase = { :name => 'Generate build time', :script => 'set -x;date +%s > ${PODS_ROOT}/../../../RN/node_modules/react-native-update/ios/pushy_build_time.txt', :execution_position => :before_compile }
 
   s.dependency 'React'
   s.dependency "React-Core"
