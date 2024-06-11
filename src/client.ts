@@ -33,7 +33,7 @@ export class Pushy {
     appKey: '',
     server: defaultServer,
     autoMarkSuccess: true,
-    updateStrategy: 'alwaysAsk',
+    updateStrategy: 'alwaysAlert',
     checkStrategy: 'both',
     logger: noop,
     debug: false,

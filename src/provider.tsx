@@ -47,7 +47,7 @@ export const PushyProvider = ({
         Alert.alert(...args);
       }
     },
-    [options],
+    [options.updateStrategy],
   );
 
   const switchVersion = useCallback(() => {

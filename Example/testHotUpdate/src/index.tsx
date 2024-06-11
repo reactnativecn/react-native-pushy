@@ -47,7 +47,7 @@ function App() {
           onValueChange={v => {
             setUseDefaultAlert(v);
             client?.setOptions({
-              useAlert: v,
+              updateStrategy: v ? null : 'alwaysAlert',
             });
             setShowUpdateSnackbar(!v);
           }}
