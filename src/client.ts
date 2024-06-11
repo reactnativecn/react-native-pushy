@@ -18,7 +18,7 @@ const defaultServer = {
   main: 'https://update.react-native.cn/api',
   backups: ['https://update.reactnative.cn/api'],
   queryUrl:
-    'https://raw.githubusercontent.com/reactnativecn/react-native-pushy/master/endpoints.json',
+    'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-pushy@master/endpoints.json',
 };
 
 const empty = {};
@@ -33,8 +33,8 @@ export class Pushy {
     appKey: '',
     server: defaultServer,
     autoMarkSuccess: true,
-    useAlert: true,
-    strategy: 'both',
+    updateStrategy: 'alwaysAsk',
+    checkStrategy: 'both',
     logger: noop,
     debug: false,
   };

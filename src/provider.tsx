@@ -43,7 +43,7 @@ export const PushyProvider = ({
 
   const showAlert = useCallback(
     (...args: Parameters<typeof Alert.alert>) => {
-      if (options.useAlert) {
+      if (options.updateStrategy === 'alwaysAlert') {
         Alert.alert(...args);
       }
     },
@@ -73,6 +73,11 @@ export const PushyProvider = ({
           return;
         }
         stateListener.current && stateListener.current.remove();
+        if (options.updateStrategy === 'silentAndNow') {
+          return client.switchVersion(hash);
+        } else if (options.updateStrategy === 'silentAndLater') {
+          return client.switchVersionLater(hash);
+        }
         showAlert('提示', '下载完毕，是否立即更新?', [
           {
             text: '下次再说',
@@ -94,7 +99,7 @@ export const PushyProvider = ({
         showAlert('更新失败', e.message);
       }
     },
-    [client, showAlert],
+    [client, options.updateStrategy, showAlert],
   );
 
   const downloadAndInstallApk = useCallback(
@@ -128,6 +133,14 @@ export const PushyProvider = ({
     if (info.expired) {
       const { downloadUrl } = info;
       if (downloadUrl) {
+        if (options.updateStrategy === 'silentAndNow') {
+          if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
+            downloadAndInstallApk(downloadUrl);
+          } else {
+            Linking.openURL(downloadUrl);
+          }
+          return;
+        }
         showAlert('提示', '您的应用版本已更新，点击更新下载安装新版本', [
           {
             text: '更新',
@@ -142,6 +155,12 @@ export const PushyProvider = ({
         ]);
       }
     } else if (info.update) {
+      if (
+        options.updateStrategy === 'silentAndNow' ||
+        options.updateStrategy === 'silentAndLater'
+      ) {
+        return downloadUpdate(info);
+      }
       showAlert(
         '提示',
         '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
@@ -157,7 +176,13 @@ export const PushyProvider = ({
         ],
       );
     }
-  }, [client, downloadAndInstallApk, downloadUpdate, showAlert]);
+  }, [
+    client,
+    downloadAndInstallApk,
+    downloadUpdate,
+    options.updateStrategy,
+    showAlert,
+  ]);
 
   const markSuccess = client.markSuccess;
 
@@ -168,11 +193,11 @@ export const PushyProvider = ({
       );
       return;
     }
-    const { strategy, dismissErrorAfter, autoMarkSuccess } = options;
+    const { checkStrategy, dismissErrorAfter, autoMarkSuccess } = options;
     if (isFirstTime && autoMarkSuccess) {
       markSuccess();
     }
-    if (strategy === 'both' || strategy === 'onAppResume') {
+    if (checkStrategy === 'both' || checkStrategy === 'onAppResume') {
       stateListener.current = AppState.addEventListener(
         'change',
         nextAppState => {
@@ -182,7 +207,7 @@ export const PushyProvider = ({
         },
       );
     }
-    if (strategy === 'both' || strategy === 'onAppStart') {
+    if (checkStrategy === 'both' || checkStrategy === 'onAppStart') {
       checkUpdate();
     }
     let dismissErrorTimer: ReturnType<typeof setTimeout>;
