@@ -69,7 +69,12 @@ export interface PushyOptions {
   appKey: string;
   server?: PushyServerConfig;
   logger?: UpdateEventsLogger;
-  updateStrategy?: 'alwaysAlert' | 'silentAndNow' | 'silentAndLater' | null;
+  updateStrategy?:
+    | 'alwaysAlert'
+    | 'alertUpdateAndIgnoreError'
+    | 'silentAndNow'
+    | 'silentAndLater'
+    | null;
   checkStrategy?: 'onAppStart' | 'onAppResume' | 'both' | null;
   autoMarkSuccess?: boolean;
   dismissErrorAfter?: number;

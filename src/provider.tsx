@@ -41,7 +41,19 @@ export const PushyProvider = ({
     setLastError(undefined);
   }, []);
 
-  const showAlert = useCallback(
+  const alertUpdate = useCallback(
+    (...args: Parameters<typeof Alert.alert>) => {
+      if (
+        options.updateStrategy === 'alwaysAlert' ||
+        options.updateStrategy === 'alertUpdateAndIgnoreError'
+      ) {
+        Alert.alert(...args);
+      }
+    },
+    [options.updateStrategy],
+  );
+
+  const alertError = useCallback(
     (...args: Parameters<typeof Alert.alert>) => {
       if (options.updateStrategy === 'alwaysAlert') {
         Alert.alert(...args);
@@ -78,7 +90,7 @@ export const PushyProvider = ({
         } else if (options.updateStrategy === 'silentAndLater') {
           return client.switchVersionLater(hash);
         }
-        showAlert('提示', '下载完毕，是否立即更新?', [
+        alertUpdate('提示', '下载完毕，是否立即更新?', [
           {
             text: '下次再说',
             style: 'cancel',
@@ -96,10 +108,10 @@ export const PushyProvider = ({
         ]);
       } catch (e: any) {
         setLastError(e);
-        showAlert('更新失败', e.message);
+        alertError('更新失败', e.message);
       }
     },
-    [client, options.updateStrategy, showAlert],
+    [alertError, client, options.updateStrategy, alertUpdate],
   );
 
   const downloadAndInstallApk = useCallback(
@@ -122,7 +134,7 @@ export const PushyProvider = ({
       info = await client.checkUpdate();
     } catch (e: any) {
       setLastError(e);
-      showAlert('更新检查失败', e.message);
+      alertError('更新检查失败', e.message);
       return;
     }
     if (!info) {
@@ -141,7 +153,7 @@ export const PushyProvider = ({
           }
           return;
         }
-        showAlert('提示', '您的应用版本已更新，点击更新下载安装新版本', [
+        alertUpdate('提示', '您的应用版本已更新，点击更新下载安装新版本', [
           {
             text: '更新',
             onPress: () => {
@@ -161,7 +173,7 @@ export const PushyProvider = ({
       ) {
         return downloadUpdate(info);
       }
-      showAlert(
+      alertUpdate(
         '提示',
         '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
         [
@@ -177,11 +189,12 @@ export const PushyProvider = ({
       );
     }
   }, [
+    alertError,
     client,
     downloadAndInstallApk,
     downloadUpdate,
     options.updateStrategy,
-    showAlert,
+    alertUpdate,
   ]);
 
   const markSuccess = client.markSuccess;
