@@ -399,7 +399,7 @@ export class Pushy {
       target: 'update.apk',
       hash: progressKey,
     }).catch(() => {
-      this.report({ type: 'errowDownloadAndInstallApk' });
+      this.report({ type: 'errorDownloadAndInstallApk' });
     });
     if (this.progressHandlers[progressKey]) {
       this.progressHandlers[progressKey].remove();
