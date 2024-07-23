@@ -62,17 +62,23 @@ export const PushyProvider = ({
     [options.updateStrategy],
   );
 
-  const switchVersion = useCallback(() => {
-    if (updateInfo && updateInfo.hash) {
-      client.switchVersion(updateInfo.hash);
-    }
-  }, [client, updateInfo]);
+  const switchVersion = useCallback(
+    (info: CheckResult | undefined = updateInfoRef.current) => {
+      if (info && info.hash) {
+        client.switchVersion(info.hash);
+      }
+    },
+    [client],
+  );
 
-  const switchVersionLater = useCallback(() => {
-    if (updateInfo && updateInfo.hash) {
-      client.switchVersionLater(updateInfo.hash);
-    }
-  }, [client, updateInfo]);
+  const switchVersionLater = useCallback(
+    (info: CheckResult | undefined = updateInfoRef.current) => {
+      if (info && info.hash) {
+        client.switchVersionLater(info.hash);
+      }
+    },
+    [client],
+  );
 
   const downloadUpdate = useCallback(
     async (info: CheckResult | undefined = updateInfoRef.current) => {
