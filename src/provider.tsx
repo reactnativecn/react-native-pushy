@@ -37,6 +37,15 @@ export const PushyProvider = ({
   const [lastError, setLastError] = useState<Error>();
   const lastChecking = useRef(0);
 
+  const throwErrorIfEnabled = useCallback(
+    (e: Error) => {
+      if (options.throwError) {
+        throw e;
+      }
+    },
+    [options.throwError],
+  );
+
   const dismissError = useCallback(() => {
     setLastError(undefined);
   }, []);
@@ -115,9 +124,16 @@ export const PushyProvider = ({
       } catch (e: any) {
         setLastError(e);
         alertError('更新失败', e.message);
+        throwErrorIfEnabled(e);
       }
     },
-    [alertError, client, options.updateStrategy, alertUpdate],
+    [
+      client,
+      options.updateStrategy,
+      alertUpdate,
+      alertError,
+      throwErrorIfEnabled,
+    ],
   );
 
   const downloadAndInstallApk = useCallback(
@@ -141,6 +157,7 @@ export const PushyProvider = ({
     } catch (e: any) {
       setLastError(e);
       alertError('更新检查失败', e.message);
+      throwErrorIfEnabled(e);
       return;
     }
     if (!info) {
@@ -195,12 +212,13 @@ export const PushyProvider = ({
       );
     }
   }, [
-    alertError,
     client,
-    downloadAndInstallApk,
-    downloadUpdate,
+    alertError,
+    throwErrorIfEnabled,
     options.updateStrategy,
     alertUpdate,
+    downloadAndInstallApk,
+    downloadUpdate,
   ]);
 
   const markSuccess = client.markSuccess;

@@ -79,4 +79,5 @@ export interface PushyOptions {
   autoMarkSuccess?: boolean;
   dismissErrorAfter?: number;
   debug?: boolean;
+  throwError?: boolean;
 }

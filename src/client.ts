@@ -37,6 +37,7 @@ export class Pushy {
     checkStrategy: 'both',
     logger: noop,
     debug: false,
+    throwError: false,
   };
 
   lastChecking?: number;
@@ -289,6 +290,7 @@ export class Pushy {
     }
     let succeeded = false;
     this.report({ type: 'downloading' });
+    let lastError: any;
     const diffUrl = (await testUrls(diffUrls)) || _diffUrl;
     if (diffUrl) {
       log('downloading diff');
@@ -300,6 +302,7 @@ export class Pushy {
         });
         succeeded = true;
       } catch (e: any) {
+        lastError = e;
         if (__DEV__) {
           succeeded = true;
         } else {
@@ -317,6 +320,7 @@ export class Pushy {
         });
         succeeded = true;
       } catch (e: any) {
+        lastError = e;
         if (__DEV__) {
           succeeded = true;
         } else {
@@ -334,6 +338,7 @@ export class Pushy {
         });
         succeeded = true;
       } catch (e: any) {
+        lastError = e;
         if (__DEV__) {
           succeeded = true;
         } else {
@@ -349,10 +354,14 @@ export class Pushy {
       return hash;
     }
     if (!succeeded) {
-      return this.report({
+      this.report({
         type: 'errorUpdate',
         data: { newVersion: hash },
       });
+      if (lastError) {
+        throw lastError;
+      }
+      return;
     }
     log('downloaded hash:', hash);
     setLocalHashInfo(hash, {
