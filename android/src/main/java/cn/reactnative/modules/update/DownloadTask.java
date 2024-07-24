@@ -75,7 +75,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 .build();
         Response response = client.newCall(request).execute();
         if (response.code() > 299) {
-            throw new Error("Server return code " + response.code());
+            throw new Error("Server error:" + response.code() + " " + response.message());
         }
         ResponseBody body = response.body();
         long contentLength = body.contentLength();
