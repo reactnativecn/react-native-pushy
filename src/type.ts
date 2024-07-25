@@ -81,3 +81,8 @@ export interface PushyOptions {
   debug?: boolean;
   throwError?: boolean;
 }
+
+export interface PushyTestPayload {
+  type: '__rnPushyVersionHash';
+  data: any;
+}

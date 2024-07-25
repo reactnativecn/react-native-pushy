@@ -14,6 +14,7 @@ export const defaultContext = {
   downloadUpdate: asyncNoop,
   downloadAndInstallApk: asyncNoop,
   getCurrentVersionInfo: () => Promise.resolve({}),
+  parseTestPayload: () => Promise.resolve(false),
   currentHash: '',
   packageVersion: '',
 };
@@ -31,6 +32,7 @@ export const PushyContext = createContext<{
     description?: string;
     metaInfo?: string;
   }>;
+  parseTestPayload: (code: string) => Promise<boolean>;
   currentHash: string;
   packageVersion: string;
   client?: Pushy;

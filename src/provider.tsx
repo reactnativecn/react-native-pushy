@@ -19,7 +19,7 @@ import {
   packageVersion,
   getCurrentVersionInfo,
 } from './core';
-import { CheckResult, ProgressData } from './type';
+import { CheckResult, ProgressData, PushyTestPayload } from './type';
 import { PushyContext } from './context';
 
 export const PushyProvider = ({
@@ -262,6 +262,25 @@ export const PushyProvider = ({
     };
   }, [checkUpdate, options, dismissError, markSuccess]);
 
+  const parseTestPayload = useCallback(
+    async (code: string) => {
+      let payload: PushyTestPayload;
+      try {
+        payload = JSON.parse(code);
+      } catch {
+        return false;
+      }
+      if (payload && payload.type) {
+        if (payload.type === '__rnPushyVersionHash') {
+          await checkUpdate({ toHash: payload.data });
+          return true;
+        }
+      }
+      return false;
+    },
+    [checkUpdate],
+  );
+
   return (
     <PushyContext.Provider
       value={{
@@ -279,6 +298,7 @@ export const PushyProvider = ({
         progress,
         downloadAndInstallApk,
         getCurrentVersionInfo,
+        parseTestPayload,
       }}>
       {children}
     </PushyContext.Provider>
