@@ -150,7 +150,7 @@ export class Pushy {
       PushyModule.setNeedUpdate({ hash });
     }
   };
-  checkUpdate = async () => {
+  checkUpdate = async (extra?: Record<string, any>) => {
     if (__DEV__ && !this.options.debug) {
       console.info(
         '您当前处于开发环境且未启用 debug，不会进行热更检查。如需在开发环境中调试热更，请在 client 中设置 debug 为 true',
@@ -176,6 +176,7 @@ export class Pushy {
       hash: currentVersion,
       buildTime,
       cInfo,
+      ...extra,
     };
     if (__DEV__) {
       delete fetchBody.buildTime;

@@ -145,81 +145,84 @@ export const PushyProvider = ({
     [client],
   );
 
-  const checkUpdate = useCallback(async () => {
-    const now = Date.now();
-    if (lastChecking.current && now - lastChecking.current < 1000) {
-      return;
-    }
-    lastChecking.current = now;
-    let info: CheckResult;
-    try {
-      info = await client.checkUpdate();
-    } catch (e: any) {
-      setLastError(e);
-      alertError('更新检查失败', e.message);
-      throwErrorIfEnabled(e);
-      return;
-    }
-    if (!info) {
-      return;
-    }
-    updateInfoRef.current = info;
-    setUpdateInfo(info);
-    if (info.expired) {
-      const { downloadUrl } = info;
-      if (downloadUrl) {
-        if (options.updateStrategy === 'silentAndNow') {
-          if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
-            downloadAndInstallApk(downloadUrl);
-          } else {
-            Linking.openURL(downloadUrl);
+  const checkUpdate = useCallback(
+    async (extra?: Record<string, any>) => {
+      const now = Date.now();
+      if (lastChecking.current && now - lastChecking.current < 1000) {
+        return;
+      }
+      lastChecking.current = now;
+      let info: CheckResult;
+      try {
+        info = await client.checkUpdate(extra);
+      } catch (e: any) {
+        setLastError(e);
+        alertError('更新检查失败', e.message);
+        throwErrorIfEnabled(e);
+        return;
+      }
+      if (!info) {
+        return;
+      }
+      updateInfoRef.current = info;
+      setUpdateInfo(info);
+      if (info.expired) {
+        const { downloadUrl } = info;
+        if (downloadUrl) {
+          if (options.updateStrategy === 'silentAndNow') {
+            if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
+              downloadAndInstallApk(downloadUrl);
+            } else {
+              Linking.openURL(downloadUrl);
+            }
+            return;
           }
-          return;
+          alertUpdate('提示', '您的应用版本已更新，点击更新下载安装新版本', [
+            {
+              text: '更新',
+              onPress: () => {
+                if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
+                  downloadAndInstallApk(downloadUrl);
+                } else {
+                  Linking.openURL(downloadUrl);
+                }
+              },
+            },
+          ]);
         }
-        alertUpdate('提示', '您的应用版本已更新，点击更新下载安装新版本', [
-          {
-            text: '更新',
-            onPress: () => {
-              if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
-                downloadAndInstallApk(downloadUrl);
-              } else {
-                Linking.openURL(downloadUrl);
-              }
+      } else if (info.update) {
+        if (
+          options.updateStrategy === 'silentAndNow' ||
+          options.updateStrategy === 'silentAndLater'
+        ) {
+          return downloadUpdate(info);
+        }
+        alertUpdate(
+          '提示',
+          '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
+          [
+            { text: '取消', style: 'cancel' },
+            {
+              text: '确定',
+              style: 'default',
+              onPress: () => {
+                downloadUpdate();
+              },
             },
-          },
-        ]);
+          ],
+        );
       }
-    } else if (info.update) {
-      if (
-        options.updateStrategy === 'silentAndNow' ||
-        options.updateStrategy === 'silentAndLater'
-      ) {
-        return downloadUpdate(info);
-      }
-      alertUpdate(
-        '提示',
-        '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
-        [
-          { text: '取消', style: 'cancel' },
-          {
-            text: '确定',
-            style: 'default',
-            onPress: () => {
-              downloadUpdate();
-            },
-          },
-        ],
-      );
-    }
-  }, [
-    client,
-    alertError,
-    throwErrorIfEnabled,
-    options.updateStrategy,
-    alertUpdate,
-    downloadAndInstallApk,
-    downloadUpdate,
-  ]);
+    },
+    [
+      client,
+      alertError,
+      throwErrorIfEnabled,
+      options.updateStrategy,
+      alertUpdate,
+      downloadAndInstallApk,
+      downloadUpdate,
+    ],
+  );
 
   const markSuccess = client.markSuccess;
 
