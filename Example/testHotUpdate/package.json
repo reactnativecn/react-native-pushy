@@ -9,7 +9,8 @@
     "test": "jest",
     "test:e2e": "detox test --configuration android.emu.debug",
     "lint": "eslint .",
-    "postinstall": "patch-package"
+    "postinstall": "patch-package",
+    "apk": "cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "patch-package": "^6.5.1",

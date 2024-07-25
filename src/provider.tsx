@@ -273,6 +273,12 @@ export const PushyProvider = ({
       if (payload && payload.type) {
         if (payload.type === '__rnPushyVersionHash') {
           await checkUpdate({ toHash: payload.data });
+          if (updateInfoRef.current && updateInfoRef.current.upToDate) {
+            Alert.alert(
+              '提示',
+              '当前尚未检测到更新版本，如果是首次扫码，请等待服务器端生成补丁包后再试（约10秒）',
+            );
+          }
           return true;
         }
       }
