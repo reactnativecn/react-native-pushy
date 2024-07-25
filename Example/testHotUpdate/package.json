@@ -16,9 +16,10 @@
     "postinstall-postinstall": "^2.1.0",
     "react": "18.0.0",
     "react-native": "0.69.8",
+    "react-native-camera-kit": "^14.0.0-beta15",
     "react-native-paper": "^5.12.1",
     "react-native-safe-area-context": "^4.8.2",
-    "react-native-update": "^10.7.1",
+    "react-native-update": "^10.10.0",
     "react-native-vector-icons": "^10.0.3"
   },
   "devDependencies": {

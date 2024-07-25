@@ -10,7 +10,16 @@ import {
   Image,
   Switch,
 } from 'react-native';
-import {Icon, PaperProvider, Snackbar, Banner} from 'react-native-paper';
+import {
+  Icon,
+  PaperProvider,
+  Snackbar,
+  Banner,
+  Button,
+  Modal,
+  Portal,
+} from 'react-native-paper';
+import {Camera} from 'react-native-camera-kit';
 
 import TestConsole from './TestConsole';
 
@@ -28,6 +37,7 @@ function App() {
     updateInfo,
     packageVersion,
     currentHash,
+    parseTestPayload,
     progress: {received, total} = {},
   } = usePushy();
   const [useDefaultAlert, setUseDefaultAlert] = useState(true);
@@ -36,6 +46,7 @@ function App() {
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
   const snackbarVisible =
     !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
+  const [showCamera, setShowCamera] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -55,6 +66,23 @@ function App() {
           }}
         />
       </View>
+      <Button onPress={() => setShowCamera(true)}>打开相机</Button>
+      <Portal>
+        <Modal visible={showCamera} onDismiss={() => setShowCamera(false)}>
+          <Camera
+            style={{minHeight: 320}}
+            scanBarcode={true}
+            onReadCode={({nativeEvent: {codeStringValue}}) => {
+              console.log(codeStringValue);
+              parseTestPayload(codeStringValue);
+              setShowCamera(false);
+            }} // optional
+            showFrame={true} // (default false) optional, show frame with transparent layer (qr code or barcode will be read on this area ONLY), start animation for scanner, that stops when a code has been found. Frame always at center of the screen
+            laserColor="red" // (default red) optional, color of laser in scanner frame
+            frameColor="white" // (default white) optional, color of border of scanner frame
+          />
+        </Modal>
+      </Portal>
       <Image
         resizeMode={'contain'}
         source={require('./assets/shezhi.png')}
