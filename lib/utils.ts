@@ -23,10 +23,9 @@ const ping =
           new Promise(r => setTimeout(() => r(null), 2000)),
         ]);
 
-const canUseGoogle = ping('https://www.google.com');
 
 export const testUrls = async (urls?: string[]) => {
-  if (!urls?.length || (await canUseGoogle)) {
+  if (!urls?.length) {
     return null;
   }
   return Promise.race(urls.map(ping)).catch(() => null);
