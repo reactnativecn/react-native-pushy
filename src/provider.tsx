@@ -270,21 +270,28 @@ export const PushyProvider = ({
       } catch {
         return false;
       }
-      if (payload && payload.type) {
+      if (payload && payload.type && payload.type.startsWith('__rnPushy')) {
+        const logger = options.logger || (() => {});
+        options.logger = ({ type, data }) => {
+          logger({ type, data });
+          Alert.alert(type, JSON.stringify(data));
+        };
         if (payload.type === '__rnPushyVersionHash') {
-          await checkUpdate({ toHash: payload.data });
-          if (updateInfoRef.current && updateInfoRef.current.upToDate) {
-            Alert.alert(
-              '提示',
-              '当前尚未检测到更新版本，如果是首次扫码，请等待服务器端生成补丁包后再试（约10秒）',
-            );
-          }
-          return true;
+          checkUpdate({ toHash: payload.data }).then(() => {
+            if (updateInfoRef.current && updateInfoRef.current.upToDate) {
+              Alert.alert(
+                '提示',
+                '当前尚未检测到更新版本，如果是首次扫码，请等待服务器端生成补丁包后再试（约10秒）',
+              );
+            }
+            options.logger = logger;
+          });
         }
+        return true;
       }
       return false;
     },
-    [checkUpdate],
+    [checkUpdate, options],
   );
 
   return (
