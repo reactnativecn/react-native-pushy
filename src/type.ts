@@ -62,7 +62,7 @@ export type UpdateEventsLogger = ({
 export interface PushyServerConfig {
   main: string;
   backups?: string[];
-  queryUrl?: string;
+  queryUrls?: string[];
 }
 
 export interface PushyOptions {

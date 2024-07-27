@@ -17,8 +17,10 @@ import {
 const defaultServer = {
   main: 'https://update.react-native.cn/api',
   backups: ['https://update.reactnative.cn/api'],
-  queryUrl:
+  queryUrls: [
+    'https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json',
     'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-pushy@master/endpoints.json',
+  ],
 };
 
 const empty = {};
@@ -233,9 +235,11 @@ export class Pushy {
     if (!server) {
       return [];
     }
-    if (server.queryUrl) {
+    if (server.queryUrls) {
       try {
-        const resp = await fetch(server.queryUrl);
+        const resp = await Promise.race(
+          server.queryUrls.map(queryUrl => fetch(queryUrl)),
+        );
         const remoteEndpoints = await resp.json();
         log('fetch endpoints:', remoteEndpoints);
         if (Array.isArray(remoteEndpoints)) {
@@ -244,7 +248,7 @@ export class Pushy {
           );
         }
       } catch (e: any) {
-        log('failed to fetch endpoints from: ', server.queryUrl);
+        log('failed to fetch endpoints from: ', server.queryUrls);
       }
     }
     return server.backups;
