@@ -16,7 +16,7 @@ import {
   UpdateAvailableResult,
   UpdateEventsListener,
 } from './type';
-import { assertRelease, logger } from './utils';
+import { assertRelease, logger, testUrls } from './utils';
 export { setCustomEndpoints };
 const {
   version: v,
@@ -260,11 +260,12 @@ export async function downloadUpdate(
   }
   let succeeded = false;
   report({ type: 'downloading' });
-  if (options.diffUrl) {
+  const diffUrl = (await testUrls(options.diffUrls)) || options.diffUrl;
+  if (diffUrl) {
     logger('downloading diff');
     try {
       await PushyModule.downloadPatchFromPpk({
-        updateUrl: options.diffUrl,
+        updateUrl: diffUrl,
         hash: options.hash,
         originHash: currentVersion,
       });
@@ -273,28 +274,34 @@ export async function downloadUpdate(
       logger(`diff error: ${e.message}, try pdiff`);
     }
   }
-  if (!succeeded && options.pdiffUrl) {
-    logger('downloading pdiff');
-    try {
-      await PushyModule.downloadPatchFromPackage({
-        updateUrl: options.pdiffUrl,
-        hash: options.hash,
-      });
-      succeeded = true;
-    } catch (e) {
-      logger(`pdiff error: ${e.message}, try full patch`);
+  if (!succeeded) {
+    const pdiffUrl = (await testUrls(options.pdiffUrls)) || options.pdiffUrl;
+    if (pdiffUrl) {
+      logger('downloading pdiff');
+      try {
+        await PushyModule.downloadPatchFromPackage({
+          updateUrl: pdiffUrl,
+          hash: options.hash,
+        });
+        succeeded = true;
+      } catch (e) {
+        logger(`pdiff error: ${e.message}, try full patch`);
+      }
     }
   }
-  if (!succeeded && options.updateUrl) {
-    logger('downloading full patch');
-    try {
-      await PushyModule.downloadFullUpdate({
-        updateUrl: options.updateUrl,
-        hash: options.hash,
-      });
-      succeeded = true;
-    } catch (e) {
-      logger(`full patch error: ${e.message}`);
+  if (!succeeded) {
+    const updateUrl = (await testUrls(options.updateUrls)) || options.updateUrl;
+    if (updateUrl) {
+      logger('downloading full patch');
+      try {
+        await PushyModule.downloadFullUpdate({
+          updateUrl: updateUrl,
+          hash: options.hash,
+        });
+        succeeded = true;
+      } catch (e) {
+        logger(`full patch error: ${e.message}`);
+      }
     }
   }
   progressHandler && progressHandler.remove();
@@ -322,12 +329,10 @@ function assertHash(hash: string) {
   return true;
 }
 
-let applyingUpdate = false;
 export function switchVersion(hash: string) {
   assertRelease();
-  if (assertHash(hash) && !applyingUpdate) {
+  if (assertHash(hash)) {
     logger('switchVersion: ' + hash);
-    applyingUpdate = true;
     PushyModule.reloadUpdate({ hash });
   }
 }

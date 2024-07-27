@@ -1,13 +1,21 @@
 import { logger } from './utils';
 
 let currentEndpoint = 'https://update.react-native.cn/api';
-let backupEndpoints: string[] = ['https://update.reactnative.cn/api'];
-let backupEndpointsQueryUrl: string | null = null;
+let backupEndpoints: string[] = [
+  'https://pushy-koa-qgbgqmcpis.cn-beijing.fcapp.run',
+  'https://update.reactnative.cn/api',
+];
+let backupEndpointsQueryUrls = [
+  'https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json',
+  'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-pushy@master/endpoints.json',
+];
 
 export async function updateBackupEndpoints() {
-  if (backupEndpointsQueryUrl) {
+  if (backupEndpointsQueryUrls) {
     try {
-      const resp = await fetch(backupEndpointsQueryUrl);
+      const resp = await Promise.race(
+        backupEndpointsQueryUrls.map((queryUrl) => fetch(queryUrl)),
+      );
       const remoteEndpoints = await resp.json();
       if (Array.isArray(remoteEndpoints)) {
         backupEndpoints = Array.from(
@@ -36,18 +44,17 @@ export function getCheckUrl(APPKEY, endpoint = currentEndpoint) {
 export function setCustomEndpoints({
   main,
   backups,
-  backupQueryUrl,
+  backupQueryUrls,
 }: {
   main: string;
   backups?: string[];
-  backupQueryUrl?: string;
+  backupQueryUrls?: string[];
 }) {
   currentEndpoint = main;
-  backupEndpointsQueryUrl = null;
   if (Array.isArray(backups) && backups.length > 0) {
     backupEndpoints = backups;
   }
-  if (typeof backupQueryUrl === 'string') {
-    backupEndpointsQueryUrl = backupQueryUrl;
+  if (Array.isArray(backupQueryUrls) && backupQueryUrls.length > 0) {
+    backupEndpointsQueryUrls = backupQueryUrls;
   }
 }
