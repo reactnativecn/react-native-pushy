@@ -37,7 +37,7 @@ function App() {
     updateInfo,
     packageVersion,
     currentHash,
-    parseTestPayload,
+    parseTestQrCode,
     progress: {received, total} = {},
   } = usePushy();
   const [useDefaultAlert, setUseDefaultAlert] = useState(true);
@@ -74,7 +74,7 @@ function App() {
             scanBarcode={true}
             onReadCode={({nativeEvent: {codeStringValue}}) => {
               console.log(codeStringValue);
-              parseTestPayload(codeStringValue);
+              parseTestQrCode(codeStringValue);
               setShowCamera(false);
             }} // optional
             showFrame={true} // (default false) optional, show frame with transparent layer (qr code or barcode will be read on this area ONLY), start animation for scanner, that stops when a code has been found. Frame always at center of the screen
