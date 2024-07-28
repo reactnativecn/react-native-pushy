@@ -263,13 +263,7 @@ export const PushyProvider = ({
   }, [checkUpdate, options, dismissError, markSuccess]);
 
   const parseTestPayload = useCallback(
-    async (code: string) => {
-      let payload: PushyTestPayload;
-      try {
-        payload = JSON.parse(code);
-      } catch {
-        return false;
-      }
+    (payload: PushyTestPayload) => {
       if (payload && payload.type && payload.type.startsWith('__rnPushy')) {
         const logger = options.logger || (() => {});
         options.logger = ({ type, data }) => {
@@ -294,6 +288,41 @@ export const PushyProvider = ({
     [checkUpdate, options],
   );
 
+  const parseTestQrCode = useCallback(
+    (code: string) => {
+      let payload: PushyTestPayload;
+      try {
+        payload = JSON.parse(code);
+        return parseTestPayload(payload);
+      } catch {
+        return false;
+      }
+    },
+    [parseTestPayload],
+  );
+
+  useEffect(() => {
+    const parseLinking = (url: string | null) => {
+      if (!url) {
+        return;
+      }
+      const params = new URLSearchParams(url);
+      const payload = {
+        type: params.get('type'),
+        data: params.get('data'),
+      };
+      parseTestPayload(payload);
+    };
+
+    Linking.getInitialURL().then(parseLinking);
+    const linkingListener = Linking.addEventListener('url', ({ url }) =>
+      parseLinking(url),
+    );
+    return () => {
+      linkingListener.remove();
+    };
+  }, [parseTestPayload]);
+
   return (
     <PushyContext.Provider
       value={{
@@ -311,7 +340,7 @@ export const PushyProvider = ({
         progress,
         downloadAndInstallApk,
         getCurrentVersionInfo,
-        parseTestPayload,
+        parseTestQrCode,
       }}>
       {children}
     </PushyContext.Provider>

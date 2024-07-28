@@ -83,6 +83,6 @@ export interface PushyOptions {
 }
 
 export interface PushyTestPayload {
-  type: '__rnPushyVersionHash';
+  type: '__rnPushyVersionHash' | string | null;
   data: any;
 }
