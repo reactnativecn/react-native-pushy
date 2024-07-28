@@ -21,7 +21,7 @@ import {
 } from './core';
 import { CheckResult, ProgressData, PushyTestPayload } from './type';
 import { PushyContext } from './context';
-import { URLSearchParams } from 'react-native-url-polyfill';
+import { URL } from 'react-native-url-polyfill';
 
 export const PushyProvider = ({
   client,
@@ -307,7 +307,7 @@ export const PushyProvider = ({
       if (!url) {
         return;
       }
-      const params = new URLSearchParams(url);
+      const params = new URL(url).searchParams;
       const payload = {
         type: params.get('type'),
         data: params.get('data'),
