@@ -21,6 +21,7 @@ import {
 } from './core';
 import { CheckResult, ProgressData, PushyTestPayload } from './type';
 import { PushyContext } from './context';
+import { URLSearchParams } from 'react-native-url-polyfill';
 
 export const PushyProvider = ({
   client,
