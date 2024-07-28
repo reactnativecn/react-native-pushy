@@ -8,7 +8,7 @@
 
 ### 优势
 
-1. 基于阿里云高速 CDN 分发，对比其他服务器在国外的热更新服务，分发更稳定，更新成功率极高。
+1. 对中国用户使用阿里云高速 CDN 分发，对比其他服务器在国外的热更新服务，分发更稳定，更新成功率极高。对国外用户则智能分流至 cloudflare，同样享受高速更新服务。
 2. 基于 bsdiff/hdiff 算法创建的**超小更新包**，通常版本迭代后在几十 KB 级别（其他全量热更新服务所需流量通常在几十 MB 级别）。
 3. 始终跟进 RN 最新正式版本，第一时间提供支持。支持 hermes 字节码格式。支持新架构。
 4. 跨越多个版本进行更新时，只需要下载**一个更新包**，不需要逐版本依次更新。
@@ -33,4 +33,3 @@ $ yarn start
 本组件由[React Native 中文网](https://reactnative.cn/)独家发布，如有定制需求可以[联系我们](https://reactnative.cn/about.html#content)。
 
 关于此插件发现任何问题，可以前往[Issues](https://github.com/reactnativecn/react-native-pushy/issues)发帖提问。
-
