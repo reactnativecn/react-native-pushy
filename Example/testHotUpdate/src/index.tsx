@@ -1,6 +1,6 @@
 /* eslint-disable react/no-unstable-nested-components */
 /* eslint-disable react-native/no-inline-styles */
-import React, {useState} from 'react';
+import React, {useRef, useState} from 'react';
 import {
   StyleSheet,
   Platform,
@@ -47,6 +47,7 @@ function App() {
   const snackbarVisible =
     !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
   const [showCamera, setShowCamera] = useState(false);
+  const lastParsedCode = useRef('');
 
   return (
     <View style={styles.container}>
@@ -73,9 +74,16 @@ function App() {
             style={{minHeight: 320}}
             scanBarcode={true}
             onReadCode={({nativeEvent: {codeStringValue}}) => {
-              console.log(codeStringValue);
-              parseTestQrCode(codeStringValue);
+              // 防止重复扫码
+              if (lastParsedCode.current === codeStringValue) {
+                return;
+              }
+              lastParsedCode.current = codeStringValue;
+              setTimeout(() => {
+                lastParsedCode.current = '';
+              }, 1000);
               setShowCamera(false);
+              parseTestQrCode(codeStringValue);
             }} // optional
             showFrame={true} // (default false) optional, show frame with transparent layer (qr code or barcode will be read on this area ONLY), start animation for scanner, that stops when a code has been found. Frame always at center of the screen
             laserColor="red" // (default red) optional, color of laser in scanner frame

@@ -6236,10 +6236,10 @@ react-native-safe-area-context@^4.8.2:
   resolved "https://registry.yarnpkg.com/react-native-safe-area-context/-/react-native-safe-area-context-4.8.2.tgz#e6b3d8acf3c6afcb4b5db03a97f9c37df7668f65"
   integrity sha512-ffUOv8BJQ6RqO3nLml5gxJ6ab3EestPiyWekxdzO/1MQ7NF8fW1Mzh1C5QE9yq573Xefnc7FuzGXjtesZGv7cQ==
 
-react-native-update@^10.11.2:
-  version "10.11.2"
-  resolved "https://registry.yarnpkg.com/react-native-update/-/react-native-update-10.11.2.tgz#d80f0c0f3705713d302b6c36d3fd8ff2f0fba340"
-  integrity sha512-5WlJ3TRodHSftqDxi3OCAnI/OIq70Kh8gr1xa9OqEG2+UwD1SA+gqHRHunKED4J7N7OUtmxIDX+hvdf8xJEgRA==
+react-native-update@^10.11.3:
+  version "10.11.3"
+  resolved "https://registry.yarnpkg.com/react-native-update/-/react-native-update-10.11.3.tgz#5fa44fdd12514eb5e7901a5d664f00fd082d6774"
+  integrity sha512-adI3sly0yFt1DfaPqICJ9VwzUoa/XAngv/N7SnICkLxO3jgccBgy0OrXDBxRn43Zeumdq40Z+ADTE5qrY4BWAw==
   dependencies:
     nanoid "^3.3.3"
     react-native-url-polyfill "^2.0.0"
