@@ -28,6 +28,7 @@ export type EventType =
   | 'errorChecking'
   | 'checking'
   | 'downloading'
+  | 'downloadSuccess'
   | 'errorUpdate'
   | 'markSuccess'
   | 'downloadingApk'

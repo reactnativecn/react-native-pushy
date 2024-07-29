@@ -293,7 +293,7 @@ export class Pushy {
         },
       );
     }
-    let succeeded = false;
+    let succeeded = '';
     this.report({ type: 'downloading' });
     let lastError: any;
     const diffUrl = (await testUrls(diffUrls)) || _diffUrl;
@@ -305,11 +305,11 @@ export class Pushy {
           hash,
           originHash: currentVersion,
         });
-        succeeded = true;
+        succeeded = 'diff';
       } catch (e: any) {
         lastError = e;
         if (__DEV__) {
-          succeeded = true;
+          succeeded = 'diff';
         } else {
           log(`diff error: ${e.message}, try pdiff`);
         }
@@ -323,11 +323,11 @@ export class Pushy {
           updateUrl: pdiffUrl,
           hash,
         });
-        succeeded = true;
+        succeeded = 'pdiff';
       } catch (e: any) {
         lastError = e;
         if (__DEV__) {
-          succeeded = true;
+          succeeded = 'pdiff';
         } else {
           log(`pdiff error: ${e.message}, try full patch`);
         }
@@ -341,11 +341,11 @@ export class Pushy {
           updateUrl: updateUrl,
           hash,
         });
-        succeeded = true;
+        succeeded = 'full';
       } catch (e: any) {
         lastError = e;
         if (__DEV__) {
-          succeeded = true;
+          succeeded = 'full';
         } else {
           log(`full patch error: ${e.message}`);
         }
@@ -367,8 +367,13 @@ export class Pushy {
         throw lastError;
       }
       return;
+    } else {
+      this.report({
+        type: 'downloadSuccess',
+        data: { newVersion: hash, diff: succeeded },
+      });
     }
-    log('downloaded hash:', hash);
+    log(`downloaded ${succeeded} hash:`, hash);
     setLocalHashInfo(hash, {
       name,
       description,
