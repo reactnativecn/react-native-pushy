@@ -147,7 +147,7 @@ export const PushyProvider = ({
   );
 
   const checkUpdate = useCallback(
-    async (extra?: Record<string, any>) => {
+    async ({ extra }: { extra?: Record<string, any> } | undefined = {}) => {
       const now = Date.now();
       if (lastChecking.current && now - lastChecking.current < 1000) {
         return;
@@ -272,7 +272,7 @@ export const PushyProvider = ({
           Alert.alert(type, JSON.stringify(data));
         };
         if (payload.type === '__rnPushyVersionHash') {
-          checkUpdate({ toHash: payload.data }).then(() => {
+          checkUpdate({ extra: { toHash: payload.data } }).then(() => {
             if (updateInfoRef.current && updateInfoRef.current.upToDate) {
               Alert.alert(
                 '提示',
