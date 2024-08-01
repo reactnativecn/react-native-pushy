@@ -290,10 +290,9 @@ export const PushyProvider = ({
   );
 
   const parseTestQrCode = useCallback(
-    (code: string) => {
-      let payload: PushyTestPayload;
+    (code: string | PushyTestPayload) => {
       try {
-        payload = JSON.parse(code);
+        const payload = typeof code === 'string' ? JSON.parse(code) : code;
         return parseTestPayload(payload);
       } catch {
         return false;

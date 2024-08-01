@@ -172,7 +172,6 @@ export class Pushy {
       return await this.lastRespJson;
     }
     this.lastChecking = now;
-    this.report({ type: 'checking' });
     const fetchBody = {
       packageVersion,
       hash: currentVersion,
@@ -183,16 +182,21 @@ export class Pushy {
     if (__DEV__) {
       delete fetchBody.buildTime;
     }
+    const body = JSON.stringify(fetchBody);
     const fetchPayload = {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(fetchBody),
+      body,
     };
     let resp;
     try {
+      this.report({
+        type: 'checking',
+        message: this.options.appKey + ': ' + body,
+      });
       resp = await fetch(this.getCheckUrl(), fetchPayload);
     } catch (e: any) {
       this.report({
@@ -220,6 +224,8 @@ export class Pushy {
     this.lastRespJson = resp.json();
 
     const result: CheckResult = await this.lastRespJson;
+
+    log('checking result:', result);
 
     if (resp.status !== 200) {
       this.report({
