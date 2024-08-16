@@ -126,7 +126,7 @@ export class Pushy {
     PushyModule.markSuccess();
     this.report({ type: 'markSuccess' });
   };
-  switchVersion = (hash: string) => {
+  switchVersion = async (hash: string) => {
     if (__DEV__) {
       console.warn(
         '您调用了switchVersion方法，但是当前是开发环境，不会进行任何操作。',
@@ -136,11 +136,11 @@ export class Pushy {
     if (this.assertHash(hash) && !this.applyingUpdate) {
       log('switchVersion: ' + hash);
       this.applyingUpdate = true;
-      PushyModule.reloadUpdate({ hash });
+      return PushyModule.reloadUpdate({ hash });
     }
   };
 
-  switchVersionLater = (hash: string) => {
+  switchVersionLater = async (hash: string) => {
     if (__DEV__) {
       console.warn(
         '您调用了switchVersionLater方法，但是当前是开发环境，不会进行任何操作。',
@@ -149,7 +149,7 @@ export class Pushy {
     }
     if (this.assertHash(hash)) {
       log('switchVersionLater: ' + hash);
-      PushyModule.setNeedUpdate({ hash });
+      return PushyModule.setNeedUpdate({ hash });
     }
   };
   checkUpdate = async (extra?: Record<string, any>) => {

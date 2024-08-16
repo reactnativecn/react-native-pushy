@@ -7,8 +7,8 @@ const asyncNoop = () => Promise.resolve();
 
 export const defaultContext = {
   checkUpdate: asyncNoop,
-  switchVersion: noop,
-  switchVersionLater: noop,
+  switchVersion: asyncNoop,
+  switchVersionLater: asyncNoop,
   markSuccess: noop,
   dismissError: noop,
   downloadUpdate: asyncNoop,
@@ -21,8 +21,8 @@ export const defaultContext = {
 
 export const PushyContext = createContext<{
   checkUpdate: () => Promise<void>;
-  switchVersion: () => void;
-  switchVersionLater: () => void;
+  switchVersion: () => Promise<void>;
+  switchVersionLater: () => Promise<void>;
   markSuccess: () => void;
   dismissError: () => void;
   downloadUpdate: () => Promise<void>;

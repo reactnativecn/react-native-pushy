@@ -73,18 +73,18 @@ export const PushyProvider = ({
   );
 
   const switchVersion = useCallback(
-    (info: CheckResult | undefined = updateInfoRef.current) => {
+    async (info: CheckResult | undefined = updateInfoRef.current) => {
       if (info && info.hash) {
-        client.switchVersion(info.hash);
+        return client.switchVersion(info.hash);
       }
     },
     [client],
   );
 
   const switchVersionLater = useCallback(
-    (info: CheckResult | undefined = updateInfoRef.current) => {
+    async (info: CheckResult | undefined = updateInfoRef.current) => {
       if (info && info.hash) {
-        client.switchVersionLater(info.hash);
+        return client.switchVersionLater(info.hash);
       }
     },
     [client],
