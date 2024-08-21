@@ -75,7 +75,7 @@ RCT_EXPORT_MODULE(RCTPushy);
         if (needClearPushyInfo) {
             [defaults setObject:nil forKey:keyPushyInfo];
             [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked];
-            [defaults synchronize];
+            
             // ...need clear files later
         }
         else {
@@ -97,7 +97,7 @@ RCT_EXPORT_MODULE(RCTPushy);
                 newInfo[paramIsFirstTime] = @(NO);
                 [defaults setObject:newInfo forKey:keyPushyInfo];
                 [defaults setObject:@(YES) forKey:keyFirstLoadMarked];
-                [defaults synchronize];
+                
             }
             
             NSString *downloadDir = [RCTPushy downloadDir];
@@ -137,7 +137,7 @@ RCT_EXPORT_MODULE(RCTPushy);
         [defaults setObject:nil forKey:keyPushyInfo];
     }
     [defaults setObject:curVersion forKey:keyRolledBackMarked];
-    [defaults synchronize];
+    
     return lastVersion;
 }
 
@@ -176,7 +176,7 @@ RCT_EXPORT_MODULE(RCTPushy);
         [defaults setObject:nil forKey:KeyPackageUpdatedMarked];
         [self clearInvalidFiles];
     }
-    [defaults synchronize];
+    
 
     return ret;
 }
@@ -196,7 +196,7 @@ RCT_EXPORT_METHOD(setUuid:(NSString *)uuid  resolver:(RCTPromiseResolveBlock)res
     @try {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         [defaults setObject:uuid forKey:keyUuid];
-        [defaults synchronize];
+        
         resolve(@true);
     }
     @catch (NSException *exception) {
@@ -214,7 +214,7 @@ RCT_EXPORT_METHOD(setLocalHashInfo:(NSString *)hash
     if (object && [object isKindOfClass:[NSDictionary class]]) {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         [defaults setObject:value forKey:[keyHashInfo stringByAppendingString:hash]];
-        [defaults synchronize];
+        
         resolve(@true);
     } else {
         reject(@"json格式校验报错", nil, nil);
@@ -295,7 +295,7 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options
         newInfo[paramPackageVersion] = [RCTPushy packageVersion];
         [defaults setObject:newInfo forKey:keyPushyInfo];
         
-        [defaults synchronize];
+        
         resolve(@true);
     }else{
         reject(@"执行报错", nil, nil);
@@ -329,8 +329,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options
     }
 }
 
-RCT_EXPORT_METHOD(markSuccess:
-                  resolver:(RCTPromiseResolveBlock)resolve
+RCT_EXPORT_METHOD(markSuccess:(RCTPromiseResolveBlock)resolve
                                     rejecter:(RCTPromiseRejectBlock)reject)
 {
     
@@ -347,7 +346,7 @@ RCT_EXPORT_METHOD(markSuccess:
             [pushyInfo removeObjectForKey:[keyHashInfo stringByAppendingString:lastVersion]];
         }
         [defaults setObject:pushyInfo forKey:keyPushyInfo];
-        [defaults synchronize];
+        
         
         // clear other package dir
         [self clearInvalidFiles];
