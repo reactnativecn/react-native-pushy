@@ -349,8 +349,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options
     }
 }
 
-RCT_EXPORT_METHOD(markSuccess:
-                  resolver:(RCTPromiseResolveBlock)resolve
+RCT_EXPORT_METHOD(markSuccess:(RCTPromiseResolveBlock)resolve
                                     rejecter:(RCTPromiseRejectBlock)reject)
 {
     
