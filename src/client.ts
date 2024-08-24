@@ -163,6 +163,13 @@ export class Pushy {
       console.warn('web 端不支持热更新检查');
       return;
     }
+    if (
+      this.options.beforeCheckUpdate &&
+      (await this.options.beforeCheckUpdate()) === false
+    ) {
+      log('beforeCheckUpdate 返回 false, 忽略检查');
+      return;
+    }
     const now = Date.now();
     if (
       this.lastRespJson &&
@@ -275,6 +282,13 @@ export class Pushy {
       description,
       metaInfo,
     } = info;
+    if (
+      this.options.beforeDownloadUpdate &&
+      (await this.options.beforeDownloadUpdate(info)) === false
+    ) {
+      log('beforeDownloadUpdate 返回 false, 忽略下载');
+      return;
+    }
     if (!info.update || !hash) {
       return;
     }

@@ -81,6 +81,8 @@ export interface PushyOptions {
   dismissErrorAfter?: number;
   debug?: boolean;
   throwError?: boolean;
+  beforeCheckUpdate?: () => Promise<boolean>;
+  beforeDownloadUpdate?: (info: CheckResult) => Promise<boolean>;
 }
 
 export interface PushyTestPayload {
