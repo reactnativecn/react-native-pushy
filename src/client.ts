@@ -1,5 +1,5 @@
 import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
-import { log, testUrls } from './utils';
+import { joinUrls, log, testUrls } from './utils';
 import { EmitterSubscription, Platform } from 'react-native';
 import { PermissionsAndroid } from './permissions';
 import {
@@ -64,8 +64,7 @@ export class Pushy {
   setOptions = (options: Partial<PushyOptions>) => {
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
-        // @ts-expect-error
-        this.options[key] = value;
+        (this.options as any)[key] = value;
         if (key === 'logger') {
           if (isRolledBack) {
             this.report({
@@ -272,12 +271,10 @@ export class Pushy {
   ) => {
     const {
       hash,
-      diffUrl: _diffUrl,
-      diffUrls,
-      pdiffUrl: _pdiffUrl,
-      pdiffUrls,
-      updateUrl: _updateUrl,
-      updateUrls,
+      diff,
+      pdiff,
+      full,
+      paths = [],
       name,
       description,
       metaInfo,
@@ -316,7 +313,7 @@ export class Pushy {
     let succeeded = '';
     this.report({ type: 'downloading' });
     let lastError: any;
-    const diffUrl = (await testUrls(diffUrls)) || _diffUrl;
+    const diffUrl = await testUrls(joinUrls(paths, diff));
     if (diffUrl) {
       log('downloading diff');
       try {
@@ -335,7 +332,7 @@ export class Pushy {
         }
       }
     }
-    const pdiffUrl = (await testUrls(pdiffUrls)) || _pdiffUrl;
+    const pdiffUrl = await testUrls(joinUrls(paths, pdiff));
     if (!succeeded && pdiffUrl) {
       log('downloading pdiff');
       try {
@@ -353,12 +350,12 @@ export class Pushy {
         }
       }
     }
-    const updateUrl = (await testUrls(updateUrls)) || _updateUrl;
-    if (!succeeded && updateUrl) {
+    const fullUrl = await testUrls(joinUrls(paths, full));
+    if (!succeeded && fullUrl) {
       log('downloading full patch');
       try {
         await PushyModule.downloadFullUpdate({
-          updateUrl: updateUrl,
+          updateUrl: fullUrl,
           hash,
         });
         succeeded = 'full';

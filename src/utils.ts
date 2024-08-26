@@ -31,9 +31,18 @@ const ping =
 
 const canUseGoogle = ping('https://www.google.com');
 
+export function joinUrls(paths: string[], fileName?: string) {
+  if (fileName) {
+    return paths.map(path => 'https://' + path + '/' + fileName);
+  }
+}
+
 export const testUrls = async (urls?: string[]) => {
-  if (!urls?.length || (await canUseGoogle)) {
+  if (!urls?.length) {
     return null;
+  }
+  if (await canUseGoogle) {
+    return urls[0];
   }
   return Promise.race(urls.map(ping)).catch(() => null);
 };

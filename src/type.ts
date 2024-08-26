@@ -7,12 +7,10 @@ export interface CheckResult {
   hash?: string;
   description?: string;
   metaInfo?: string;
-  pdiffUrl?: string;
-  pdiffUrls?: string[];
-  diffUrl?: string;
-  diffUrls?: string[];
-  updateUrl?: string;
-  updateUrls?: string[];
+  pdiff?: string;
+  diff?: string;
+  full?: string;
+  paths?: string[];
   paused?: 'app' | 'package';
   message?: string;
 }

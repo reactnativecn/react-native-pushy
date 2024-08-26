@@ -4,9 +4,7 @@ const {
   version: v,
 } = require('react-native/Libraries/Core/ReactNativeVersion');
 const RNVersion = `${v.major}.${v.minor}.${v.patch}`;
-const isTurboModuleEnabled =
-  // @ts-expect-error
-  global.__turboModuleProxy != null;
+const isTurboModuleEnabled = (global as any).__turboModuleProxy != null;
 
 export const PushyModule =
   Platform.OS === 'web'
