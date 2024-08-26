@@ -277,7 +277,7 @@ export class Pushy {
       paths = [],
       name,
       description = '',
-      metaInfo = '',
+      metaInfo,
     } = info;
     if (
       this.options.beforeDownloadUpdate &&

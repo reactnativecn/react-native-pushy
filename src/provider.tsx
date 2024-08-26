@@ -165,6 +165,7 @@ export const PushyProvider = ({
       if (!info) {
         return;
       }
+      info.description = info.description ?? '';
       updateInfoRef.current = info;
       setUpdateInfo(info);
       if (info.expired) {
