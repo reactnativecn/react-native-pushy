@@ -191,6 +191,7 @@ const styles = StyleSheet.create({
 
 const pushyClient = new Pushy({
   appKey,
+  debug: true,
 });
 
 export default function Root() {
