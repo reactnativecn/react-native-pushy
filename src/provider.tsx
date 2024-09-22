@@ -22,6 +22,8 @@ import {
 import { CheckResult, ProgressData, PushyTestPayload } from './type';
 import { PushyContext } from './context';
 import { URL } from 'react-native-url-polyfill';
+import { isInRollout } from './isInRollout';
+import { log } from './utils';
 
 export const PushyProvider = ({
   client,
@@ -164,6 +166,14 @@ export const PushyProvider = ({
       }
       if (!info) {
         return;
+      }
+      const rollout = info.config?.rollout;
+      if (rollout) {
+        if (!isInRollout(rollout)) {
+          log(`not in ${rollout}% rollout, ignored`);
+          return;
+        }
+        log(`in ${rollout}% rollout, continue`);
       }
       info.description = info.description ?? '';
       updateInfoRef.current = info;

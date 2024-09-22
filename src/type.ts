@@ -7,6 +7,10 @@ export interface CheckResult {
   hash?: string;
   description?: string;
   metaInfo?: string;
+  config?: {
+    rollout?: number;
+    [key: string]: any;
+  };
   pdiff?: string;
   diff?: string;
   full?: string;
