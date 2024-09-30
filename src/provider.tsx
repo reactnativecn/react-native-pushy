@@ -15,7 +15,6 @@ import {
 import { Pushy } from './client';
 import {
   currentVersion,
-  isFirstTime,
   packageVersion,
   getCurrentVersionInfo,
 } from './core';
@@ -246,7 +245,7 @@ export const PushyProvider = ({
       return;
     }
     const { checkStrategy, dismissErrorAfter, autoMarkSuccess } = options;
-    if (isFirstTime && autoMarkSuccess) {
+    if (autoMarkSuccess) {
       markSuccess();
     }
     if (checkStrategy === 'both' || checkStrategy === 'onAppResume') {
