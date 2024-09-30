@@ -11,6 +11,7 @@ import {
   packageVersion,
   rolledBackVersion,
   setLocalHashInfo,
+  isFirstTime,
   isRolledBack,
 } from './core';
 
@@ -118,7 +119,7 @@ export class Pushy {
     return true;
   };
   markSuccess = () => {
-    if (this.marked || __DEV__) {
+    if (this.marked || __DEV__ || !isFirstTime) {
       return;
     }
     this.marked = true;
