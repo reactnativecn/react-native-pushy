@@ -49,7 +49,7 @@ export interface EventData {
     uuid: string;
   };
   packageVersion: string;
-  buildTime: number;
+  buildTime: string;
   message?: string;
   rolledBackVersion?: string;
   newVersion?: string;

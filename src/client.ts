@@ -187,6 +187,7 @@ export class Pushy {
       ...extra,
     };
     if (__DEV__) {
+      // @ts-ignore
       delete fetchBody.buildTime;
     }
     const body = JSON.stringify(fetchBody);

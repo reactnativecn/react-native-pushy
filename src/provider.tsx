@@ -13,11 +13,7 @@ import {
   Linking,
 } from 'react-native';
 import { Pushy } from './client';
-import {
-  currentVersion,
-  packageVersion,
-  getCurrentVersionInfo,
-} from './core';
+import { currentVersion, packageVersion, getCurrentVersionInfo } from './core';
 import { CheckResult, ProgressData, PushyTestPayload } from './type';
 import { PushyContext } from './context';
 import { URL } from 'react-native-url-polyfill';
