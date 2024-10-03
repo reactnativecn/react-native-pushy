@@ -166,7 +166,7 @@ export const PushyProvider = ({
       if (!info) {
         return;
       }
-      const rollout = info.config?.rollout;
+      const rollout = info.config?.rollout?.[packageVersion];
       if (rollout) {
         if (!isInRollout(rollout)) {
           log(`not in ${rollout}% rollout, ignored`);

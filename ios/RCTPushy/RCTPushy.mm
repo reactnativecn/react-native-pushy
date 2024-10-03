@@ -536,7 +536,15 @@ RCT_EXPORT_METHOD(markSuccess:(RCTPromiseResolveBlock)resolve
     
     for(NSString *fileName in list) {
         if (![fileName isEqualToString:curVersion]) {
-            [_fileManager removeFile:[downloadDir stringByAppendingPathComponent:fileName] completionHandler:nil];
+            NSString *filePath = [downloadDir stringByAppendingPathComponent:fileName];
+            NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:&error];
+            if (error) {
+                continue;
+            }
+            NSDate *modificationDate = [attributes fileModificationDate];
+            if ([[NSDate date] timeIntervalSinceDate:modificationDate] > 7 * 24 * 60 * 60) {
+                [_fileManager removeFile:filePath completionHandler:nil];
+            }
         }
     }
 }

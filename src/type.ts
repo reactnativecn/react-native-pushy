@@ -8,7 +8,9 @@ export interface CheckResult {
   description?: string;
   metaInfo?: string;
   config?: {
-    rollout?: number;
+    rollout?: {
+      [packageVersion: string]: number;
+    };
     [key: string]: any;
   };
   pdiff?: string;

@@ -430,6 +430,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             if (sub.getName().charAt(0) == '.') {
                 continue;
             }
+            if (isFileUpdatedWithinDays(sub, 7)) {
+                continue;
+            }
             if (sub.isFile()) {
                 sub.delete();
             } else {
@@ -439,6 +442,13 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 removeDirectory(sub);
             }
         }
+    }
+
+    private boolean isFileUpdatedWithinDays(File file, int days) {
+        long currentTime = System.currentTimeMillis();
+        long lastModified = file.lastModified();
+        long daysInMillis = days * 24 * 60 * 60 * 1000L;
+        return (currentTime - lastModified) < daysInMillis;
     }
 
     @Override

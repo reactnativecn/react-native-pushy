@@ -21,14 +21,14 @@ const PushyConstants = isTurboModuleEnabled
   ? PushyModule.getConstants()
   : PushyModule;
 
-export const downloadRootDir = PushyConstants.downloadRootDir;
-export const packageVersion = PushyConstants.packageVersion;
-export const currentVersion = PushyConstants.currentVersion;
-export const isFirstTime = PushyConstants.isFirstTime;
-export const rolledBackVersion = PushyConstants.rolledBackVersion;
-export const isRolledBack = typeof rolledBackVersion === 'string';
+export const downloadRootDir: string = PushyConstants.downloadRootDir;
+export const packageVersion: string = PushyConstants.packageVersion;
+export const currentVersion: string = PushyConstants.currentVersion;
+export const isFirstTime: boolean = PushyConstants.isFirstTime;
+export const rolledBackVersion: string = PushyConstants.rolledBackVersion;
+export const isRolledBack: boolean = typeof rolledBackVersion === 'string';
 
-export const buildTime = PushyConstants.buildTime;
+export const buildTime: string = PushyConstants.buildTime;
 let uuid = PushyConstants.uuid;
 
 if (Platform.OS === 'android' && !PushyConstants.isUsingBundleUrl) {
