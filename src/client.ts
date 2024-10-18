@@ -52,6 +52,16 @@ export class Pushy {
   marked = false;
   applyingUpdate = false;
   version = cInfo.pushy;
+  loggerPromise = (() => {
+    let resolve;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return {
+      promise,
+      resolve
+    }
+  })();
 
   constructor(options: PushyOptions) {
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
@@ -60,6 +70,14 @@ export class Pushy {
       }
     }
     this.setOptions(options);
+    if (isRolledBack) {
+      this.report({
+        type: 'rollback',
+        data: {
+          rolledBackVersion,
+        },
+      });
+    }
   }
 
   setOptions = (options: Partial<PushyOptions>) => {
@@ -67,20 +85,13 @@ export class Pushy {
       if (value !== undefined) {
         (this.options as any)[key] = value;
         if (key === 'logger') {
-          if (isRolledBack) {
-            this.report({
-              type: 'rollback',
-              data: {
-                rolledBackVersion,
-              },
-            });
-          }
+          this.loggerPromise.resolve();
         }
       }
     }
   };
 
-  report = ({
+  report = async ({
     type,
     message = '',
     data = {},
@@ -90,6 +101,7 @@ export class Pushy {
     data?: Record<string, string | number>;
   }) => {
     log(type + ' ' + message);
+    await this.loggerPromise.promise;
     const { logger = noop, appKey } = this.options;
     logger({
       type,
