@@ -74,5 +74,6 @@
     "react-native": "0.73",
     "ts-jest": "^29.0.3",
     "typescript": "^5.3.3"
-  }
+  },
+  "packageManager": "yarn@4.5.1"
 }

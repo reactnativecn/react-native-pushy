@@ -53,14 +53,14 @@ export class Pushy {
   applyingUpdate = false;
   version = cInfo.pushy;
   loggerPromise = (() => {
-    let resolve;
-    const promise = new Promise((res) => {
+    let resolve: (value?: unknown) => void = () => {};
+    const promise = new Promise(res => {
       resolve = res;
     });
     return {
       promise,
-      resolve
-    }
+      resolve,
+    };
   })();
 
   constructor(options: PushyOptions) {
