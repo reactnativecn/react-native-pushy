@@ -48,3 +48,4 @@ Example/testHotUpdate/artifacts
 yarn-error.log
 Example/testHotUpdate/.yarn
 android/bin
+Example/testHotUpdate/harmony
