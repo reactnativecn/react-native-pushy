@@ -49,3 +49,4 @@ yarn-error.log
 Example/testHotUpdate/.yarn
 android/bin
 Example/testHotUpdate/harmony
+Example/testHotUpdate/android/app/.cxx
