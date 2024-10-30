@@ -116,7 +116,11 @@ export class Pushy {
       },
     });
   };
-
+  throwIfEnabled = (e: Error) => {
+    if (this.options.throwError) {
+      throw e;
+    }
+  };
   getCheckUrl = (endpoint: string = this.options.server!.main) => {
     return `${endpoint}/checkUpdate/${this.options.appKey}`;
   };
@@ -231,7 +235,11 @@ export class Pushy {
               fetch(this.getCheckUrl(endpoint), fetchPayload),
             ),
           );
-        } catch {}
+        } catch (err: any) {
+          this.throwIfEnabled(new Error('errorCheckingUseBackup'));
+        }
+      } else {
+        this.throwIfEnabled(new Error('errorCheckingGetBackup'));
       }
     }
     if (!resp) {
@@ -239,6 +247,7 @@ export class Pushy {
         type: 'errorChecking',
         message: 'Can not connect to update server. Please check your network.',
       });
+      this.throwIfEnabled(new Error('errorChecking'));
       return this.lastRespJson ? await this.lastRespJson : empty;
     }
     this.lastRespJson = resp.json();
@@ -252,6 +261,7 @@ export class Pushy {
         type: 'errorChecking',
         message: result.message,
       });
+      this.throwIfEnabled(new Error(result.message));
     }
 
     return result;
@@ -427,14 +437,21 @@ export class Pushy {
           PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
         );
         if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
-          return this.report({ type: 'rejectStoragePermission' });
+          this.report({ type: 'rejectStoragePermission' });
+          this.throwIfEnabled(new Error('rejectStoragePermission'));
+          return;
         }
       } catch (e: any) {
-        return this.report({ type: 'errorStoragePermission' });
+        this.report({ type: 'errorStoragePermission' });
+        this.throwIfEnabled(e);
+        return;
       }
     }
     const progressKey = 'downloadingApk';
     if (onDownloadProgress) {
+      if (this.progressHandlers[progressKey]) {
+        this.progressHandlers[progressKey].remove();
+      }
       this.progressHandlers[progressKey] = pushyNativeEventEmitter.addListener(
         'RCTPushyDownloadProgress',
         (progressData: ProgressData) => {
@@ -450,6 +467,7 @@ export class Pushy {
       hash: progressKey,
     }).catch(() => {
       this.report({ type: 'errorDownloadAndInstallApk' });
+      this.throwIfEnabled(new Error('errorDownloadAndInstallApk'));
     });
     if (this.progressHandlers[progressKey]) {
       this.progressHandlers[progressKey].remove();
