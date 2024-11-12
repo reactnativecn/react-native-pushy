@@ -1,5 +1,5 @@
 import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
-import { joinUrls, log, testUrls } from './utils';
+import { emptyObj, joinUrls, log, noop, promiseAny, testUrls } from './utils';
 import { EmitterSubscription, Platform } from 'react-native';
 import { PermissionsAndroid } from './permissions';
 import {
@@ -23,9 +23,6 @@ const defaultServer = {
     'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-pushy@master/endpoints.json',
   ],
 };
-
-const empty = {};
-const noop = () => {};
 
 if (Platform.OS === 'web') {
   console.warn('react-native-update 不支持 web 端热更，不会执行操作');
@@ -230,7 +227,7 @@ export class Pushy {
       const backupEndpoints = await this.getBackupEndpoints();
       if (backupEndpoints) {
         try {
-          resp = await Promise.race(
+          resp = await promiseAny(
             backupEndpoints.map(endpoint =>
               fetch(this.getCheckUrl(endpoint), fetchPayload),
             ),
@@ -248,7 +245,7 @@ export class Pushy {
         message: 'Can not connect to update server. Please check your network.',
       });
       this.throwIfEnabled(new Error('errorChecking'));
-      return this.lastRespJson ? await this.lastRespJson : empty;
+      return this.lastRespJson ? await this.lastRespJson : emptyObj;
     }
     this.lastRespJson = resp.json();
 
@@ -273,7 +270,7 @@ export class Pushy {
     }
     if (server.queryUrls) {
       try {
-        const resp = await Promise.race(
+        const resp = await promiseAny(
           server.queryUrls.map(queryUrl => fetch(queryUrl)),
         );
         const remoteEndpoints = await resp.json();
