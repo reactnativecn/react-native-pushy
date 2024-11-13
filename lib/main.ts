@@ -16,7 +16,7 @@ import {
   UpdateAvailableResult,
   UpdateEventsListener,
 } from './type';
-import { assertRelease, logger, testUrls } from './utils';
+import { assertRelease, logger, promiseAny, testUrls } from './utils';
 export { setCustomEndpoints };
 const {
   version: v,
@@ -162,7 +162,7 @@ export async function checkUpdate(APPKEY: string) {
     const backupEndpoints = await updateBackupEndpoints();
     if (backupEndpoints) {
       try {
-        resp = await Promise.race(
+        resp = await promiseAny(
           backupEndpoints.map((endpoint) =>
             fetch(getCheckUrl(APPKEY, endpoint), fetchPayload),
           ),
