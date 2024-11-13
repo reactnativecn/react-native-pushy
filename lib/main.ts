@@ -16,7 +16,7 @@ import {
   UpdateAvailableResult,
   UpdateEventsListener,
 } from './type';
-import { assertRelease, logger, testUrls } from './utils';
+import { assertRelease, logger, promiseAny, testUrls } from './utils';
 export { setCustomEndpoints };
 const {
   version: v,
@@ -167,8 +167,8 @@ export async function checkUpdate(APPKEY: string) {
     const backupEndpoints = await updateBackupEndpoints();
     if (backupEndpoints) {
       try {
-        resp = await Promise.race(
-          backupEndpoints.map((endpoint) =>
+        resp = await promiseAny(
+          backupEndpoints.map(endpoint =>
             fetch(getCheckUrl(APPKEY, endpoint), fetchPayload),
           ),
         );
@@ -205,7 +205,7 @@ function checkOperation(
   if (!Array.isArray(op)) {
     return;
   }
-  op.forEach((action) => {
+  op.forEach(action => {
     if (action.type === 'block') {
       blockUpdate = {
         reason: action.reason,
@@ -250,7 +250,7 @@ export async function downloadUpdate(
       const downloadCallback = eventListeners.onDownloadProgress;
       progressHandler = eventEmitter.addListener(
         'RCTPushyDownloadProgress',
-        (progressData) => {
+        progressData => {
           if (progressData.hash === options.hash) {
             downloadCallback(progressData);
           }

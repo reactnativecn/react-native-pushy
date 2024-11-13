@@ -1,4 +1,4 @@
-import { logger } from './utils';
+import { logger, promiseAny } from './utils';
 
 let currentEndpoint = 'https://update.react-native.cn/api';
 let backupEndpoints: string[] = [
@@ -13,8 +13,8 @@ let backupEndpointsQueryUrls = [
 export async function updateBackupEndpoints() {
   if (backupEndpointsQueryUrls) {
     try {
-      const resp = await Promise.race(
-        backupEndpointsQueryUrls.map((queryUrl) => fetch(queryUrl)),
+      const resp = await promiseAny(
+        backupEndpointsQueryUrls.map(queryUrl => fetch(queryUrl)),
       );
       const remoteEndpoints = await resp.json();
       if (Array.isArray(remoteEndpoints)) {
