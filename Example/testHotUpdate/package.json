@@ -11,13 +11,13 @@
     "lint": "eslint .",
     "postinstall": "patch-package",
     "apk": "cd android && ./gradlew assembleRelease",
-    "dev": "react-native bundle-harmony --dev"
+    "dev:harmony": "react-native bundle-harmony --dev"
   },
   "dependencies": {
     "patch-package": "^8.0.0",
     "postinstall-postinstall": "^2.1.0",
     "react": "18.3.1",
-    "react-native": "0.75.4",
+    "react-native": "0.76.1",
     "react-native-camera-kit": "^14.0.0-beta15",
     "react-native-paper": "^5.12.5",
     "react-native-safe-area-context": "^4.11.1",
@@ -25,23 +25,29 @@
     "react-native-vector-icons": "^10.2.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.25.9",
-    "@babel/preset-env": "^7.25.9",
-    "@babel/runtime": "^7.25.9",
-    "@react-native/babel-preset": "0.75.4",
-    "@react-native/eslint-config": "0.75.4",
-    "@react-native/metro-config": "0.75.4",
-    "@react-native/typescript-config": "0.75.4",
-    "@types/react": "^18.3.12",
-    "@types/react-test-renderer": "^18.3.0",
-    "babel-jest": "^29.7.0",
+    "@babel/core": "^7.25.2",
+    "@babel/preset-env": "^7.25.3",
+    "@babel/runtime": "^7.25.0",
+    "@react-native-community/cli": "15.0.0-alpha.2",
+    "@react-native-community/cli-platform-android": "15.0.0-alpha.2",
+    "@react-native-community/cli-platform-ios": "15.0.0-alpha.2",
+    "@react-native/babel-preset": "0.76.1",
+    "@react-native/eslint-config": "0.76.1",
+    "@react-native/metro-config": "0.76.1",
+    "@react-native/typescript-config": "0.76.1",
+    "@types/react": "^18.2.6",
+    "@types/react-test-renderer": "^18.0.0",
+    "babel-jest": "^29.6.3",
     "eslint": "^8.19.0",
-    "jest": "^29.7.0",
+    "jest": "^29.6.3",
     "prettier": "2.8.8",
     "react-test-renderer": "18.3.1",
-    "typescript": "5.6.3"
+    "typescript": "5.0.4"
   },
   "engines": {
     "node": ">=16"
-  }
+  },
+  "trustedDependencies": [
+    "postinstall-postinstall"
+  ]
 }
