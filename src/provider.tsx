@@ -90,18 +90,20 @@ export const PushyProvider = ({
   const downloadUpdate = useCallback(
     async (info: CheckResult | undefined = updateInfoRef.current) => {
       if (!info || !info.update) {
-        return;
+        return false;
       }
       try {
         const hash = await client.downloadUpdate(info, setProgress);
         if (!hash) {
-          return;
+          return false;
         }
         stateListener.current && stateListener.current.remove();
         if (options.updateStrategy === 'silentAndNow') {
-          return client.switchVersion(hash);
+          client.switchVersion(hash);
+          return true;
         } else if (options.updateStrategy === 'silentAndLater') {
-          return client.switchVersionLater(hash);
+          client.switchVersionLater(hash);
+          return true;
         }
         alertUpdate('提示', '下载完毕，是否立即更新?', [
           {
@@ -119,10 +121,12 @@ export const PushyProvider = ({
             },
           },
         ]);
+        return true;
       } catch (e: any) {
         setLastError(e);
         alertError('更新失败', e.message);
         throwErrorIfEnabled(e);
+        return false;
       }
     },
     [
@@ -202,7 +206,8 @@ export const PushyProvider = ({
           options.updateStrategy === 'silentAndNow' ||
           options.updateStrategy === 'silentAndLater'
         ) {
-          return downloadUpdate(info);
+          downloadUpdate(info);
+          return;
         }
         alertUpdate(
           '提示',
