@@ -38,7 +38,8 @@ export type EventType =
   | 'downloadingApk'
   | 'rejectStoragePermission'
   | 'errorStoragePermission'
-  | 'errorDownloadAndInstallApk';
+  | 'errorDownloadAndInstallApk'
+  | 'errorInstallApk';
 
 export interface EventData {
   currentVersion: string;
