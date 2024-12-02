@@ -41,11 +41,11 @@ const ping =
         Promise.race([
           fetch(url, {
             method: 'HEAD',
-          }).then(({ status }) => (status === 200 ? url : null)),
+          })
+            .then(({ status }) => (status === 200 ? url : null))
+            .catch(() => null),
           new Promise(r => setTimeout(() => r(null), 2000)),
         ]);
-
-const canUseGoogle = ping('https://www.google.com');
 
 export function joinUrls(paths: string[], fileName?: string) {
   if (fileName) {
@@ -56,9 +56,6 @@ export function joinUrls(paths: string[], fileName?: string) {
 export const testUrls = async (urls?: string[]) => {
   if (!urls?.length) {
     return null;
-  }
-  if (await canUseGoogle) {
-    return urls[0];
   }
   return promiseAny(urls.map(ping)).catch(() => null);
 };
