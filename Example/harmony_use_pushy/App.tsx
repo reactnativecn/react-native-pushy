@@ -193,10 +193,10 @@ const styles = StyleSheet.create({
   image: {},
 });
 
-// const pushyClient = new Pushy({
-//   appKey,
-//   debug: true,
-// });
+const pushyClient = new Pushy({
+  appKey,
+  debug: true,
+});
 
 console.log('😁pushyClient', Pushy);
 export default function Root() {

@@ -7,7 +7,7 @@
   "license": "",
   "dependencies": {
     "rnoh": "file:../../libs/rnoh",
-//    "geolocation": "file:../../node_modules/@react-native-oh-tpl/geolocation/harmony/geolocation"
+    "pushy": "file:../../node_modules/react-native-update/harmony/pushy"
   }
 }
 

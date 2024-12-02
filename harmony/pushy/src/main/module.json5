@@ -1,0 +1,7 @@
+{
+  "module": {
+    "name": "pushy",
+    "type": "har",
+    "deviceTypes": ['default'],
+  }
+}

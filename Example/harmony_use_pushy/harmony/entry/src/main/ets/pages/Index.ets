@@ -44,8 +44,8 @@ struct Index {
           },
           jsBundleProvider: new TraceJSBundleProviderDecorator(
             new AnyJSBundleProvider([
-              // MetroJSBundleProvider.fromServerIp('127.0.0.1'),
-              // new ResourceJSBundleProvider(this.rnAbility.context.resourceManager, 'hermes_bundle.hbc'),
+              MetroJSBundleProvider.fromServerIp('127.0.0.1'),
+              new ResourceJSBundleProvider(this.rnAbility.context.resourceManager, 'hermes_bundle.hbc'),
               new ResourceJSBundleProvider(this.rnAbility.context.resourceManager, 'bundle.harmony.js')
             ]),
             this.rnAbility.getLogger()),
