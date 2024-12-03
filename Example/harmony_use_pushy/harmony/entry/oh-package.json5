@@ -7,7 +7,7 @@
   "license": "",
   "dependencies": {
     "rnoh": "file:../../libs/rnoh",
-    "pushy": "file:../../node_modules/react-native-update/harmony/pushy"
+    "pushy": "file:../../node_modules/react-native-update/harmony"
   }
 }
 

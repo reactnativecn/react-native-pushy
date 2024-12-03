@@ -7,6 +7,6 @@
   "main": "index.ets",
   "version": "3.1.0-0.0.7",
   "dependencies": {
-    "rnoh": "file:../../../../libs/rnoh"
+    "rnoh": "file:../../../libs/rnoh"
   }
 }
