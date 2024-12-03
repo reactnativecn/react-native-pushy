@@ -20,7 +20,7 @@ if (!PushyModule) {
 const PushyConstants = isTurboModuleEnabled
   ? PushyModule.getConstants()
   : PushyModule;
-
+console.log('😁PushyConstants', PushyConstants);
 export const downloadRootDir: string = PushyConstants.downloadRootDir;
 export const packageVersion: string = PushyConstants.packageVersion;
 export const currentVersion: string = PushyConstants.currentVersion;
