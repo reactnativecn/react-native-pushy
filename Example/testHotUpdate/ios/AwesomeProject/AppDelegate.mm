@@ -15,13 +15,14 @@
   return [super application:application didFinishLaunchingWithOptions:launchOptions];
 }
 
-- (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
+- (NSURL *)bundleURL
 {
-#if DEBUG
-  return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index"];
-#else
-  return [RCTPushy bundleURL];
-#endif
+  #if DEBUG
+    // 原先DEBUG这里的写法不作修改(所以DEBUG模式下不可热更新)
+    return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index"];
+  #else
+    return [RCTPushy bundleURL];  // <--  把这里非DEBUG的情况替换为热更新bundle
+  #endif
 }
 
 @end
