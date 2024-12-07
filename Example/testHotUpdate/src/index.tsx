@@ -124,7 +124,10 @@ function App() {
           react-native-update版本：{client?.version}
         </Text>
       </TouchableOpacity>
-      <TestConsole visible={showTestConsole} />
+      <TestConsole
+        visible={showTestConsole}
+        onClose={() => setShowTestConsole(false)}
+      />
       {snackbarVisible && (
         <Snackbar
           visible={snackbarVisible}
