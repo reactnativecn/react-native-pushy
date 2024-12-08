@@ -1,12 +1,9 @@
 import { TurboModule, TurboModuleContext } from 'rnoh/ts';
 import common from '@ohos.app.ability.common';
 import dataPreferences from '@ohos.data.preferences';
-import geoLocationManager from '@ohos.geoLocationManager';
 import { bundleManager } from '@kit.AbilityKit';
 import abilityAccessCtrl, { Permissions } from '@ohos.abilityAccessCtrl';
 import { BusinessError } from '@ohos.base';
-import { Config, GeolocationOptions } from './Config';
-import { LocationManager } from './LocationManager';
 import logger from './Logger';
 import { UpdateModuleImpl } from './UpdateModuleImpl';
 import { UpdateContext } from './UpdateContext';
@@ -14,10 +11,8 @@ import { UpdateContext } from './UpdateContext';
 const TAG = "PushyTurboModule"
 
 export class PushyTurboModule extends TurboModule {
-  mConfiguration: Config
   mUiCtx: common.UIAbilityContext
   context: UpdateContext
-  mLocationManager: LocationManager
 
   constructor(protected ctx: TurboModuleContext) {
     super(ctx);
@@ -25,8 +20,7 @@ export class PushyTurboModule extends TurboModule {
     this.mUiCtx = ctx.uiAbilityContext
     let rnInstance = ctx.rnInstance
     this.context = new UpdateContext(this.mUiCtx)
-    // this.mLocationManager = new LocationManager()
-    // this.mLocationManager.setRnInstance(rnInstance)
+    // rnInstance.emitDeviceEvent("Pushy",{code: err.code, message: err.message});
   }
 
 
