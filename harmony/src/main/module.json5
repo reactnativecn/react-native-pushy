@@ -3,5 +3,5 @@
     "name": "pushy",
     "type": "har",
     "deviceTypes": ['default'],
-  }
+  },
 }

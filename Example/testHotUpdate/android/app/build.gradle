@@ -1,7 +1,7 @@
 apply plugin: "com.android.application"
 apply plugin: "com.facebook.react"
 apply plugin: "kotlin-android"
-apply plugin: "kotlin-android-extensions"
+//apply plugin: "kotlin-android-extensions"
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -71,6 +71,9 @@ def enableProguardInReleaseBuilds = false
 def jscFlavor = 'org.webkit:android-jsc:+'
 
 android {
+    buildFeatures {
+        viewBinding = true
+    }
     ndkVersion rootProject.ext.ndkVersion
 
     compileSdkVersion rootProject.ext.compileSdkVersion

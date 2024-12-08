@@ -1,4 +1,5 @@
 import { TurboModule, TurboModuleContext } from 'rnoh/ts';
+import common from '@ohos.app.ability.common';
 import dataPreferences from '@ohos.data.preferences';
 import geoLocationManager from '@ohos.geoLocationManager';
 import { bundleManager } from '@kit.AbilityKit';
@@ -7,12 +8,15 @@ import { BusinessError } from '@ohos.base';
 import { Config, GeolocationOptions } from './Config';
 import { LocationManager } from './LocationManager';
 import logger from './Logger';
+import { UpdateModuleImpl } from './UpdateModuleImpl';
+import { UpdateContext } from './UpdateContext';
 
 const TAG = "PushyTurboModule"
 
 export class PushyTurboModule extends TurboModule {
   mConfiguration: Config
-  mUiCtx: Context
+  mUiCtx: common.UIAbilityContext
+  context: UpdateContext
   mLocationManager: LocationManager
 
   constructor(protected ctx: TurboModuleContext) {
@@ -20,6 +24,7 @@ export class PushyTurboModule extends TurboModule {
     logger.debug(TAG, ",PushyTurboModule constructor");
     this.mUiCtx = ctx.uiAbilityContext
     let rnInstance = ctx.rnInstance
+    this.context = new UpdateContext(this.mUiCtx)
     // this.mLocationManager = new LocationManager()
     // this.mLocationManager.setRnInstance(rnInstance)
   }
@@ -27,7 +32,6 @@ export class PushyTurboModule extends TurboModule {
 
 getConstants(): Object {
   logger.debug(TAG, ",call getConstants");
-
   const context = this.mUiCtx;
   const preferencesManager = dataPreferences.getPreferencesSync(context,{ name: 'update' });
   const isFirstTime = preferencesManager.getSync("isFirstTime", false) as boolean;
@@ -35,6 +39,7 @@ getConstants(): Object {
   const uuid = preferencesManager.getSync("uuid", "") as string;
   const currentVersion = preferencesManager.getSync("currentVersion", "") as string;
   const buildTime = preferencesManager.getSync("buildTime", "") as string;
+  const isUsingBundleUrl = this.context.getIsUsingBundleUrl();
   let bundleFlags = bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_REQUESTED_PERMISSION;
   let packageVersion = '';
   try {
@@ -56,73 +61,62 @@ getConstants(): Object {
     downloadRootDir: `${context.filesDir}/_update`,
     packageVersion,
     currentVersion,
+    buildTime,
+    isUsingBundleUrl,
     isFirstTime,
     rolledBackVersion,
-    buildTime,
     uuid,
-    isUsingBundleUrl: true
   }
 }
 
 
-  setLocalHashInfo(hash: string, info: string): void {
-    logger.debug(TAG, ",call requestAuthorization");
-    // const permissions: Array<Permissions> = ['ohos.permission.APPROXIMATELY_LOCATION', 'ohos.permission.LOCATION'];
-    // let onGrantedSuccess = () => {
-    //   logger.debug(TAG, `,call requestAuthorization,onGranted ok:`);
-    //   logger.debug(TAG, `,call requestAuthorization,onGranted before notify RN:`);
-    //   success();
-    // }
-    // let onGrantedFailed = (errorB) => {
-    //   logger.debug(TAG, `,call requestAuthorization,onGrantedFailed error: ${JSON.stringify(errorB)}`);
-    //   error(errorB)
-    // }
-    // this.reqPermissionsFromUser(permissions, onGrantedSuccess, onGrantedFailed)
+  async setLocalHashInfo(hash: string, info: string): Promise<boolean>  {
+    logger.debug(TAG, ",call setLocalHashInfo");
+    return UpdateModuleImpl.setLocalHashInfo(this.context,hash,info);
   }
 
-  getLocalHashInfo(hash: string): void {
-    // logger.debug(TAG, `,call getCurrentPosition`);
-    // if (this.mConfiguration?.skipPermissionRequests) {
-    //   logger.debug(TAG, `,call getCurrentPosition flag100`)
-    //   this.mLocationManager.getCurrentLocationData(options, success, error);
-    //   return;
-    // }
-    // logger.debug(TAG, `,call getCurrentPosition,to requestAuthorization ==req200`);
-    // this.requestAuthorization(() => {
-    //   this.mLocationManager.getCurrentLocationData(options, success, error)
-    // }, error)
+  async getLocalHashInfo(hash: string): Promise<string> {
+    return UpdateModuleImpl.getLocalHashInfo(this.context,hash);
   }
 
-  setUuid(uuid: string): void {
+  async setUuid(uuid: string): Promise<boolean>  {
     logger.debug(TAG, `,call setUuid`);
+    return UpdateModuleImpl.setUuid(this.context,uuid);
   }
 
-  reloadUpdate(options: { hash: string }): void {
+  async reloadUpdate(options: { hash: string }): Promise<void> {
     logger.debug(TAG, `,call reloadUpdate`);
+    return UpdateModuleImpl.reloadUpdate(this.context, this.mUiCtx, options);
   }
 
-  setNeedUpdate(options: { hash: string }): void {
+  async setNeedUpdate(options: { hash: string }): Promise<boolean> {
     logger.debug(TAG, `,call setNeedUpdate`);
+    return UpdateModuleImpl.setNeedUpdate(this.context, options);
   }
 
-  markSuccess(): void {
+  async markSuccess(): Promise<boolean> {
     logger.debug(TAG, `,call markSuccess`);
+    return UpdateModuleImpl.markSuccess(this.context);
   }
 
-  downloadPatchFromPpk(options: { updateUrl: string; hash: string; originHash: string }): void {
+  async downloadPatchFromPpk(options: { updateUrl: string; hash: string; originHash: string }): Promise<void> {
     logger.debug(TAG, `,call downloadPatchFromPpk`);
+    return UpdateModuleImpl.downloadPatchFromPpk(this.context, options);
   }
 
-  downloadPatchFromPackage(options: { updateUrl: string; hash: string }): void {
+  async downloadPatchFromPackage(options: { updateUrl: string; hash: string }): Promise<void>  {
     logger.debug(TAG, `,call downloadPatchFromPackage`);
+    return UpdateModuleImpl.downloadPatchFromPackage(this.context, options);
   }
 
-  downloadFullUpdate(options: { updateUrl: string; hash: string }): void {
+  async downloadFullUpdate(options: { updateUrl: string; hash: string }): Promise<void> {
     logger.debug(TAG, `,call downloadFullUpdate`);
+    return UpdateModuleImpl.downloadFullUpdate(this.context, options);
   }
 
-  downloadAndInstallApk(options: { url: string; target: string; hash: string }): void {
+  async downloadAndInstallApk(options: { url: string; target: string; hash: string }): Promise<void> {
     logger.debug(TAG, `,call downloadAndInstallApk`);
+    return UpdateModuleImpl.downloadAndInstallApk(this.context, options);
   }
 
   addListener(eventName: string): void {

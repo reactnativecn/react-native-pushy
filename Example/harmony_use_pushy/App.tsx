@@ -34,28 +34,43 @@ function App() {
   const [showTestConsole, setShowTestConsole] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
+  console.log('😁updateInfo', updateInfo);
   const snackbarVisible =
     !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
-
-  console.log('😁Pushy', Pushy);
 
   return (
     <View style={styles.container}>
       <Text style={styles.welcome}>欢迎使用Pushy热更新服务</Text>
       <View style={{flexDirection: 'row'}}>
-        <Text>
-          {useDefaultAlert ? '当前使用' : '当前不使用'}默认的alert更新提示
-        </Text>
-        <Switch
-          value={useDefaultAlert}
-          onValueChange={v => {
-            setUseDefaultAlert(v);
+        <TouchableOpacity
+          onPress={() => {
             client?.setOptions({
-              updateStrategy: v ? null : 'alwaysAlert',
+              updateStrategy: !useDefaultAlert ? null : 'alwaysAlert',
             });
-            setShowUpdateSnackbar(!v);
+            setShowUpdateSnackbar(useDefaultAlert);
+            setUseDefaultAlert(!useDefaultAlert);
           }}
-        />
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+          }}>
+          <View
+            style={{
+              width: 20,
+              height: 20,
+              borderWidth: 1,
+              borderColor: '#999',
+              backgroundColor: useDefaultAlert ? 'blue' : 'white',
+              justifyContent: 'center',
+              alignItems: 'center',
+            }}>
+            {useDefaultAlert && <Text style={{color: 'white'}}>✓</Text>}
+          </View>
+          <Text style={{marginLeft: 8}}>
+            {' '}
+            {useDefaultAlert ? '当前使用' : '当前不使用'}默认的alert更新提示
+          </Text>
+        </TouchableOpacity>
       </View>
       <Image
         resizeMode={'contain'}
@@ -198,12 +213,10 @@ const pushyClient = new Pushy({
   debug: true,
 });
 
-console.log('😁pushyClient', Pushy);
 export default function Root() {
-  return <App />;
-  // return (
-  //   <PushyProvider client={pushyClient}>
-  //     <App />
-  //   </PushyProvider>
-  // );
+  return (
+    <PushyProvider client={pushyClient}>
+      <App />
+    </PushyProvider>
+  );
 }
