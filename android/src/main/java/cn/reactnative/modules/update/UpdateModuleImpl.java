@@ -117,8 +117,7 @@ public class UpdateModuleImpl {
             public void run() {
                 try {
                     updateContext.switchVersion(hash);
-                    Activity activity = mContext.getCurrentActivity();
-                    Application application = activity.getApplication();
+                    final Application application = (Application) getReactApplicationContext().getApplicationContext();
                     ReactInstanceManager instanceManager = updateContext.getCustomReactInstanceManager();
 
                     if (instanceManager == null) {
@@ -142,7 +141,9 @@ public class UpdateModuleImpl {
                         promise.resolve(true);
                     } catch (Throwable err) {
                         promise.reject("pushy:"+err.getMessage());
-                        activity.recreate();
+                        if (activity != null) {
+                            activity.recreate();
+                        }
                     }
 
                 } catch (Throwable err) {

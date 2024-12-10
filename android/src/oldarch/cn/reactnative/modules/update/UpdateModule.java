@@ -176,8 +176,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
             public void run() {
                 try {
                     updateContext.switchVersion(hash);
-                    Activity activity = getCurrentActivity();
-                    Application application = activity.getApplication();
+                    final Application application = (Application) getReactApplicationContext().getApplicationContext();
                     ReactInstanceManager instanceManager = updateContext.getCustomReactInstanceManager();
 
                     if (instanceManager == null) {
@@ -200,7 +199,9 @@ public class UpdateModule extends ReactContextBaseJavaModule {
                         instanceManager.recreateReactContextInBackground();
                         promise.resolve(null);
                     } catch (Throwable err) {
-                        activity.recreate();
+                        if (activity != null) {
+                            activity.recreate();
+                        }
                         promise.reject(err);
                     }
 
