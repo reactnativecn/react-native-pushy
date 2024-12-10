@@ -1,7 +1,7 @@
 package cn.reactnative.modules.update;
 
 import android.app.Activity;
-import android.app.Application;
+import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Build;
@@ -176,7 +176,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
             public void run() {
                 try {
                     updateContext.switchVersion(hash);
-                    final Application application = (Application) getReactApplicationContext().getApplicationContext();
+                    final Context application = getReactApplicationContext().getApplicationContext();
                     ReactInstanceManager instanceManager = updateContext.getCustomReactInstanceManager();
 
                     if (instanceManager == null) {
@@ -199,6 +199,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
                         instanceManager.recreateReactContextInBackground();
                         promise.resolve(null);
                     } catch (Throwable err) {
+                        final Activity activity = getCurrentActivity();
                         if (activity != null) {
                             activity.recreate();
                         }
