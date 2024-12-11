@@ -7,7 +7,6 @@ import {
   View,
   TouchableOpacity,
   Image,
-  Switch,
   Modal,
 } from 'react-native';
 
@@ -37,6 +36,12 @@ function App() {
   console.log('😁updateInfo', updateInfo);
   const snackbarVisible =
     !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
+
+  if (showTestConsole) {
+    return (
+      <TestConsole visible={true} onClose={() => setShowTestConsole(false)} />
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -98,14 +103,13 @@ function App() {
       <TouchableOpacity
         testID="testcase"
         style={{marginTop: 15}}
-        onLongPress={() => {
+        onPress={() => {
           setShowTestConsole(true);
         }}>
         <Text style={styles.instructions}>
           react-native-update版本：{client?.version}
         </Text>
       </TouchableOpacity>
-      <TestConsole visible={showTestConsole} />
       {snackbarVisible && (
         <Modal
           animationType="slide"

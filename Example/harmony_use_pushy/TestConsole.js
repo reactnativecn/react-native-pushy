@@ -3,7 +3,6 @@
 import {useCallback, useMemo, useState} from 'react';
 import {
   ActivityIndicator,
-  Modal,
   TextInput,
   Button,
   StyleSheet,
@@ -31,14 +30,15 @@ const CustomDialog = ({title, visible, onConfirm}) => {
         <TouchableOpacity
           testID="done"
           style={styles.button}
-          onLongPress={onConfirm}>
+          onPress={onConfirm}>
           <Text style={styles.buttonText}>确认</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 };
-export default function TestConsole({visible}) {
+export default function TestConsole({visible, onClose}) {
+  console.log('😁TestConsole', visible);
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
   const [options, setOptions] = useState();
@@ -125,7 +125,7 @@ export default function TestConsole({visible}) {
         <TouchableOpacity
           key={i}
           testID={NativeTestMethod[i].name}
-          onLongPress={() => {
+          onPress={() => {
             NativeTestMethod[i].invoke();
           }}>
           <Text>{NativeTestMethod[i].name}</Text>
@@ -134,81 +134,92 @@ export default function TestConsole({visible}) {
     }
     return <View>{views}</View>;
   }, [NativeTestMethod]);
+  if (!visible) {
+    return null;
+  }
 
   return (
-    <Modal visible={visible}>
-      <SafeAreaView style={{flex: 1, padding: 10}}>
+    <SafeAreaView style={{flex: 1, padding: 10}}>
+      <View
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: 10,
+        }}>
         <Text>调试Pushy方法（方法名，参数，值换行）</Text>
-        <TextInput
-          autoCorrect={false}
-          autoCapitalize="none"
-          style={{
-            borderWidth: StyleSheet.hairlineWidth * 4,
-            borderColor: 'black',
-            height: '30%',
-            marginTop: 20,
-            marginBottom: 20,
-            padding: 10,
-            fontSize: 20,
-          }}
-          textAlignVertical="top"
-          multiline={true}
-          value={text}
-          onChangeText={setText}
-        />
-        {running && <ActivityIndicator />}
-        <TouchableOpacity
-          style={{
-            backgroundColor: 'rgb(0,140,237)',
-            justifyContent: 'center',
-            alignItems: 'center',
-            paddingTop: 10,
-            paddingBottom: 10,
-            marginBottom: 5,
-          }}
-          testID="submit"
-          onLongPress={async () => {
-            setRunning(true);
-            try {
-              const inputs = text.split('\n');
-              const methodName = inputs[0];
-              let params = [];
-              if (inputs.length === 1) {
-                if (options) {
-                  await PushyModule[methodName](options);
-                } else {
-                  await PushyModule[methodName]();
-                }
+        <Button title="关闭" onPress={() => onClose()} />
+      </View>
+      <TextInput
+        autoCorrect={false}
+        autoCapitalize="none"
+        style={{
+          borderWidth: StyleSheet.hairlineWidth * 4,
+          borderColor: 'black',
+          height: '30%',
+          marginTop: 20,
+          marginBottom: 20,
+          padding: 10,
+          fontSize: 20,
+        }}
+        textAlignVertical="top"
+        multiline={true}
+        value={text}
+        onChangeText={setText}
+      />
+      {running && <ActivityIndicator />}
+      <TouchableOpacity
+        style={{
+          backgroundColor: 'rgb(0,140,237)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          paddingTop: 10,
+          paddingBottom: 10,
+          marginBottom: 5,
+        }}
+        testID="submit"
+        onPress={async () => {
+          setRunning(true);
+          try {
+            const inputs = text.split('\n');
+            const methodName = inputs[0];
+            console.log('😁', methodName, options, inputs);
+            let params = [];
+            if (inputs.length === 1) {
+              if (options) {
+                await PushyModule[methodName](options);
               } else {
-                if (inputs.length === 2) {
-                  params = [inputs[1]];
-                } else {
-                  params = [inputs[1], inputs[2]];
-                  console.log({inputs, params});
-                }
-                await PushyModule[methodName](...params);
+                await PushyModule[methodName]();
               }
-              setAlertVisible(true);
-              setAlertMsg('done');
-            } catch (e) {
-              setAlertVisible(true);
-              setAlertMsg(e.message);
+            } else {
+              if (inputs.length === 2) {
+                params = [inputs[1]];
+              } else {
+                params = [inputs[1], inputs[2]];
+                console.log({inputs, params});
+              }
+              await PushyModule[methodName](...params);
             }
-            setRunning(false);
-          }}>
-          <Text style={{color: 'white'}}>执行</Text>
-        </TouchableOpacity>
-        <Button title="重置" onPress={() => setText('')} />
-        {renderTestView()}
-        <CustomDialog
-          title={alertMsg}
-          visible={alertVisible}
-          onConfirm={() => {
-            setAlertVisible(false);
-          }}
-        />
-      </SafeAreaView>
-    </Modal>
+            setAlertVisible(true);
+            setAlertMsg('done');
+          } catch (e) {
+            setAlertVisible(true);
+            setAlertMsg(e.message);
+          }
+          setRunning(false);
+        }}>
+        <Text style={{color: 'white'}}>执行</Text>
+      </TouchableOpacity>
+      <Button title="重置" onPress={() => setText('')} />
+      {renderTestView()}
+      <CustomDialog
+        title={alertMsg}
+        visible={alertVisible}
+        onConfirm={() => {
+          setAlertVisible(false);
+        }}
+      />
+    </SafeAreaView>
   );
 }
 
