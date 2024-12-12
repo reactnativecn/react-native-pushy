@@ -33,6 +33,10 @@ function App() {
   const [showTestConsole, setShowTestConsole] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
+  // if (updateInfo) {
+  //   updateInfo!.name = 'name';
+  //   updateInfo!.update = true;
+  // }
   console.log('😁updateInfo', updateInfo);
   const snackbarVisible =
     !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
@@ -111,17 +115,9 @@ function App() {
         </Text>
       </TouchableOpacity>
       {snackbarVisible && (
-        <Modal
-          animationType="slide"
-          transparent={true}
-          visible={snackbarVisible}
-          onRequestClose={() => {
-            setShowUpdateSnackbar(false);
-          }}>
+        <View style={styles.overlay}>
           <View
             style={{
-              position: 'absolute',
-              bottom: 0,
               width: '100%',
               backgroundColor: '#333',
               padding: 16,
@@ -148,51 +144,57 @@ function App() {
               </TouchableOpacity>
             </View>
           </View>
-        </Modal>
+        </View>
       )}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={showUpdateBanner}
-        onRequestClose={() => setShowUpdateBanner(false)}>
-        <View
-          style={{
-            position: 'absolute',
-            top: 0,
-            width: '100%',
-            backgroundColor: '#fff',
-            padding: 16,
-            borderBottomWidth: 1,
-            borderBottomColor: '#eee',
-          }}>
-          <View style={{flexDirection: 'row', alignItems: 'center'}}>
-            <Text>更新已完成，是否立即重启？</Text>
-          </View>
+      {showUpdateBanner && (
+        <View style={styles.overlay}>
           <View
             style={{
-              flexDirection: 'row',
-              justifyContent: 'flex-end',
-              marginTop: 10,
+              width: '100%',
+              backgroundColor: '#fff',
+              padding: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: '#eee',
             }}>
-            <TouchableOpacity
-              onPress={() => {
-                switchVersionLater();
-                setShowUpdateBanner(false);
-              }}
-              style={{marginRight: 20}}>
-              <Text style={{color: '#2196F3'}}>下次再说</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={switchVersion}>
-              <Text style={{color: '#2196F3'}}>立即重启</Text>
-            </TouchableOpacity>
+            <View style={{flexDirection: 'row', alignItems: 'center'}}>
+              <Text>更新已完成，是否立即重启？</Text>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                justifyContent: 'flex-end',
+                marginTop: 10,
+              }}>
+              <TouchableOpacity
+                onPress={() => {
+                  switchVersionLater();
+                  setShowUpdateBanner(false);
+                }}
+                style={{marginRight: 20}}>
+                <Text style={{color: '#2196F3'}}>下次再说</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={switchVersion}>
+                <Text style={{color: '#2196F3'}}>立即重启</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
-      </Modal>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   container: {
     flex: 1,
     justifyContent: 'center',
