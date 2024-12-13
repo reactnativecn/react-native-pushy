@@ -37,15 +37,35 @@ export const emptyModule = new EmptyModule();
 const ping =
   Platform.OS === 'web'
     ? Promise.resolve
-    : async (url: string) =>
-        Promise.race([
+    : async (url: string) => {
+        let pingFinished = false;
+        return Promise.race([
           fetch(url, {
             method: 'HEAD',
           })
-            .then(({ status }) => (status === 200 ? url : null))
-            .catch(() => null),
-          new Promise(r => setTimeout(() => r(null), 2000)),
+            .then(({ status, statusText }) => {
+              pingFinished = true;
+              if (status === 200) {
+                return url;
+              }
+              log('ping failed', url, status, statusText);
+              return null;
+            })
+            .catch(e => {
+              pingFinished = true;
+              log('ping error', url, e);
+              return null;
+            }),
+          new Promise(r =>
+            setTimeout(() => {
+              r(null);
+              if (!pingFinished) {
+                log('ping timeout', url);
+              }
+            }, 2000),
+          ),
         ]);
+      };
 
 export function joinUrls(paths: string[], fileName?: string) {
   if (fileName) {
@@ -57,5 +77,10 @@ export const testUrls = async (urls?: string[]) => {
   if (!urls?.length) {
     return null;
   }
-  return promiseAny(urls.map(ping)).catch(() => null);
+  const ret = await promiseAny(urls.map(ping));
+  if (ret) {
+    return ret;
+  }
+  log('all ping failed, use first url:', urls[0]);
+  return urls[0];
 };
