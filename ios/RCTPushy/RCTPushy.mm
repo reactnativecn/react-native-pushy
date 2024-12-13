@@ -315,17 +315,18 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options
         if (hash.length) {
             [self setNeedUpdate:options resolver:resolve rejecter:reject];
             
+            // reload in earlier version
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
+                [self.bridge reload];
+            });
+            
             #if __has_include("RCTReloadCommand.h")
                 // reload 0.62+
                 RCTReloadCommandSetBundleURL([[self class] bundleURL]);
                 RCTTriggerReloadCommandListeners(@"pushy reload");
-            #else
-                // reload in earlier version
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
-                    [self.bridge reload];
-                });
             #endif
+
             resolve(@true);
         }else{
             reject(@"执行报错", nil, nil);
