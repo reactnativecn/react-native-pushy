@@ -15,8 +15,7 @@ import {
 import {PushyModule} from 'react-native-update';
 const Hash = '9D5CE6EBA420717BE7E7D308B11F8207681B066C951D68F3994D19828F342474';
 const UUID = '00000000-0000-0000-0000-000000000000';
-const DownloadUrl =
-  'http://cos.pgyer.com/697913e94d7441f20c686e2b0996a1aa.apk?sign=7a8f11b1df82cba45c8ac30b1acec88c&t=1680404102&response-content-disposition=attachment%3Bfilename%3DtestHotupdate_1.0.apk';
+const DownloadUrl = 'https://localhost:3000/diff.ppk-patch';
 
 const CustomDialog = ({title, visible, onConfirm}) => {
   if (!visible) {

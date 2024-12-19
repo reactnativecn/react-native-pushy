@@ -49,29 +49,23 @@
       }
     ],
     "requestPermissions": [
-           {
-               "name": "ohos.permission.APPROXIMATELY_LOCATION",
-               "reason": "$string:Access_location",
-               "usedScene": {
-                   "abilities": [
-                       "EntryAbility"
-                     ],
-                   "when": "always"
-                 }
-             },
-           {
-               "name": "ohos.permission.LOCATION",
-               "reason": "$string:Access_location",
-               "usedScene": {
-                   "abilities": [
-                       "EntryAbility"
-                     ],
-                   "when": "always"
-                }
-             },
-          {
-               "name": "ohos.permission.INTERNET"
-             }
+      {
+        "name": "ohos.permission.WRITE_MEDIA",
+        "reason": "$string:reason_write_media",
+        "usedScene": {
+          "when": "always",
+        }
+      },
+      {
+        "name": "ohos.permission.READ_MEDIA",
+        "reason": "$string:reason_read_media",
+        "usedScene": {
+          "when": "always",
+        }
+      },
+      {
+        "name": "ohos.permission.INTERNET"
+      }
     ]
   }
 }

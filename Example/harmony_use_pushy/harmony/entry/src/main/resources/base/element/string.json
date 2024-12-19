@@ -15,6 +15,14 @@
     {
       "name": "EntryAbility_label",
       "value": "label"
+    },
+    {
+      "name": "reason_write_media",
+      "value": "Write files to internal storage"
+    },
+    {
+      "name": "reason_read_media",
+      "value": "Read files to internal storage"
     }
   ]
 }

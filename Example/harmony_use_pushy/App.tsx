@@ -1,14 +1,7 @@
 /* eslint-disable react/no-unstable-nested-components */
 /* eslint-disable react-native/no-inline-styles */
 import React, {useState} from 'react';
-import {
-  StyleSheet,
-  Text,
-  View,
-  TouchableOpacity,
-  Image,
-  Modal,
-} from 'react-native';
+import {StyleSheet, Text, View, TouchableOpacity, Image} from 'react-native';
 
 import TestConsole from './TestConsole';
 
@@ -26,10 +19,9 @@ function App() {
     updateInfo,
     packageVersion,
     currentHash,
-    parseTestQrCode,
     progress: {received, total} = {},
   } = usePushy();
-  const [useDefaultAlert, setUseDefaultAlert] = useState(true);
+  const [useDefaultAlert, setUseDefaultAlert] = useState(false);
   const [showTestConsole, setShowTestConsole] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
@@ -50,6 +42,7 @@ function App() {
   return (
     <View style={styles.container}>
       <Text style={styles.welcome}>欢迎使用Pushy热更新服务</Text>
+      {/* <Text style={styles.welcome}>😁更新成功！！！</Text> */}
       <View style={{flexDirection: 'row'}}>
         <TouchableOpacity
           onPress={() => {

@@ -32,15 +32,20 @@ export class DownloadTask {
 
   private async removeDirectory(path: string): Promise<void> {
     try {
-      const stat = await fileIo.stat(path);
-      if (stat.isDirectory()) {
-        const files = await fileIo.listFile(path);
-        for (const file of files) {
-          if (file === '.' || file === '..') continue;
-          await this.removeDirectory(`${path}/${file}`);
+      const res = fileIo.accessSync(path);
+      if(res){
+        const stat = await fileIo.stat(path);
+        if (stat.isDirectory()) {
+          const files = await fileIo.listFile(path);
+          for (const file of files) {
+            if (file === '.' || file === '..') continue;
+            await this.removeDirectory(`${path}/${file}`);
+          }
+          await fileIo.rmdir(path);
+        }else{
+          await fileIo.unlink(path);
         }
       }
-      await fileIo.unlink(path);
     } catch (error) {
       console.error('Failed to delete directory:', error);
       throw error;
@@ -271,7 +276,11 @@ private async processUnzippedFiles(directory: string): Promise<ZipFile> {
 
       if (fn === "__diff.json") {
         foundDiff = true;
-        const jsonContent = entry.content.toString();
+        let jsonContent = '';
+        const bufferArray = new Uint8Array(entry.content);
+        for (let i = 0; i < bufferArray.length; i++) {
+          jsonContent += String.fromCharCode(bufferArray[i]);
+        }
         const obj = JSON.parse(jsonContent);
 
         const copies = obj.copies;
@@ -296,7 +305,7 @@ private async processUnzippedFiles(directory: string): Promise<ZipFile> {
       if (fn === "index.bundlejs.patch") {
         foundBundlePatch = true;
         const patched = await Patch.hdiffPatch(params, entry.content);
-        
+
         const outputFile = `${params.unzipDirectory}/index.bundlejs`;
         const writer = await fileIo.open(outputFile, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
         const chunkSize = 4096;
@@ -311,7 +320,25 @@ private async processUnzippedFiles(directory: string): Promise<ZipFile> {
         continue;
       }
 
-      await zip.decompressFile(entry.filename, params.unzipDirectory);
+      if (fn === "bundle.harmony.js.patch") {
+        foundBundlePatch = true;
+        const patched = await Patch.hdiffPatch(params, entry.content);
+
+        const outputFile = `${params.unzipDirectory}/bundle.harmony.js`;
+        const writer = await fileIo.open(outputFile, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
+        const chunkSize = 4096;
+        let bytesWritten = 0;
+        const totalLength = patched.byteLength;
+        while (bytesWritten < totalLength) {
+          const chunk = patched.slice(bytesWritten, bytesWritten + chunkSize);
+          await fileIo.write(writer.fd, chunk);
+          bytesWritten += chunk.byteLength;
+        }
+        await fileIo.close(writer);
+        continue;
+      }
+
+      // await zip.decompressFile(entry.filename, params.unzipDirectory);
     }
 
     if (!foundDiff) {

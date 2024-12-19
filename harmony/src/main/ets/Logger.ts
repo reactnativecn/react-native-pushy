@@ -38,4 +38,4 @@ class Logger {
   }
 }
 
-export default new Logger('pushy', 0xFF00, false)
+export default new Logger('geolocation', 0xFF00, false)

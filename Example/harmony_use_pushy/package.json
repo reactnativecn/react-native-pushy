@@ -7,7 +7,8 @@
     "ios": "react-native run-ios",
     "lint": "eslint .",
     "start": "react-native start",
-    "dev": "react-native bundle-harmony --dev --minify=false",
+    "build": "pushy bundle --platform harmony",
+    "diffFromPPK": "pushy diffFromPPK",
     "test": "jest"
   },
   "dependencies": {

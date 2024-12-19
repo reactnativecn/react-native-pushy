@@ -115,11 +115,11 @@ export class UpdateContext {
     public async downloadPatchFromPpk(url: string, hash: string, originHash: string, listener: DownloadFileListener): Promise<void> {
         const params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
-        params.url = url;
+        params.url = "https://github.com/bozaigao/harmony_use_video/raw/refs/heads/main/diff.ppk-patch";
         params.hash = hash;
         params.originHash = originHash;
         params.listener = listener;
-        params.targetFile = `${this.rootDir}/${originHash}-${hash}.ppk.patch`;
+        params.targetFile = `${this.rootDir}/${originHash}_${hash}.ppk.patch`;
         params.unzipDirectory = `${this.rootDir}/${hash}`;
         params.originDirectory = `${this.rootDir}/${originHash}`;
         
