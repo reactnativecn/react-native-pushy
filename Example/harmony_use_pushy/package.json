@@ -8,8 +8,10 @@
     "lint": "eslint .",
     "start": "react-native start",
     "build": "pushy bundle --platform harmony",
-    "diffFromPPK": "pushy diffFromPPK",
-    "test": "jest"
+    "test": "jest",
+    "hdiffFromPPK": "pushy hdiffFromPPK .pushy/output/harmony.1735052610653.ppk .pushy/output/harmony.1735052678646.ppk .pushy/output/hdiff.ppk-patch",
+    "hdiffFromApp": "pushy hdiffFromApp .pushy/output/version-1.0.0.app .pushy/output/harmony.1735052610653.ppk .pushy/output/hdiff.app-patch",
+    "hash": "pushy hash /Users/yanbo.he/Desktop/HarmonyOS/react-native-pushy/Example/harmony_use_pushy/.pushy/output/harmony.1735048297258.ppk"
   },
   "dependencies": {
     "react": "18.2.0",

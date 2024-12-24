@@ -10,7 +10,7 @@ export class DownloadTaskParams {
   // 任务类型常量
   static readonly TASK_TYPE_CLEANUP: number = 0;        // 保留hash和originHash
   static readonly TASK_TYPE_PATCH_FULL: number = 1;     // 全量补丁
-  static readonly TASK_TYPE_PATCH_FROM_APK: number = 2; // 从APK补丁
+  static readonly TASK_TYPE_PATCH_FROM_APP: number = 2; // 从APP补丁
   static readonly TASK_TYPE_PATCH_FROM_PPK: number = 3; // 从PPK补丁
   static readonly TASK_TYPE_PLAIN_DOWNLOAD: number = 4; // 普通下载
 

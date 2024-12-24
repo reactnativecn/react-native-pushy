@@ -14,5 +14,4 @@ Hdp_Files := \
 LOCAL_SRC_FILES := \
 	DownloadTask.c \
 	$(Hdp_Files)
-
 include $(BUILD_SHARED_LIBRARY)

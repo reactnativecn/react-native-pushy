@@ -1,17 +1,19 @@
-import { ComponentBuilderContext, RNOHLogger } from 'rnoh';
+import { FileJSBundleProvider } from 'pushy/src/main/ets/FileJSBundleProvider';
+import { ComponentBuilderContext, JSBundleProvider, RNOHLogger } from 'rnoh';
 import {
   RNApp,
   RNAbility,
   AnyJSBundleProvider,
-  MetroJSBundleProvider,
   ResourceJSBundleProvider,
   TraceJSBundleProviderDecorator,
 } from 'rnoh'
 import { createRNPackages } from '../RNPackagesFactory'
+
 @Builder
 export function CustomComponentBuilder(ctx: ComponentBuilderContext) {
 
 }
+
 
 @Entry
 @Component
@@ -46,6 +48,7 @@ struct Index {
             new AnyJSBundleProvider([
               // MetroJSBundleProvider.fromServerIp('127.0.0.1'),
               // new ResourceJSBundleProvider(this.rnAbility.context.resourceManager, 'hermes_bundle.hbc'),
+              new FileJSBundleProvider(this.rnAbility.context),
               new ResourceJSBundleProvider(this.rnAbility.context.resourceManager, 'bundle.harmony.js')
             ]),
             this.rnAbility.getLogger()),

@@ -67,7 +67,7 @@ export class UpdateModuleImpl {
     options: { updateUrl: string; hash: string }
   ): Promise<void> {
     try {
-      await updateContext.downloadPatchFromApk(options.updateUrl, options.hash, {
+      await updateContext.downloadPatchFromPackage(options.updateUrl, options.hash, {
         onDownloadCompleted: (params: DownloadTaskParams) => {
           return Promise.resolve();
         },

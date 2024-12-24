@@ -16,6 +16,12 @@ import {PushyModule} from 'react-native-update';
 const Hash = '9D5CE6EBA420717BE7E7D308B11F8207681B066C951D68F3994D19828F342474';
 const UUID = '00000000-0000-0000-0000-000000000000';
 const DownloadUrl = 'https://localhost:3000/diff.ppk-patch';
+const AppPatchDownloadUrl = 'https://github.com/bozaigao/test_pushy_server/raw/refs/heads/main/hdiff.app-patch';
+const AppPatchHash = 'f5ba92c7c04250d4b8a446c8267ef459';
+const PPKDownloadUrl = 'https://github.com/bozaigao/test_pushy_server/raw/refs/heads/main/hdiff.ppk-patch';
+const PPKPatchHash = '6b3d26b7d868d1f67aedadb7f0b342d9';
+const OriginHash = 'f5ba92c7c04250d4b8a446c8267ef459';
+
 
 const CustomDialog = ({title, visible, onConfirm}) => {
   if (!visible) {
@@ -73,10 +79,17 @@ export default function TestConsole({visible, onClose}) {
         },
       },
       {
-        name: 'setNeedUpdate',
+        name: 'setNeedUpdateForApp',
         invoke: () => {
           setText('setNeedUpdate');
-          setOptions({hash: Hash});
+          setOptions({hash: AppPatchHash});
+        },
+      },
+      {
+        name: 'setNeedUpdateForPPK',
+        invoke: () => {
+          setText('setNeedUpdate');
+          setOptions({hash: PPKPatchHash});
         },
       },
       {
@@ -90,14 +103,14 @@ export default function TestConsole({visible, onClose}) {
         name: 'downloadPatchFromPpk',
         invoke: () => {
           setText('downloadPatchFromPpk');
-          setOptions({updateUrl: DownloadUrl, hash: Hash, originHash: Hash});
+          setOptions({updateUrl: PPKDownloadUrl, hash: PPKPatchHash, originHash: OriginHash});
         },
       },
       {
         name: 'downloadPatchFromPackage',
         invoke: () => {
           setText('downloadPatchFromPackage');
-          setOptions({updateUrl: DownloadUrl, hash: Hash});
+          setOptions({updateUrl: AppPatchDownloadUrl, hash: AppPatchHash});
         },
       },
       {
@@ -182,7 +195,7 @@ export default function TestConsole({visible, onClose}) {
           try {
             const inputs = text.split('\n');
             const methodName = inputs[0];
-            console.log('😁', methodName, options, inputs);
+            console.log('😁', methodName, options, inputs,PushyModule);
             let params = [];
             if (inputs.length === 1) {
               if (options) {

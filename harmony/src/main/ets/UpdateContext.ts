@@ -2,16 +2,17 @@ import preferences from '@ohos.data.preferences';
 import bundleManager from '@ohos.bundle.bundleManager';
 import fileIo from '@ohos.file.fs';
 import { DownloadTask } from './DownloadTask';
+import common from '@ohos.app.ability.common';
 import { DownloadTaskParams } from './DownloadTaskParams';
 
 export class UpdateContext {
-    private context: Context;
+    private context: common.UIAbilityContext;
     private rootDir: string;
     private preferences: preferences.Preferences;
     private static DEBUG: boolean = false;
     private static isUsingBundleUrl: boolean = false;
 
-    constructor(context: Context) {
+    constructor(context: common.UIAbilityContext) {
         this.context = context;
         this.rootDir = context.filesDir + '/_update';
         
@@ -22,7 +23,6 @@ export class UpdateContext {
         } catch (e) {
             console.error('Failed to create root directory:', e);
         }
-
         this.initPreferences();
     }
 
@@ -31,7 +31,6 @@ export class UpdateContext {
             this.preferences = await preferences.getPreferences(this.context, 'update');
             const packageVersion = await this.getPackageVersion();
             const storedVersion = await this.preferences.get('packageVersion', '');
-            
             if (packageVersion !== storedVersion) {
                 await this.preferences.clear();
                 await this.preferences.put('packageVersion', packageVersion);
@@ -115,26 +114,26 @@ export class UpdateContext {
     public async downloadPatchFromPpk(url: string, hash: string, originHash: string, listener: DownloadFileListener): Promise<void> {
         const params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
-        params.url = "https://github.com/bozaigao/harmony_use_video/raw/refs/heads/main/diff.ppk-patch";
+        params.url = url;
         params.hash = hash;
         params.originHash = originHash;
         params.listener = listener;
         params.targetFile = `${this.rootDir}/${originHash}_${hash}.ppk.patch`;
         params.unzipDirectory = `${this.rootDir}/${hash}`;
-        params.originDirectory = `${this.rootDir}/${originHash}`;
+        params.originDirectory = `${this.rootDir}/${params.originHash}`;
         
         const downloadTask = new DownloadTask(this.context);
         await downloadTask.execute(params);
     }
 
-    public async downloadPatchFromApk(url: string, hash: string, listener: DownloadFileListener): Promise<void> {
+    public async downloadPatchFromPackage(url: string, hash: string, listener: DownloadFileListener): Promise<void> {
         try {
             const params = new DownloadTaskParams();
-            params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK;
+            params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP;
             params.url = url;
             params.hash = hash;
             params.listener = listener;
-            params.targetFile = `${this.rootDir}/${hash}.apk.patch`;
+            params.targetFile = `${this.rootDir}/${hash}.app.patch`;
             params.unzipDirectory = `${this.rootDir}/${hash}`;
 
             const downloadTask = new DownloadTask(this.context);
@@ -146,7 +145,7 @@ export class UpdateContext {
 
     public async switchVersion(hash: string): Promise<void> {
         try {
-            const bundlePath = `${this.rootDir}/${hash}/index.bundlejs`;
+            const bundlePath = `${this.rootDir}/${hash}/bundle.harmony.js`;
             if (!fileIo.accessSync(bundlePath)) {
                 throw new Error(`Bundle version ${hash} not found.`);
             }
@@ -166,26 +165,25 @@ export class UpdateContext {
         }
     }
 
-    public static getBundleUrl(context: Context, defaultAssetsUrl?: string): string {
+    public static getBundleUrl(context: common.UIAbilityContext, defaultAssetsUrl?: string): string {
         return new UpdateContext(context).getBundleUrl(defaultAssetsUrl);
     }
 
     public getBundleUrl(defaultAssetsUrl?: string): string {
         UpdateContext.isUsingBundleUrl = true;
         const currentVersion = this.getCurrentVersion();
+        console.log('😁currentVersion',currentVersion);
         if (!currentVersion) {
             return defaultAssetsUrl;
         }
-
         if (!this.isFirstTime()) {
             if (!this.preferences.get('firstTimeOk', true)) {
                 return this.rollBack();
             }
         }
-
         let version = currentVersion;
         while (version) {
-            const bundleFile = `${this.rootDir}/${version}/index.bundlejs`;
+            const bundleFile = `${this.rootDir}/${version}/bundle.harmony.js`;
             try {
                 if (!fileIo.accessSync(bundleFile)) {
                     console.error(`Bundle version ${version} not found.`);
@@ -198,7 +196,6 @@ export class UpdateContext {
                 version = this.rollBack();
             }
         }
-
         return defaultAssetsUrl;
     }
 
