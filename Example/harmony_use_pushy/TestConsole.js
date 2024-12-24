@@ -43,7 +43,6 @@ const CustomDialog = ({title, visible, onConfirm}) => {
   );
 };
 export default function TestConsole({visible, onClose}) {
-  console.log('😁TestConsole', visible);
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
   const [options, setOptions] = useState();
@@ -195,7 +194,6 @@ export default function TestConsole({visible, onClose}) {
           try {
             const inputs = text.split('\n');
             const methodName = inputs[0];
-            console.log('😁', methodName, options, inputs,PushyModule);
             let params = [];
             if (inputs.length === 1) {
               if (options) {

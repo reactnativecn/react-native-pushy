@@ -293,7 +293,7 @@ export class DownloadTask {
         }
       }
 
-      // await zip.decompressFile(entry.filename, params.unzipDirectory);
+      await zip.decompressFile(entry.filename, params.unzipDirectory);
     }
 
     if (!foundDiff) {
@@ -302,7 +302,7 @@ export class DownloadTask {
     if (!foundBundlePatch) {
       throw new Error('bundle patch not found');
     }
-    // await this.copyFromResource(copyList);
+    await this.copyFromResource(copyList);
   }
 
   private async doPatchFromPpk(params: DownloadTaskParams): Promise<void> {

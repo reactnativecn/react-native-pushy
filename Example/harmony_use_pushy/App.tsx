@@ -29,7 +29,6 @@ function App() {
   //   updateInfo!.name = 'name';
   //   updateInfo!.update = true;
   // }
-  console.log('😁updateInfo', updateInfo);
   const snackbarVisible =
     !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
 

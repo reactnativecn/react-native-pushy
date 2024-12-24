@@ -9,9 +9,7 @@ export class FileJSBundleProvider extends JSBundleProvider {
 
   constructor(context: common.UIAbilityContext) {
     super();
-    console.log('😁test1');
     this.updateContext = new UpdateContext(context);
-    // this.filePath =  this.updateContext.getBundleUrl();
   }
   getURL(): string {
     return this.updateContext.getBundleUrl();
