@@ -382,7 +382,7 @@ export class DownloadTask {
         }
       }
 
-      // await zip.decompressFile(entry.filename, params.unzipDirectory);
+      await zip.decompressFile(entry.filename, params.unzipDirectory);
     }
 
     if (!foundDiff) {
