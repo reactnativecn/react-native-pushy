@@ -105,7 +105,6 @@ export class DownloadTask {
       await fileIo.close(writer);
       const stat = await fileIo.stat(params.targetFile);
       const fileSize = stat.size;
-      console.log('😁下载成功');
     } catch (error) {
       console.error('Download failed:', error);
       throw error;
@@ -269,7 +268,6 @@ export class DownloadTask {
             new Uint8Array(originContent.buffer),
             new Uint8Array(entry.content),
           );
-          console.log('😁patched', patched);
           const outputFile = `${params.unzipDirectory}/bundle.harmony.js`;
           const writer = await fileIo.open(
             outputFile,
@@ -285,7 +283,6 @@ export class DownloadTask {
             bytesWritten += chunk.byteLength;
           }
           await fileIo.close(writer);
-          console.log('😁outputFile', outputFile);
           continue;
         } catch (error) {
           console.error('Failed to process bundle patch:', error);
@@ -350,7 +347,6 @@ export class DownloadTask {
         foundBundlePatch = true;
         const filePath = params.originDirectory + '/bundle.harmony.js';
         const res = fileIo.accessSync(filePath);
-        console.log('😁filePath', filePath, res);
         if (res) {
           const stat = await fileIo.stat(filePath);
           const reader = await fileIo.open(filePath, fileIo.OpenMode.READ_ONLY);
@@ -362,9 +358,7 @@ export class DownloadTask {
               new Uint8Array(originContent),
               new Uint8Array(entry.content),
             );
-            console.log('😁patched', patched);
             const outputFile = `${params.unzipDirectory}/bundle.harmony.js`;
-            console.log('😁outputFile', outputFile);
             const writer = await fileIo.open(outputFile, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY);
             const chunkSize = 4096;
             let bytesWritten = 0;

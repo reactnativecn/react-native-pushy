@@ -172,7 +172,6 @@ export class UpdateContext {
     public getBundleUrl(defaultAssetsUrl?: string): string {
         UpdateContext.isUsingBundleUrl = true;
         const currentVersion = this.getCurrentVersion();
-        console.log('😁currentVersion',currentVersion);
         if (!currentVersion) {
             return defaultAssetsUrl;
         }

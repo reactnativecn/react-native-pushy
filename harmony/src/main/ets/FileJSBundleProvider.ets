@@ -19,7 +19,6 @@ export class FileJSBundleProvider extends JSBundleProvider {
     try {
       this.filePath =  this.updateContext.getBundleUrl();
       const res = fileIo.accessSync(this.filePath);
-      console.log('😁filePath',this.filePath, res);
       if (res) {
         const file = fileIo.openSync(this.filePath, fileIo.OpenMode.READ_ONLY);
         try {
