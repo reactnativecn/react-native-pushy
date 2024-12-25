@@ -1,10 +1,6 @@
 #import "RCTPushy.h"
 #import "RCTPushyDownloader.h"
 #import "RCTPushyManager.h"
-
-#if __has_include("RCTReloadCommand.h")
-#import "RCTReloadCommand.h"
-#endif
 // Thanks to this guard, we won't import this header when we build for the old architecture.
 #ifdef RCT_NEW_ARCH_ENABLED
 #import "RCTPushySpec.h"
@@ -315,18 +311,14 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options
         if (hash.length) {
             [self setNeedUpdate:options resolver:resolve rejecter:reject];
             
-            // reload in earlier version
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
-                [self.bridge reload];
-            });
+            // reload 0.62+
+            // RCTReloadCommandSetBundleURL([[self class] bundleURL]);
+            // RCTTriggerReloadCommandListeners(@"pushy reload");
             
-            #if __has_include("RCTReloadCommand.h")
-                // reload 0.62+
-                RCTReloadCommandSetBundleURL([[self class] bundleURL]);
-                RCTTriggerReloadCommandListeners(@"pushy reload");
-            #endif
-
+           dispatch_async(dispatch_get_main_queue(), ^{
+               [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
+               [self.bridge reload];
+           });
             resolve(@true);
         }else{
             reject(@"执行报错", nil, nil);

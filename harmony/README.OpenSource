@@ -1,0 +1,11 @@
+[
+    {
+        "Name": "react-native-netinfo",
+        "License": "MIT License",
+        "License File": "https://github.com/react-native-netinfo/react-native-netinfo/blob/master/LICENSE",
+        "Version Number": "11.1.0",
+        "Owner" : "Matt Oakes <hello@mattoakes.net>"
+        "Upstream URL": "https://github.com/react-native-netinfo/react-native-netinfo",
+        "Description": "React Native Network Info API for Android, iOS, macOS, Windows & Web. It allows you to get information on:Connection type，Connection quality"
+    }
+]
