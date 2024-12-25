@@ -110,7 +110,7 @@ getConstants(): Object {
 
   async downloadAndInstallApk(options: { url: string; target: string; hash: string }): Promise<void> {
     logger.debug(TAG, `,call downloadAndInstallApk`);
-    return UpdateModuleImpl.downloadAndInstallApk(this.context, options);
+    return UpdateModuleImpl.downloadAndInstallApk(this.mUiCtx, options);
   }
 
   addListener(eventName: string): void {

@@ -32,26 +32,9 @@ export class UpdateModuleImpl {
   }
 
   static async downloadAndInstallApk(
-    updateContext: UpdateContext,
+    context: common.UIAbilityContext,
     options: { url: string; hash: string; target: string }
   ): Promise<void> {
-    try {
-      await updateContext.downloadFile(options.url, options.hash, options.target, {
-        onDownloadCompleted: async (params: DownloadTaskParams) => {
-          this.jumpToHWMarket();
-          return Promise.resolve();
-        },
-        onDownloadFailed: (error: Error) => {
-          return Promise.reject(error);
-        }
-      });
-    } catch (error) {
-      logger.error(TAG, `downloadAndInstallApk failed: ${error}`);
-      throw error;
-    }
-  }
-
-  async jumpToHWMarket(): Promise<void> {
     try {
       const want = {
         action: 'action.system.home',
@@ -60,7 +43,6 @@ export class UpdateModuleImpl {
         }
       };
 
-      const context = getContext(this) as common.UIAbilityContext;
       if (!context) {
         throw new Error('获取context失败');
       }
@@ -71,7 +53,6 @@ export class UpdateModuleImpl {
       throw error;
     }
   }
-
 
   static async downloadPatchFromPackage(
     updateContext: UpdateContext,
