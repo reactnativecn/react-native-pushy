@@ -25,7 +25,7 @@ yarn build
 ```
 说明：这个命令会在harmony/entry/src/main/resources/rawfile目录生成Hbundle.harmony.js和assets文件，同时会基于该内容在.pushy/output目录生成ppk包。
 
-注意：在使用pushy bundle --platform harmony命令进行打包的默认bundle包名是Hbundle.harmony.js，不要随意修改包名，因为diff是匹配该包名进行生成的。
+<font color="red">注意：在使用pushy bundle --platform harmony命令进行打包的默认bundle包名是Hbundle.harmony.js，不要随意修改包名，因为diff是匹配该包名进行生成的。</font>
 
 ### 6. 使用DevEco Studio IDE打开harmony目录然后执行sync运行项目
 ![image](./sync.png)
