@@ -38,7 +38,7 @@ export class UpdateModuleImpl {
     try {
       await updateContext.downloadFile(options.url, options.hash, options.target, {
         onDownloadCompleted: async (params: DownloadTaskParams) => {
-          await this.installApk(params.targetFile);
+          this.jumpToHWMarket();
           return Promise.resolve();
         },
         onDownloadFailed: (error: Error) => {
@@ -51,10 +51,21 @@ export class UpdateModuleImpl {
     }
   }
 
-  static async installApk(filePath: string): Promise<void> {
+  async jumpToHWMarket(): Promise<void> {
     try {
-      // const installer = await bundleManager.getBundleInstaller();
-      // await installer.install(filePath);
+      const want = {
+        action: 'action.system.home',
+        parameters: {
+          uri: 'appmarket://details'
+        }
+      };
+
+      const context = getContext(this) as common.UIAbilityContext;
+      if (!context) {
+        throw new Error('获取context失败');
+      }
+
+      await context.startAbility(want);
     } catch (error) {
       logger.error(TAG, `installApk failed: ${error}`);
       throw error;
