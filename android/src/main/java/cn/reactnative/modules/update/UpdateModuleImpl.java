@@ -1,7 +1,7 @@
 package cn.reactnative.modules.update;
 
 import android.app.Activity;
-import android.app.Application;
+import android.content.Context;
 import android.util.Log;
 import com.facebook.react.ReactApplication;
 import com.facebook.react.ReactInstanceManager;
@@ -117,8 +117,7 @@ public class UpdateModuleImpl {
             public void run() {
                 try {
                     updateContext.switchVersion(hash);
-                    Activity activity = mContext.getCurrentActivity();
-                    Application application = activity.getApplication();
+                    final Context application = mContext.getApplicationContext();
                     ReactInstanceManager instanceManager = updateContext.getCustomReactInstanceManager();
 
                     if (instanceManager == null) {
@@ -142,7 +141,10 @@ public class UpdateModuleImpl {
                         promise.resolve(true);
                     } catch (Throwable err) {
                         promise.reject("pushy:"+err.getMessage());
-                        activity.recreate();
+                        final Activity activity = mContext.getCurrentActivity();
+                        if (activity != null) {
+                            activity.recreate();
+                        }
                     }
 
                 } catch (Throwable err) {

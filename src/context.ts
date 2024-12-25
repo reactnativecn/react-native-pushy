@@ -25,7 +25,7 @@ export const PushyContext = createContext<{
   switchVersionLater: () => Promise<void>;
   markSuccess: () => void;
   dismissError: () => void;
-  downloadUpdate: () => Promise<void>;
+  downloadUpdate: () => Promise<boolean | void>;
   downloadAndInstallApk: (url: string) => Promise<void>;
   getCurrentVersionInfo: () => Promise<{
     name?: string;

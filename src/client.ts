@@ -1,5 +1,5 @@
 import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
-import { joinUrls, log, testUrls } from './utils';
+import { emptyObj, joinUrls, log, noop, promiseAny, testUrls } from './utils';
 import { EmitterSubscription, Platform } from 'react-native';
 import { PermissionsAndroid } from './permissions';
 import {
@@ -24,9 +24,6 @@ const defaultServer = {
   ],
 };
 
-const empty = {};
-const noop = () => {};
-
 if (Platform.OS === 'web') {
   console.warn('react-native-update 不支持 web 端热更，不会执行操作');
 }
@@ -46,11 +43,13 @@ export class Pushy {
   lastChecking?: number;
   lastRespJson?: Promise<any>;
 
-  progressHandlers: Record<string, EmitterSubscription> = {};
-  downloadedHash?: string;
+  static progressHandlers: Record<string, EmitterSubscription> = {};
+  static downloadedHash?: string;
 
-  marked = false;
-  applyingUpdate = false;
+  static apkStatus: 'downloading' | 'downloaded' | null = null;
+
+  static marked = false;
+  static applyingUpdate = false;
   version = cInfo.pushy;
   loggerPromise = (() => {
     let resolve: (value?: unknown) => void = () => {};
@@ -124,21 +123,21 @@ export class Pushy {
   getCheckUrl = (endpoint: string = this.options.server!.main) => {
     return `${endpoint}/checkUpdate/${this.options.appKey}`;
   };
-  assertHash = (hash: string) => {
-    if (!this.downloadedHash) {
+  static assertHash = (hash: string) => {
+    if (!Pushy.downloadedHash) {
       return;
     }
-    if (hash !== this.downloadedHash) {
-      log(`use downloaded hash ${this.downloadedHash} first`);
+    if (hash !== Pushy.downloadedHash) {
+      log(`use downloaded hash ${Pushy.downloadedHash} first`);
       return;
     }
     return true;
   };
   markSuccess = () => {
-    if (this.marked || __DEV__ || !isFirstTime) {
+    if (Pushy.marked || __DEV__ || !isFirstTime) {
       return;
     }
-    this.marked = true;
+    Pushy.marked = true;
     PushyModule.markSuccess();
     this.report({ type: 'markSuccess' });
   };
@@ -149,9 +148,9 @@ export class Pushy {
       );
       return;
     }
-    if (this.assertHash(hash) && !this.applyingUpdate) {
+    if (Pushy.assertHash(hash) && !Pushy.applyingUpdate) {
       log('switchVersion: ' + hash);
-      this.applyingUpdate = true;
+      Pushy.applyingUpdate = true;
       return PushyModule.reloadUpdate({ hash });
     }
   };
@@ -163,7 +162,7 @@ export class Pushy {
       );
       return;
     }
-    if (this.assertHash(hash)) {
+    if (Pushy.assertHash(hash)) {
       log('switchVersionLater: ' + hash);
       return PushyModule.setNeedUpdate({ hash });
     }
@@ -230,7 +229,7 @@ export class Pushy {
       const backupEndpoints = await this.getBackupEndpoints();
       if (backupEndpoints) {
         try {
-          resp = await Promise.race(
+          resp = await promiseAny(
             backupEndpoints.map(endpoint =>
               fetch(this.getCheckUrl(endpoint), fetchPayload),
             ),
@@ -248,7 +247,7 @@ export class Pushy {
         message: 'Can not connect to update server. Please check your network.',
       });
       this.throwIfEnabled(new Error('errorChecking'));
-      return this.lastRespJson ? await this.lastRespJson : empty;
+      return this.lastRespJson ? await this.lastRespJson : emptyObj;
     }
     this.lastRespJson = resp.json();
 
@@ -273,7 +272,7 @@ export class Pushy {
     }
     if (server.queryUrls) {
       try {
-        const resp = await Promise.race(
+        const resp = await promiseAny(
           server.queryUrls.map(queryUrl => fetch(queryUrl)),
         );
         const remoteEndpoints = await resp.json();
@@ -317,15 +316,15 @@ export class Pushy {
       log(`rolledback hash ${rolledBackVersion}, ignored`);
       return;
     }
-    if (this.downloadedHash === hash) {
-      log(`duplicated downloaded hash ${this.downloadedHash}, ignored`);
-      return this.downloadedHash;
+    if (Pushy.downloadedHash === hash) {
+      log(`duplicated downloaded hash ${Pushy.downloadedHash}, ignored`);
+      return Pushy.downloadedHash;
     }
-    if (this.progressHandlers[hash]) {
+    if (Pushy.progressHandlers[hash]) {
       return;
     }
     if (onDownloadProgress) {
-      this.progressHandlers[hash] = pushyNativeEventEmitter.addListener(
+      Pushy.progressHandlers[hash] = pushyNativeEventEmitter.addListener(
         'RCTPushyDownloadProgress',
         progressData => {
           if (progressData.hash === hash) {
@@ -392,9 +391,9 @@ export class Pushy {
         }
       }
     }
-    if (this.progressHandlers[hash]) {
-      this.progressHandlers[hash].remove();
-      delete this.progressHandlers[hash];
+    if (Pushy.progressHandlers[hash]) {
+      Pushy.progressHandlers[hash].remove();
+      delete Pushy.progressHandlers[hash];
     }
     if (__DEV__) {
       return hash;
@@ -420,7 +419,7 @@ export class Pushy {
       description,
       metaInfo,
     });
-    this.downloadedHash = hash;
+    Pushy.downloadedHash = hash;
     return hash;
   };
   downloadAndInstallApk = async (
@@ -430,7 +429,14 @@ export class Pushy {
     if (Platform.OS !== 'android') {
       return;
     }
-    this.report({ type: 'downloadingApk' });
+    if (Pushy.apkStatus === 'downloading') {
+      return;
+    }
+    if (Pushy.apkStatus === 'downloaded') {
+      this.report({ type: 'errorInstallApk' });
+      this.throwIfEnabled(new Error('errorInstallApk'));
+      return;
+    }
     if (Platform.Version <= 23) {
       try {
         const granted = await PermissionsAndroid.request(
@@ -447,12 +453,14 @@ export class Pushy {
         return;
       }
     }
+    Pushy.apkStatus = 'downloading';
+    this.report({ type: 'downloadingApk' });
     const progressKey = 'downloadingApk';
     if (onDownloadProgress) {
-      if (this.progressHandlers[progressKey]) {
-        this.progressHandlers[progressKey].remove();
+      if (Pushy.progressHandlers[progressKey]) {
+        Pushy.progressHandlers[progressKey].remove();
       }
-      this.progressHandlers[progressKey] = pushyNativeEventEmitter.addListener(
+      Pushy.progressHandlers[progressKey] = pushyNativeEventEmitter.addListener(
         'RCTPushyDownloadProgress',
         (progressData: ProgressData) => {
           if (progressData.hash === progressKey) {
@@ -466,12 +474,14 @@ export class Pushy {
       target: 'update.apk',
       hash: progressKey,
     }).catch(() => {
+      Pushy.apkStatus = null;
       this.report({ type: 'errorDownloadAndInstallApk' });
       this.throwIfEnabled(new Error('errorDownloadAndInstallApk'));
     });
-    if (this.progressHandlers[progressKey]) {
-      this.progressHandlers[progressKey].remove();
-      delete this.progressHandlers[progressKey];
+    Pushy.apkStatus = 'downloaded';
+    if (Pushy.progressHandlers[progressKey]) {
+      Pushy.progressHandlers[progressKey].remove();
+      delete Pushy.progressHandlers[progressKey];
     }
   };
 }
