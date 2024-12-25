@@ -109,12 +109,10 @@ export class UpdateModuleImpl {
 
     try {
       await updateContext.switchVersion(hash);
-      // 鸿蒙系统重新加载bundle的逻辑
       const bundleInfo = await bundleManager.getBundleInfoForSelf(
         bundleManager.BundleFlag.GET_BUNDLE_INFO_WITH_REQUESTED_PERMISSION
       );
       await context.terminateSelf();
-      // 重启应用
       const want = {
         bundleName: bundleInfo.name,
         abilityName: context.abilityInfo?.name

@@ -91,7 +91,6 @@ export class DownloadTask {
       let received = 0;
       const data = response.result as ArrayBuffer;
       const chunks = Math.ceil(data.byteLength / this.DOWNLOAD_CHUNK_SIZE);
-      console.log('开始写入文件，总大小:', data.byteLength);
       for (let i = 0; i < chunks; i++) {
         const start = i * this.DOWNLOAD_CHUNK_SIZE;
         const end = Math.min(start + this.DOWNLOAD_CHUNK_SIZE, data.byteLength);
@@ -173,7 +172,6 @@ export class DownloadTask {
     await this.removeDirectory(params.unzipDirectory);
     await fileIo.mkdir(params.unzipDirectory);
 
-    // 解压文件
     try {
       await zip.decompressFile(params.targetFile, params.unzipDirectory);
     } catch (error) {
@@ -392,10 +390,8 @@ export class DownloadTask {
     copyList: Map<string, Array<string>>,
   ): Promise<void> {
     try {
-      // 获取应用资源路径
       const bundlePath = this.context.bundleCodeDir;
 
-      // 遍历资源包中的文件
       const files = await fileIo.listFile(bundlePath);
       for (const file of files) {
         if (file === '.' || file === '..') continue;
@@ -408,10 +404,8 @@ export class DownloadTask {
             console.info(`Copying from resource ${file} to ${target}`);
 
             if (lastTarget) {
-              // 如果已经复制过一次，直接从上一个目标复制
               await this.copyFile(lastTarget, target);
             } else {
-              // 第一次复制，从资源文件复制
               const sourcePath = `${bundlePath}/${file}`;
               await this.copyFile(sourcePath, target);
               lastTarget = target;
