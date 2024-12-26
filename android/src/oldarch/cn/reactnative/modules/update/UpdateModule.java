@@ -9,6 +9,7 @@ import android.util.Log;
 
 import com.facebook.react.ReactApplication;
 import com.facebook.react.ReactInstanceManager;
+import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContext;
@@ -19,6 +20,7 @@ import com.facebook.react.bridge.UiThreadUtil;
 import com.facebook.react.bridge.JSBundleLoader;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
+import com.jakewharton.processphoenix.ProcessPhoenix;
 
 import java.io.File;
 import java.lang.reflect.Field;
@@ -30,6 +32,7 @@ import static androidx.core.content.FileProvider.getUriForFile;
 public class UpdateModule extends ReactContextBaseJavaModule {
     UpdateContext updateContext;
     public static ReactApplicationContext mContext;
+    private LifecycleEventListener mLifecycleEventListener = null;
 
     public UpdateModule(ReactApplicationContext reactContext, UpdateContext updateContext) {
         super(reactContext);
@@ -167,6 +170,20 @@ public class UpdateModule extends ReactContextBaseJavaModule {
         });
     }
 
+    private void loadBundleLegacy() {
+        final Activity currentActivity = getCurrentActivity();
+        if (currentActivity == null) {
+            return;
+        }
+
+        currentActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                currentActivity.recreate();
+            }
+        });
+    }
+
     @ReactMethod
     public void reloadUpdate(ReadableMap options, final Promise promise) {
         final String hash = options.getString("hash");
@@ -194,21 +211,14 @@ public class UpdateModule extends ReactContextBaseJavaModule {
                         jsBundleField.setAccessible(true);
                         jsBundleField.set(instanceManager, UpdateContext.getBundleUrl(application));
                     }
-
-                    try {
-                        instanceManager.recreateReactContextInBackground();
-                        promise.resolve(null);
-                    } catch (Throwable err) {
-                        final Activity activity = getCurrentActivity();
-                        if (activity != null) {
-                            activity.recreate();
-                        }
-                        promise.reject(err);
-                    }
+                    
+                    instanceManager.recreateReactContextInBackground();
+                    promise.resolve(true);
 
                 } catch (Throwable err) {
                     promise.reject(err);
-                    Log.e("pushy", "switchVersion failed", err);
+                    Log.e("pushy", "switchVersion failed ", err);
+                    loadBundleLegacy();
                 }
             }
         });

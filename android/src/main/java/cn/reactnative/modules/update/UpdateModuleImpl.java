@@ -105,6 +105,20 @@ public class UpdateModuleImpl {
         }
     }
 
+    private void loadBundleLegacy() {
+        final Activity currentActivity = getCurrentActivity();
+        if (currentActivity == null) {
+            return;
+        }
+
+        currentActivity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                currentActivity.recreate();
+            }
+        });
+    }
+
     public static void reloadUpdate(UpdateContext updateContext, ReactApplicationContext mContext, ReadableMap options,Promise promise) {
         final String hash = options.getString("hash");
 
@@ -136,20 +150,13 @@ public class UpdateModuleImpl {
                         jsBundleField.set(instanceManager, UpdateContext.getBundleUrl(application));
                     }
 
-                    try {
-                        instanceManager.recreateReactContextInBackground();
-                        promise.resolve(true);
-                    } catch (Throwable err) {
-                        promise.reject("pushy:"+err.getMessage());
-                        final Activity activity = mContext.getCurrentActivity();
-                        if (activity != null) {
-                            activity.recreate();
-                        }
-                    }
+                    instanceManager.recreateReactContextInBackground();
+                    promise.resolve(true);
 
                 } catch (Throwable err) {
-                    promise.reject("pushy:switchVersion failed"+err.getMessage());
-                    Log.e("pushy", "switchVersion failed", err);
+                    promise.reject(err);
+                    Log.e("pushy", "switchVersion failed ", err);
+                    loadBundleLegacy();
                 }
             }
         });
