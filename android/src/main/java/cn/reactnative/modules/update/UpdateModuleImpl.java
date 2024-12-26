@@ -106,7 +106,7 @@ public class UpdateModuleImpl {
     }
 
     private void loadBundleLegacy() {
-        final Activity currentActivity = getCurrentActivity();
+        final Activity currentActivity = mContext.getCurrentActivity();
         if (currentActivity == null) {
             return;
         }
