@@ -171,7 +171,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     }
 
     private void loadBundleLegacy() {
-        final Activity currentActivity = getCurrentActivity();
+        final Activity currentActivity = mContext.getCurrentActivity();
         if (currentActivity == null) {
             return;
         }
