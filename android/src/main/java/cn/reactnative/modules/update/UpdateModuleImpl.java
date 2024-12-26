@@ -101,25 +101,11 @@ public class UpdateModuleImpl {
                 }
             });
         }catch (Exception e){
-            promise.reject("执行报错:"+e.getMessage());
+            promise.reject("执行报错:" + e.getMessage());
         }
     }
 
-    private void loadBundleLegacy(ReactApplicationContext mContext) {
-        final Activity currentActivity = mContext.getCurrentActivity();
-        if (currentActivity == null) {
-            return;
-        }
-
-        currentActivity.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                currentActivity.recreate();
-            }
-        });
-    }
-
-    public static void reloadUpdate(UpdateContext updateContext, ReactApplicationContext mContext, ReadableMap options,Promise promise) {
+    public static void reloadUpdate(UpdateContext updateContext, ReactApplicationContext mContext, ReadableMap options, Promise promise) {
         final String hash = options.getString("hash");
 
         if (hash == null || hash.isEmpty()) {
@@ -156,7 +142,17 @@ public class UpdateModuleImpl {
                 } catch (Throwable err) {
                     promise.reject(err);
                     Log.e("pushy", "switchVersion failed ", err);
-                    loadBundleLegacy(mContext);
+                    final Activity currentActivity = mContext.getCurrentActivity();
+                    if (currentActivity == null) {
+                        return;
+                    }
+
+                    currentActivity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            currentActivity.recreate();
+                        }
+                    });
                 }
             }
         });
