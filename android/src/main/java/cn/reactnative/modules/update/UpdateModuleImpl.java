@@ -105,7 +105,7 @@ public class UpdateModuleImpl {
         }
     }
 
-    private void loadBundleLegacy() {
+    private void loadBundleLegacy(ReactApplicationContext mContext) {
         final Activity currentActivity = mContext.getCurrentActivity();
         if (currentActivity == null) {
             return;
@@ -122,7 +122,7 @@ public class UpdateModuleImpl {
     public static void reloadUpdate(UpdateContext updateContext, ReactApplicationContext mContext, ReadableMap options,Promise promise) {
         final String hash = options.getString("hash");
 
-        if(hash==null || hash.isEmpty()){
+        if (hash == null || hash.isEmpty()) {
             promise.reject("hash不能为空");
             return;
         }
@@ -156,7 +156,7 @@ public class UpdateModuleImpl {
                 } catch (Throwable err) {
                     promise.reject(err);
                     Log.e("pushy", "switchVersion failed ", err);
-                    loadBundleLegacy();
+                    loadBundleLegacy(mContext);
                 }
             }
         });
@@ -182,7 +182,7 @@ public class UpdateModuleImpl {
                     }
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e){
             promise.reject("执行报错:"+e.getMessage());
         }
     }
@@ -196,7 +196,7 @@ public class UpdateModuleImpl {
                     promise.resolve(true);
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e){
             promise.reject("执行报错:"+e.getMessage());
         }
     }
@@ -210,7 +210,7 @@ public class UpdateModuleImpl {
                     promise.resolve(true);
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e){
             promise.reject("执行报错:"+e.getMessage());
         }
 
@@ -246,9 +246,9 @@ public class UpdateModuleImpl {
 
     public static void getLocalHashInfo(UpdateContext updateContext, final String hash, Promise promise) {
         String value = updateContext.getKv("hash_" + hash);
-        if(check(value)){
+        if (check(value)) {
             promise.resolve(value);
-        }else {
+        } else {
             promise.reject("校验报错:json字符串格式错误");
         }
 

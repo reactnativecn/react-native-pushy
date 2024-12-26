@@ -9,7 +9,7 @@ import android.util.Log;
 
 import com.facebook.react.ReactApplication;
 import com.facebook.react.ReactInstanceManager;
-import com.facebook.react.bridge.LifecycleEventListener;
+// import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContext;
@@ -32,7 +32,7 @@ import static androidx.core.content.FileProvider.getUriForFile;
 public class UpdateModule extends ReactContextBaseJavaModule {
     UpdateContext updateContext;
     public static ReactApplicationContext mContext;
-    private LifecycleEventListener mLifecycleEventListener = null;
+    // private LifecycleEventListener mLifecycleEventListener = null;
 
     public UpdateModule(ReactApplicationContext reactContext, UpdateContext updateContext) {
         super(reactContext);
@@ -171,7 +171,7 @@ public class UpdateModule extends ReactContextBaseJavaModule {
     }
 
     private void loadBundleLegacy() {
-        final Activity currentActivity = mContext.getCurrentActivity();
+        final Activity currentActivity = getCurrentActivity();
         if (currentActivity == null) {
             return;
         }
