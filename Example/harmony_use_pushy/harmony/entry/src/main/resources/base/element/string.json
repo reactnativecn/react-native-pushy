@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "Access_location",
+      "value": "access location"
+    },
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "description"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "label"
+    },
+    {
+      "name": "reason_write_media",
+      "value": "Write files to internal storage"
+    },
+    {
+      "name": "reason_read_media",
+      "value": "Read files to internal storage"
+    }
+  ]
+}

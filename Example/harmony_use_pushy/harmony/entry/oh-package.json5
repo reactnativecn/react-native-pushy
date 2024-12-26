@@ -1,0 +1,13 @@
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "Please describe the basic information.",
+  "main": "",
+  "author": "",
+  "license": "",
+  "dependencies": {
+    "rnoh": "file:../../libs/rnoh",
+    "pushy": "file:../../node_modules/react-native-update/harmony"
+  }
+}
+
