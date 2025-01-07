@@ -1,6 +1,7 @@
 import { hapTasks } from '@ohos/hvigor-ohos-plugin';
 import fs from 'fs';
 import path from 'path';
+
 export function generatePushyBuildTime(str?: string) {
     return {
         pluginId: 'PushyBuildTimePlugin',
@@ -13,11 +14,22 @@ export function generatePushyBuildTime(str?: string) {
                     if (!fs.existsSync(dirPath)) {
                         fs.mkdirSync(dirPath, { recursive: true });
                     }
+                    const moduleJsonPath = path.resolve(__dirname, './oh-package.json5');
+                    let versionName = '';
+                    if (fs.existsSync(moduleJsonPath)) {
+                        const moduleContent = fs.readFileSync(moduleJsonPath, 'utf-8');
+                        const versionMatch = moduleContent.match(/"version":\s*"([^"]+)"/);
+                        if (versionMatch && versionMatch[1]) {
+                            versionName = versionMatch[1];
+                        }
+                    }
                     const buildTime = new Date().toISOString();
-                    const metaContent = { pushy_build_time : buildTime };
+                    const metaContent = { 
+                        pushy_build_time: buildTime,
+                        versionName: versionName 
+                    };
                     fs.writeFileSync(metaFilePath, JSON.stringify(metaContent, null, 4));
                     console.log(`Build time written to ${metaFilePath}`);
-
                 },
                 dependencies: [],
                 postDependencies: ['default@BuildJS']
