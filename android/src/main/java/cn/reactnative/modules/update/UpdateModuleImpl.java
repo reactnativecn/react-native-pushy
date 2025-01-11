@@ -3,7 +3,10 @@ package cn.reactnative.modules.update;
 import android.app.Activity;
 import android.content.Context;
 import android.util.Log;
+
+import com.facebook.react.ReactActivity;
 import com.facebook.react.ReactApplication;
+import com.facebook.react.ReactDelegate;
 import com.facebook.react.ReactInstanceManager;
 import com.facebook.react.bridge.JSBundleLoader;
 import com.facebook.react.bridge.Promise;
@@ -12,16 +15,10 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.UiThreadUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.json.JSONObject;
-
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class UpdateModuleImpl {
 
@@ -146,13 +143,17 @@ public class UpdateModuleImpl {
                     if (currentActivity == null) {
                         return;
                     }
-
-                    currentActivity.runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            currentActivity.recreate();
-                        }
-                    });
+                    try {
+                        final ReactDelegate reactDelegate = ((ReactActivity) currentActivity).getReactDelegate();
+                        reactDelegate.reload();
+                    } catch (Throwable e) {
+                        currentActivity.runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                currentActivity.recreate();
+                            }
+                        });
+                    }
                 }
             }
         });
