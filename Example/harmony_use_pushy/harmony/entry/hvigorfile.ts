@@ -14,11 +14,11 @@ export function generatePushyBuildTime(str?: string) {
                     if (!fs.existsSync(dirPath)) {
                         fs.mkdirSync(dirPath, { recursive: true });
                     }
-                    const moduleJsonPath = path.resolve(__dirname, './oh-package.json5');
+                    const moduleJsonPath = path.resolve(__dirname, '../AppScope/app.json5');
                     let versionName = '';
                     if (fs.existsSync(moduleJsonPath)) {
                         const moduleContent = fs.readFileSync(moduleJsonPath, 'utf-8');
-                        const versionMatch = moduleContent.match(/"version":\s*"([^"]+)"/);
+                        const versionMatch = moduleContent.match(/"versionName":\s*"([^"]+)"/);
                         if (versionMatch && versionMatch[1]) {
                             versionName = versionMatch[1];
                         }
