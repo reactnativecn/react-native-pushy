@@ -2,6 +2,8 @@
 
 本组件是面向 React Native 提供热更新功能的组件，详情请访问我们的官方网站 <https://pushy.reactnative.cn>。
 
+**现已支持鸿蒙以及新架构**
+
 ### 快速开始
 
 请查看[文档](https://pushy.reactnative.cn/docs/getting-started.html)
