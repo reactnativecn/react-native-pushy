@@ -150,14 +150,17 @@ public class UpdateModuleImpl {
                         if (getReactDelegateMethod != null) {
                             ReactDelegate reactDelegate = (ReactDelegate) 
                                 getReactDelegateMethod.invoke(currentActivity);
-                            reactDelegate.reload();
+                            
+                            // Try to get reload method using reflection
+                            java.lang.reflect.Method reloadMethod = 
+                                ReactDelegate.class.getMethod("reload");
+                            if (reloadMethod != null) {
+                                reloadMethod.invoke(reactDelegate);
+                            } else {
+                                throw new NoSuchMethodException();
+                            }
                         } else {
-                            currentActivity.runOnUiThread(new Runnable() {
-                                @Override
-                                public void run() {
-                                    currentActivity.recreate();
-                                }
-                            });
+                            throw new NoSuchMethodException();
                         }
                     } catch (Throwable e) {
                         currentActivity.runOnUiThread(new Runnable() {
