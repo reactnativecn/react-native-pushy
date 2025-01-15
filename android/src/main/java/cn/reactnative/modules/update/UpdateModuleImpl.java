@@ -144,8 +144,21 @@ public class UpdateModuleImpl {
                         return;
                     }
                     try {
-                        final ReactDelegate reactDelegate = ((ReactActivity) currentActivity).getReactDelegate();
-                        reactDelegate.reload();
+                        // Try to get getReactDelegate method using reflection
+                        java.lang.reflect.Method getReactDelegateMethod = 
+                            ReactActivity.class.getMethod("getReactDelegate");
+                        if (getReactDelegateMethod != null) {
+                            ReactDelegate reactDelegate = (ReactDelegate) 
+                                getReactDelegateMethod.invoke(currentActivity);
+                            reactDelegate.reload();
+                        } else {
+                            currentActivity.runOnUiThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    currentActivity.recreate();
+                                }
+                            });
+                        }
                     } catch (Throwable e) {
                         currentActivity.runOnUiThread(new Runnable() {
                             @Override
