@@ -205,9 +205,10 @@ export class Pushy {
       // @ts-ignore
       delete fetchBody.buildTime;
     }
-    let body = JSON.stringify(fetchBody);
-    if (Platform.OS === 'harmony') {
-      body = fetchBody;
+    // harmony fetch body is not string
+    let body: any = fetchBody;
+    if (Platform.OS === 'ios' || Platform.OS === 'android') {
+      body = JSON.stringify(fetchBody);
     }
     const fetchPayload = {
       method: 'POST',
