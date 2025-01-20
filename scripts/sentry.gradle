@@ -1,0 +1,45 @@
+def reactNativeRoot = rootProject.projectDir.parentFile
+
+android.applicationVariants.all { variant ->
+    if (variant.buildType.name == 'release') {
+        def variantName = variant.name.capitalize()
+        def bundleTask = tasks.findByName("createBundle${variantName}JsAndAssets")
+        
+        if (bundleTask != null) {
+            def copyAssetsTaskName = "copy${variantName}AssetsToRoot"
+            
+            tasks.create(name: copyAssetsTaskName, type: Copy) {
+                description = "将生成的 assets 和 bundle 文件拷贝到 RN 项目根目录"
+                group = 'Assets'
+                
+                dependsOn bundleTask
+                
+                doFirst {
+                    def assetsDir = new File("${reactNativeRoot}/.pushy/intermedia/android")
+                    
+                    if (!assetsDir.exists()) {
+                        def created = assetsDir.mkdirs()
+                    }
+                }
+                
+                from("${buildDir}/generated/assets/createBundleReleaseJsAndAssets") {
+                    include "index.android.bundle"
+                    rename "index.android.bundle", "index.bundlejs"
+                }
+                
+                from("${buildDir}/generated/res/createBundleReleaseJsAndAssets") {
+                    include "drawable*/**"
+                    include "raw/**"
+                }
+                
+                into "${reactNativeRoot}/.pushy/intermedia/android"
+                
+                doLast {
+                    println "资源文件拷贝完成，目标目录: ${reactNativeRoot}/assets"
+                }
+            }
+            
+             bundleTask.finalizedBy tasks.named(copyAssetsTaskName)
+        }
+    }
+}
