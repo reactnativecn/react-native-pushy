@@ -1,5 +1,5 @@
 {
-  "lockfileVersion": 0,
+  "lockfileVersion": 1,
   "workspaces": {
     "": {
       "dependencies": {
@@ -11,7 +11,7 @@
         "react-native-camera-kit": "^14.1.0",
         "react-native-paper": "^5.13.1",
         "react-native-safe-area-context": "^5.1.0",
-        "react-native-update": "^10.21.1",
+        "react-native-update": "^10.22.0",
         "react-native-vector-icons": "^10.2.0",
       },
       "devDependencies": {
@@ -1409,7 +1409,7 @@
 
     "react-native-safe-area-context": ["react-native-safe-area-context@5.1.0", "", { "peerDependencies": { "react": "*", "react-native": "*" } }, "sha512-Y4vyJX+0HPJUQNVeIJTj2/UOjbSJcB09OEwirAWDrOZ67Lz5p43AmjxSy8nnZft1rMzoh3rcPuonB6jJyHTfCw=="],
 
-    "react-native-update": ["react-native-update@10.21.1", "http://bnpm.byted.org/react-native-update/-/react-native-update-10.21.1.tgz", { "dependencies": { "nanoid": "^3.3.3", "react-native-url-polyfill": "^2.0.0" }, "peerDependencies": { "react": ">=16.8.0", "react-native": ">=0.59.0" } }, "sha512-rS0RxbrJkT29Q/vCQTc8SCMrjWEU+ltMHO+KsHsjy2qSECt/fZzF/kc2e01jdcukTFUtSedFnnKv3a5sWWemTg=="],
+    "react-native-update": ["react-native-update@10.22.0", "", { "dependencies": { "nanoid": "^3.3.3", "react-native-url-polyfill": "^2.0.0" }, "peerDependencies": { "react": ">=16.8.0", "react-native": ">=0.59.0" } }, "sha512-RP49tCaMSb7+H1zhpzd8RWiCcG5Opc5jklAB2T67SKVoiGYF4AH+/xdPlpOmuNHfUm97rJG945UPb/GcVT7/nA=="],
 
     "react-native-url-polyfill": ["react-native-url-polyfill@2.0.0", "", { "dependencies": { "whatwg-url-without-unicode": "8.0.0-3" }, "peerDependencies": { "react-native": "*" } }, "sha512-My330Do7/DvKnEvwQc0WdcBnFPploYKp9CYlefDXzIdEaA+PAhDYllkvGeEroEzvc4Kzzj2O4yVdz8v6fjRvhA=="],
 
