@@ -4,9 +4,7 @@ const {
   version: v,
 } = require('react-native/Libraries/Core/ReactNativeVersion');
 const RNVersion = `${v.major}.${v.minor}.${v.patch}`;
-const isTurboModuleEnabled =
-  // @ts-expect-error
-  global.__turboModuleProxy != null;
+const isTurboModuleEnabled = (global as any).__turboModuleProxy != null;
 
 export const PushyModule =
   Platform.OS === 'web'
@@ -16,26 +14,26 @@ export const PushyModule =
     : NativeModules.Pushy;
 
 if (!PushyModule) {
-  throw new Error('react-native-update模块无法加载，请对照安装文档检查配置。');
+  throw new Error('react-native-update 模块无法加载，请对照安装文档检查配置。');
 }
 
 const PushyConstants = isTurboModuleEnabled
   ? PushyModule.getConstants()
   : PushyModule;
 
-export const downloadRootDir = PushyConstants.downloadRootDir;
-export const packageVersion = PushyConstants.packageVersion;
-export const currentVersion = PushyConstants.currentVersion;
-export const isFirstTime = PushyConstants.isFirstTime;
-export const rolledBackVersion = PushyConstants.rolledBackVersion;
-export const isRolledBack = typeof rolledBackVersion === 'string';
+export const downloadRootDir: string = PushyConstants.downloadRootDir;
+export const packageVersion: string = PushyConstants.packageVersion;
+export const currentVersion: string = PushyConstants.currentVersion;
+export const isFirstTime: boolean = PushyConstants.isFirstTime;
+export const rolledBackVersion: string = PushyConstants.rolledBackVersion;
+export const isRolledBack: boolean = typeof rolledBackVersion === 'string';
 
-export const buildTime = PushyConstants.buildTime;
+export const buildTime: string = PushyConstants.buildTime;
 let uuid = PushyConstants.uuid;
 
 if (Platform.OS === 'android' && !PushyConstants.isUsingBundleUrl) {
   throw new Error(
-    'react-native-update模块无法加载，请对照文档检查Bundle URL的配置',
+    'react-native-update 模块无法加载，请对照文档检查 Bundle URL 的配置',
   );
 }
 

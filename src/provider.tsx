@@ -13,14 +13,12 @@ import {
   Linking,
 } from 'react-native';
 import { Pushy } from './client';
-import {
-  currentVersion,
-  isFirstTime,
-  packageVersion,
-  getCurrentVersionInfo,
-} from './core';
-import { CheckResult, ProgressData } from './type';
+import { currentVersion, packageVersion, getCurrentVersionInfo } from './core';
+import { CheckResult, ProgressData, PushyTestPayload } from './type';
 import { PushyContext } from './context';
+import { URL } from 'react-native-url-polyfill';
+import { isInRollout } from './isInRollout';
+import { log } from './utils';
 
 export const PushyProvider = ({
   client,
@@ -37,43 +35,77 @@ export const PushyProvider = ({
   const [lastError, setLastError] = useState<Error>();
   const lastChecking = useRef(0);
 
+  const throwErrorIfEnabled = useCallback(
+    (e: Error) => {
+      if (options.throwError) {
+        throw e;
+      }
+    },
+    [options.throwError],
+  );
+
   const dismissError = useCallback(() => {
     setLastError(undefined);
   }, []);
 
-  const showAlert = useCallback(
+  const alertUpdate = useCallback(
     (...args: Parameters<typeof Alert.alert>) => {
-      if (options.useAlert) {
+      if (
+        options.updateStrategy === 'alwaysAlert' ||
+        options.updateStrategy === 'alertUpdateAndIgnoreError'
+      ) {
         Alert.alert(...args);
       }
     },
-    [options],
+    [options.updateStrategy],
   );
 
-  const switchVersion = useCallback(() => {
-    if (updateInfo && updateInfo.hash) {
-      client.switchVersion(updateInfo.hash);
-    }
-  }, [client, updateInfo]);
+  const alertError = useCallback(
+    (...args: Parameters<typeof Alert.alert>) => {
+      if (options.updateStrategy === 'alwaysAlert') {
+        Alert.alert(...args);
+      }
+    },
+    [options.updateStrategy],
+  );
 
-  const switchVersionLater = useCallback(() => {
-    if (updateInfo && updateInfo.hash) {
-      client.switchVersionLater(updateInfo.hash);
-    }
-  }, [client, updateInfo]);
+  const switchVersion = useCallback(
+    async (info: CheckResult | undefined = updateInfoRef.current) => {
+      if (info && info.hash) {
+        return client.switchVersion(info.hash);
+      }
+    },
+    [client],
+  );
+
+  const switchVersionLater = useCallback(
+    async (info: CheckResult | undefined = updateInfoRef.current) => {
+      if (info && info.hash) {
+        return client.switchVersionLater(info.hash);
+      }
+    },
+    [client],
+  );
 
   const downloadUpdate = useCallback(
     async (info: CheckResult | undefined = updateInfoRef.current) => {
       if (!info || !info.update) {
-        return;
+        return false;
       }
       try {
         const hash = await client.downloadUpdate(info, setProgress);
         if (!hash) {
-          return;
+          return false;
         }
         stateListener.current && stateListener.current.remove();
-        showAlert('提示', '下载完毕，是否立即更新?', [
+        if (options.updateStrategy === 'silentAndNow') {
+          client.switchVersion(hash);
+          return true;
+        } else if (options.updateStrategy === 'silentAndLater') {
+          client.switchVersionLater(hash);
+          return true;
+        }
+        alertUpdate('提示', '下载完毕，是否立即更新?', [
           {
             text: '下次再说',
             style: 'cancel',
@@ -89,12 +121,21 @@ export const PushyProvider = ({
             },
           },
         ]);
+        return true;
       } catch (e: any) {
         setLastError(e);
-        showAlert('更新失败', e.message);
+        alertError('更新失败', e.message);
+        throwErrorIfEnabled(e);
+        return false;
       }
     },
-    [client, showAlert],
+    [
+      client,
+      options.updateStrategy,
+      alertUpdate,
+      alertError,
+      throwErrorIfEnabled,
+    ],
   );
 
   const downloadAndInstallApk = useCallback(
@@ -106,58 +147,94 @@ export const PushyProvider = ({
     [client],
   );
 
-  const checkUpdate = useCallback(async () => {
-    const now = Date.now();
-    if (lastChecking.current && now - lastChecking.current < 1000) {
-      return;
-    }
-    lastChecking.current = now;
-    let info: CheckResult;
-    try {
-      info = await client.checkUpdate();
-    } catch (e: any) {
-      setLastError(e);
-      showAlert('更新检查失败', e.message);
-      return;
-    }
-    if (!info) {
-      return;
-    }
-    updateInfoRef.current = info;
-    setUpdateInfo(info);
-    if (info.expired) {
-      const { downloadUrl } = info;
-      if (downloadUrl) {
-        showAlert('提示', '您的应用版本已更新，点击更新下载安装新版本', [
-          {
-            text: '更新',
-            onPress: () => {
-              if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
-                downloadAndInstallApk(downloadUrl);
-              } else {
-                Linking.openURL(downloadUrl);
-              }
-            },
-          },
-        ]);
+  const checkUpdate = useCallback(
+    async ({ extra }: { extra?: Record<string, any> } | undefined = {}) => {
+      const now = Date.now();
+      if (lastChecking.current && now - lastChecking.current < 1000) {
+        return;
       }
-    } else if (info.update) {
-      showAlert(
-        '提示',
-        '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
-        [
-          { text: '取消', style: 'cancel' },
-          {
-            text: '确定',
-            style: 'default',
-            onPress: () => {
-              downloadUpdate();
+      lastChecking.current = now;
+      let info: CheckResult;
+      try {
+        info = await client.checkUpdate(extra);
+      } catch (e: any) {
+        setLastError(e);
+        alertError('更新检查失败', e.message);
+        throwErrorIfEnabled(e);
+        return;
+      }
+      if (!info) {
+        return;
+      }
+      const rollout = info.config?.rollout?.[packageVersion];
+      if (rollout) {
+        if (!isInRollout(rollout)) {
+          log(`not in ${rollout}% rollout, ignored`);
+          return;
+        }
+        log(`in ${rollout}% rollout, continue`);
+      }
+      info.description = info.description ?? '';
+      updateInfoRef.current = info;
+      setUpdateInfo(info);
+      if (info.expired) {
+        const { downloadUrl } = info;
+        if (downloadUrl) {
+          if (options.updateStrategy === 'silentAndNow') {
+            if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
+              downloadAndInstallApk(downloadUrl);
+            } else {
+              Linking.openURL(downloadUrl);
+            }
+            return;
+          }
+          alertUpdate('提示', '您的应用版本已更新，点击更新下载安装新版本', [
+            {
+              text: '更新',
+              onPress: () => {
+                if (Platform.OS === 'android' && downloadUrl.endsWith('.apk')) {
+                  downloadAndInstallApk(downloadUrl);
+                } else {
+                  Linking.openURL(downloadUrl);
+                }
+              },
             },
-          },
-        ],
-      );
-    }
-  }, [client, downloadAndInstallApk, downloadUpdate, showAlert]);
+          ]);
+        }
+      } else if (info.update) {
+        if (
+          options.updateStrategy === 'silentAndNow' ||
+          options.updateStrategy === 'silentAndLater'
+        ) {
+          downloadUpdate(info);
+          return;
+        }
+        alertUpdate(
+          '提示',
+          '检查到新的版本' + info.name + ',是否下载?\n' + info.description,
+          [
+            { text: '取消', style: 'cancel' },
+            {
+              text: '确定',
+              style: 'default',
+              onPress: () => {
+                downloadUpdate();
+              },
+            },
+          ],
+        );
+      }
+    },
+    [
+      client,
+      alertError,
+      throwErrorIfEnabled,
+      options.updateStrategy,
+      alertUpdate,
+      downloadAndInstallApk,
+      downloadUpdate,
+    ],
+  );
 
   const markSuccess = client.markSuccess;
 
@@ -168,11 +245,11 @@ export const PushyProvider = ({
       );
       return;
     }
-    const { strategy, dismissErrorAfter, autoMarkSuccess } = options;
-    if (isFirstTime && autoMarkSuccess) {
+    const { checkStrategy, dismissErrorAfter, autoMarkSuccess } = options;
+    if (autoMarkSuccess) {
       markSuccess();
     }
-    if (strategy === 'both' || strategy === 'onAppResume') {
+    if (checkStrategy === 'both' || checkStrategy === 'onAppResume') {
       stateListener.current = AppState.addEventListener(
         'change',
         nextAppState => {
@@ -182,7 +259,7 @@ export const PushyProvider = ({
         },
       );
     }
-    if (strategy === 'both' || strategy === 'onAppStart') {
+    if (checkStrategy === 'both' || checkStrategy === 'onAppStart') {
       checkUpdate();
     }
     let dismissErrorTimer: ReturnType<typeof setTimeout>;
@@ -196,6 +273,66 @@ export const PushyProvider = ({
       clearTimeout(dismissErrorTimer);
     };
   }, [checkUpdate, options, dismissError, markSuccess]);
+
+  const parseTestPayload = useCallback(
+    (payload: PushyTestPayload) => {
+      if (payload && payload.type && payload.type.startsWith('__rnPushy')) {
+        const logger = options.logger || (() => {});
+        options.logger = ({ type, data }) => {
+          logger({ type, data });
+          Alert.alert(type, JSON.stringify(data));
+        };
+        if (payload.type === '__rnPushyVersionHash') {
+          checkUpdate({ extra: { toHash: payload.data } }).then(() => {
+            if (updateInfoRef.current && updateInfoRef.current.upToDate) {
+              Alert.alert(
+                '提示',
+                '当前尚未检测到更新版本，如果是首次扫码，请等待服务器端生成补丁包后再试（约10秒）',
+              );
+            }
+            options.logger = logger;
+          });
+        }
+        return true;
+      }
+      return false;
+    },
+    [checkUpdate, options],
+  );
+
+  const parseTestQrCode = useCallback(
+    (code: string | PushyTestPayload) => {
+      try {
+        const payload = typeof code === 'string' ? JSON.parse(code) : code;
+        return parseTestPayload(payload);
+      } catch {
+        return false;
+      }
+    },
+    [parseTestPayload],
+  );
+
+  useEffect(() => {
+    const parseLinking = (url: string | null) => {
+      if (!url) {
+        return;
+      }
+      const params = new URL(url).searchParams;
+      const payload = {
+        type: params.get('type'),
+        data: params.get('data'),
+      };
+      parseTestPayload(payload);
+    };
+
+    Linking.getInitialURL().then(parseLinking);
+    const linkingListener = Linking.addEventListener('url', ({ url }) =>
+      parseLinking(url),
+    );
+    return () => {
+      linkingListener.remove();
+    };
+  }, [parseTestPayload]);
 
   return (
     <PushyContext.Provider
@@ -214,6 +351,7 @@ export const PushyProvider = ({
         progress,
         downloadAndInstallApk,
         getCurrentVersionInfo,
+        parseTestQrCode,
       }}>
       {children}
     </PushyContext.Provider>

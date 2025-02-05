@@ -1,4 +1,6 @@
-import React, {useState} from 'react';
+/* eslint-disable react/no-unstable-nested-components */
+/* eslint-disable react-native/no-inline-styles */
+import React, {useRef, useState} from 'react';
 import {
   StyleSheet,
   Platform,
@@ -8,7 +10,16 @@ import {
   Image,
   Switch,
 } from 'react-native';
-import {Icon, PaperProvider, Snackbar, Banner} from 'react-native-paper';
+import {
+  Icon,
+  PaperProvider,
+  Snackbar,
+  Banner,
+  Button,
+  Modal,
+  Portal,
+} from 'react-native-paper';
+import {Camera} from 'react-native-camera-kit';
 
 import TestConsole from './TestConsole';
 
@@ -26,6 +37,7 @@ function App() {
     updateInfo,
     packageVersion,
     currentHash,
+    parseTestQrCode,
     progress: {received, total} = {},
   } = usePushy();
   const [useDefaultAlert, setUseDefaultAlert] = useState(true);
@@ -34,6 +46,8 @@ function App() {
   const [showUpdateSnackbar, setShowUpdateSnackbar] = useState(false);
   const snackbarVisible =
     !useDefaultAlert && showUpdateSnackbar && updateInfo?.update;
+  const [showCamera, setShowCamera] = useState(false);
+  const lastParsedCode = useRef('');
 
   return (
     <View style={styles.container}>
@@ -47,12 +61,36 @@ function App() {
           onValueChange={v => {
             setUseDefaultAlert(v);
             client?.setOptions({
-              useAlert: v,
+              updateStrategy: v ? null : 'alwaysAlert',
             });
             setShowUpdateSnackbar(!v);
           }}
         />
       </View>
+      <Button onPress={() => setShowCamera(true)}>打开相机</Button>
+      <Portal>
+        <Modal visible={showCamera} onDismiss={() => setShowCamera(false)}>
+          <Camera
+            style={{minHeight: 320}}
+            scanBarcode={true}
+            onReadCode={({nativeEvent: {codeStringValue}}) => {
+              // 防止重复扫码
+              if (lastParsedCode.current === codeStringValue) {
+                return;
+              }
+              lastParsedCode.current = codeStringValue;
+              setTimeout(() => {
+                lastParsedCode.current = '';
+              }, 1000);
+              setShowCamera(false);
+              parseTestQrCode(codeStringValue);
+            }} // optional
+            showFrame={true} // (default false) optional, show frame with transparent layer (qr code or barcode will be read on this area ONLY), start animation for scanner, that stops when a code has been found. Frame always at center of the screen
+            laserColor="red" // (default red) optional, color of laser in scanner frame
+            frameColor="white" // (default white) optional, color of border of scanner frame
+          />
+        </Modal>
+      </Portal>
       <Image
         resizeMode={'contain'}
         source={require('./assets/shezhi.png')}
@@ -86,7 +124,10 @@ function App() {
           react-native-update版本：{client?.version}
         </Text>
       </TouchableOpacity>
-      <TestConsole visible={showTestConsole} />
+      <TestConsole
+        visible={showTestConsole}
+        onClose={() => setShowTestConsole(false)}
+      />
       {snackbarVisible && (
         <Snackbar
           visible={snackbarVisible}
@@ -153,6 +194,7 @@ const styles = StyleSheet.create({
 
 const pushyClient = new Pushy({
   appKey,
+  debug: true,
 });
 
 export default function Root() {

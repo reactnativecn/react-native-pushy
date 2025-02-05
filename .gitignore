@@ -46,3 +46,8 @@ Example/**/.pushy
 Example/testHotUpdate/artifacts
 
 yarn-error.log
+Example/testHotUpdate/.yarn
+android/bin
+Example/testHotUpdate/harmony
+Example/testHotUpdate/android/app/.cxx
+Example/harmony_use_pushy/libs

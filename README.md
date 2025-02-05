@@ -2,15 +2,17 @@
 
 本组件是面向 React Native 提供热更新功能的组件，详情请访问我们的官方网站 <https://pushy.reactnative.cn>。
 
+**现已支持鸿蒙以及新架构**
+
 ### 快速开始
 
 请查看[文档](https://pushy.reactnative.cn/docs/getting-started.html)
 
 ### 优势
 
-1. 基于阿里云高速 CDN 分发，对比其他服务器在国外的热更新服务，分发更稳定，更新成功率极高。
+1. 对中国用户使用阿里云高速 CDN 分发，对比其他服务器在国外的热更新服务，分发更稳定，更新成功率极高。对国外用户则智能分流至 cloudflare，同样享受高速更新服务。
 2. 基于 bsdiff/hdiff 算法创建的**超小更新包**，通常版本迭代后在几十 KB 级别（其他全量热更新服务所需流量通常在几十 MB 级别）。
-3. 始终跟进 RN 最新正式版本，第一时间提供支持。支持 hermes 字节码格式。支持新架构。
+3. 始终跟进 RN 最新正式版本，第一时间提供支持。支持 hermes 字节码格式。支持新架构（注：安卓 0.73.0 ~ 0.76.0 的新架构因官方 bug 不支持，0.73 以下或 0.76.1 以上的新架构可用）。
 4. 跨越多个版本进行更新时，只需要下载**一个更新包**，不需要逐版本依次更新。
 5. 命令行工具 & 网页双端管理，版本发布过程简单便捷，完全可以集成 CI。
 6. 支持崩溃回滚，安全可靠。
@@ -33,4 +35,3 @@ $ yarn start
 本组件由[React Native 中文网](https://reactnative.cn/)独家发布，如有定制需求可以[联系我们](https://reactnative.cn/about.html#content)。
 
 关于此插件发现任何问题，可以前往[Issues](https://github.com/reactnativecn/react-native-pushy/issues)发帖提问。
-

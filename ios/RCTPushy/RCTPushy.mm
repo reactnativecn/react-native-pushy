@@ -1,6 +1,10 @@
 #import "RCTPushy.h"
 #import "RCTPushyDownloader.h"
 #import "RCTPushyManager.h"
+
+#if __has_include("RCTReloadCommand.h")
+#import "RCTReloadCommand.h"
+#endif
 // Thanks to this guard, we won't import this header when we build for the old architecture.
 #ifdef RCT_NEW_ARCH_ENABLED
 #import "RCTPushySpec.h"
@@ -75,7 +79,7 @@ RCT_EXPORT_MODULE(RCTPushy);
         if (needClearPushyInfo) {
             [defaults setObject:nil forKey:keyPushyInfo];
             [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked];
-            [defaults synchronize];
+            
             // ...need clear files later
         }
         else {
@@ -97,7 +101,7 @@ RCT_EXPORT_MODULE(RCTPushy);
                 newInfo[paramIsFirstTime] = @(NO);
                 [defaults setObject:newInfo forKey:keyPushyInfo];
                 [defaults setObject:@(YES) forKey:keyFirstLoadMarked];
-                [defaults synchronize];
+                
             }
             
             NSString *downloadDir = [RCTPushy downloadDir];
@@ -137,7 +141,7 @@ RCT_EXPORT_MODULE(RCTPushy);
         [defaults setObject:nil forKey:keyPushyInfo];
     }
     [defaults setObject:curVersion forKey:keyRolledBackMarked];
-    [defaults synchronize];
+    
     return lastVersion;
 }
 
@@ -176,7 +180,7 @@ RCT_EXPORT_MODULE(RCTPushy);
         [defaults setObject:nil forKey:KeyPackageUpdatedMarked];
         [self clearInvalidFiles];
     }
-    [defaults synchronize];
+    
 
     return ret;
 }
@@ -196,7 +200,7 @@ RCT_EXPORT_METHOD(setUuid:(NSString *)uuid  resolver:(RCTPromiseResolveBlock)res
     @try {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         [defaults setObject:uuid forKey:keyUuid];
-        [defaults synchronize];
+        
         resolve(@true);
     }
     @catch (NSException *exception) {
@@ -214,7 +218,7 @@ RCT_EXPORT_METHOD(setLocalHashInfo:(NSString *)hash
     if (object && [object isKindOfClass:[NSDictionary class]]) {
         NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
         [defaults setObject:value forKey:[keyHashInfo stringByAppendingString:hash]];
-        [defaults synchronize];
+        
         resolve(@true);
     } else {
         reject(@"json格式校验报错", nil, nil);
@@ -295,7 +299,7 @@ RCT_EXPORT_METHOD(setNeedUpdate:(NSDictionary *)options
         newInfo[paramPackageVersion] = [RCTPushy packageVersion];
         [defaults setObject:newInfo forKey:keyPushyInfo];
         
-        [defaults synchronize];
+        
         resolve(@true);
     }else{
         reject(@"执行报错", nil, nil);
@@ -311,14 +315,18 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options
         if (hash.length) {
             [self setNeedUpdate:options resolver:resolve rejecter:reject];
             
-            // reload 0.62+
-            // RCTReloadCommandSetBundleURL([[self class] bundleURL]);
-            // RCTTriggerReloadCommandListeners(@"pushy reload");
+            // reload in earlier version
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
+                [self.bridge reload];
+            });
             
-           dispatch_async(dispatch_get_main_queue(), ^{
-               [self.bridge setValue:[[self class] bundleURL] forKey:@"bundleURL"];
-               [self.bridge reload];
-           });
+            #if __has_include("RCTReloadCommand.h")
+                // reload 0.62+
+                RCTReloadCommandSetBundleURL([[self class] bundleURL]);
+                RCTTriggerReloadCommandListeners(@"pushy reload");
+            #endif
+
             resolve(@true);
         }else{
             reject(@"执行报错", nil, nil);
@@ -329,8 +337,7 @@ RCT_EXPORT_METHOD(reloadUpdate:(NSDictionary *)options
     }
 }
 
-RCT_EXPORT_METHOD(markSuccess:
-                  resolver:(RCTPromiseResolveBlock)resolve
+RCT_EXPORT_METHOD(markSuccess:(RCTPromiseResolveBlock)resolve
                                     rejecter:(RCTPromiseRejectBlock)reject)
 {
     
@@ -347,7 +354,7 @@ RCT_EXPORT_METHOD(markSuccess:
             [pushyInfo removeObjectForKey:[keyHashInfo stringByAppendingString:lastVersion]];
         }
         [defaults setObject:pushyInfo forKey:keyPushyInfo];
-        [defaults synchronize];
+        
         
         // clear other package dir
         [self clearInvalidFiles];
@@ -537,7 +544,15 @@ RCT_EXPORT_METHOD(markSuccess:
     
     for(NSString *fileName in list) {
         if (![fileName isEqualToString:curVersion]) {
-            [_fileManager removeFile:[downloadDir stringByAppendingPathComponent:fileName] completionHandler:nil];
+            NSString *filePath = [downloadDir stringByAppendingPathComponent:fileName];
+            NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:filePath error:&error];
+            if (error) {
+                continue;
+            }
+            NSDate *modificationDate = [attributes fileModificationDate];
+            if ([[NSDate date] timeIntervalSinceDate:modificationDate] > 7 * 24 * 60 * 60) {
+                [_fileManager removeFile:filePath completionHandler:nil];
+            }
         }
     }
 }
@@ -610,7 +625,7 @@ RCT_EXPORT_METHOD(markSuccess:
 - (std::shared_ptr<facebook::react::TurboModule>)getTurboModule:
     (const facebook::react::ObjCTurboModule::InitParams &)params
 {
-    return std::make_shared<facebook::react::NativeUpdateSpecJSI>(params);
+    return std::make_shared<facebook::react::NativePushySpecJSI>(params);
 }
 #endif
 

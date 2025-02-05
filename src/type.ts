@@ -7,12 +7,16 @@ export interface CheckResult {
   hash?: string;
   description?: string;
   metaInfo?: string;
-  pdiffUrl?: string;
-  pdiffUrls?: string[];
-  diffUrl?: string;
-  diffUrls?: string[];
-  updateUrl?: string;
-  updateUrls?: string[];
+  config?: {
+    rollout?: {
+      [packageVersion: string]: number;
+    };
+    [key: string]: any;
+  };
+  pdiff?: string;
+  diff?: string;
+  full?: string;
+  paths?: string[];
   paused?: 'app' | 'package';
   message?: string;
 }
@@ -28,12 +32,14 @@ export type EventType =
   | 'errorChecking'
   | 'checking'
   | 'downloading'
+  | 'downloadSuccess'
   | 'errorUpdate'
   | 'markSuccess'
   | 'downloadingApk'
   | 'rejectStoragePermission'
   | 'errorStoragePermission'
-  | 'errowDownloadAndInstallApk';
+  | 'errorDownloadAndInstallApk'
+  | 'errorInstallApk';
 
 export interface EventData {
   currentVersion: string;
@@ -44,7 +50,7 @@ export interface EventData {
     uuid: string;
   };
   packageVersion: string;
-  buildTime: number;
+  buildTime: string;
   message?: string;
   rolledBackVersion?: string;
   newVersion?: string;
@@ -62,16 +68,29 @@ export type UpdateEventsLogger = ({
 export interface PushyServerConfig {
   main: string;
   backups?: string[];
-  queryUrl?: string;
+  queryUrls?: string[];
 }
 
 export interface PushyOptions {
   appKey: string;
   server?: PushyServerConfig;
   logger?: UpdateEventsLogger;
-  useAlert?: boolean;
-  strategy?: 'onAppStart' | 'onAppResume' | 'both' | null;
+  updateStrategy?:
+    | 'alwaysAlert'
+    | 'alertUpdateAndIgnoreError'
+    | 'silentAndNow'
+    | 'silentAndLater'
+    | null;
+  checkStrategy?: 'onAppStart' | 'onAppResume' | 'both' | null;
   autoMarkSuccess?: boolean;
   dismissErrorAfter?: number;
   debug?: boolean;
+  throwError?: boolean;
+  beforeCheckUpdate?: () => Promise<boolean>;
+  beforeDownloadUpdate?: (info: CheckResult) => Promise<boolean>;
+}
+
+export interface PushyTestPayload {
+  type: '__rnPushyVersionHash' | string | null;
+  data: any;
 }

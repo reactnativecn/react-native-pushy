@@ -1,0 +1,12 @@
+{
+  "license": "ISC",
+  "types": "",
+  "devDependencies": {},
+  "name": "pushy",
+  "description": "",
+  "main": "index.ets",
+  "version": "3.1.0-0.0.7",
+  "dependencies": {
+    "rnoh": "file:../../../libs/rnoh"
+  }
+}

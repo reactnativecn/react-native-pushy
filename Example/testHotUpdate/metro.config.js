@@ -1,24 +1,11 @@
-const path = require('path');
+const {getDefaultConfig, mergeConfig} = require('@react-native/metro-config');
 
-// const extraNodeModules = {
-//   react: path.resolve(__dirname, 'node_modules/react'),
-//   'react-native': path.resolve(__dirname, 'node_modules/react-native'),
-//   'react-native-update': path.resolve(__dirname, '../..'),
-//   '@babel/runtime': path.resolve(__dirname, 'node_modules/@babel/runtime'),
-// };
-// const watchFolders = [path.resolve(__dirname, '../..')];
+/**
+ * Metro configuration
+ * https://reactnative.dev/docs/metro
+ *
+ * @type {import('metro-config').MetroConfig}
+ */
+const config = {};
 
-module.exports = {
-  transformer: {
-    getTransformOptions: async () => ({
-      transform: {
-        experimentalImportSupport: false,
-        inlineRequires: true,
-      },
-    }),
-  },
-  // resolver: {
-  //   extraNodeModules,
-  // },
-  // watchFolders,
-};
+module.exports = mergeConfig(getDefaultConfig(__dirname), config);

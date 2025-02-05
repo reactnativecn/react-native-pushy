@@ -1,9 +1,12 @@
 package cn.reactnative.modules.update;
 
 import android.app.Activity;
-import android.app.Application;
+import android.content.Context;
 import android.util.Log;
+
+import com.facebook.react.ReactActivity;
 import com.facebook.react.ReactApplication;
+import com.facebook.react.ReactDelegate;
 import com.facebook.react.ReactInstanceManager;
 import com.facebook.react.bridge.JSBundleLoader;
 import com.facebook.react.bridge.Promise;
@@ -12,16 +15,10 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.UiThreadUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import org.json.JSONObject;
-
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Field;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class UpdateModuleImpl {
 
@@ -101,14 +98,14 @@ public class UpdateModuleImpl {
                 }
             });
         }catch (Exception e){
-            promise.reject("执行报错:"+e.getMessage());
+            promise.reject("执行报错:" + e.getMessage());
         }
     }
 
-    public static void reloadUpdate(UpdateContext updateContext, ReactApplicationContext mContext, ReadableMap options,Promise promise) {
+    public static void reloadUpdate(UpdateContext updateContext, ReactApplicationContext mContext, ReadableMap options, Promise promise) {
         final String hash = options.getString("hash");
 
-        if(hash==null || hash.isEmpty()){
+        if (hash == null || hash.isEmpty()) {
             promise.reject("hash不能为空");
             return;
         }
@@ -117,8 +114,7 @@ public class UpdateModuleImpl {
             public void run() {
                 try {
                     updateContext.switchVersion(hash);
-                    Activity activity = mContext.getCurrentActivity();
-                    Application application = activity.getApplication();
+                    final Context application = mContext.getApplicationContext();
                     ReactInstanceManager instanceManager = updateContext.getCustomReactInstanceManager();
 
                     if (instanceManager == null) {
@@ -137,17 +133,43 @@ public class UpdateModuleImpl {
                         jsBundleField.set(instanceManager, UpdateContext.getBundleUrl(application));
                     }
 
-                    try {
-                        instanceManager.recreateReactContextInBackground();
-                        promise.resolve(true);
-                    } catch (Throwable err) {
-                        promise.reject("pushy:"+err.getMessage());
-                        activity.recreate();
-                    }
+                    instanceManager.recreateReactContextInBackground();
+                    promise.resolve(true);
 
                 } catch (Throwable err) {
-                    promise.reject("pushy:switchVersion failed"+err.getMessage());
-                    Log.e("pushy", "switchVersion failed", err);
+                    promise.reject(err);
+                    Log.e("pushy", "switchVersion failed ", err);
+                    final Activity currentActivity = mContext.getCurrentActivity();
+                    if (currentActivity == null) {
+                        return;
+                    }
+                    try {
+                        // Try to get getReactDelegate method using reflection
+                        java.lang.reflect.Method getReactDelegateMethod = 
+                            ReactActivity.class.getMethod("getReactDelegate");
+                        if (getReactDelegateMethod != null) {
+                            ReactDelegate reactDelegate = (ReactDelegate) 
+                                getReactDelegateMethod.invoke(currentActivity);
+                            
+                            // Try to get reload method using reflection
+                            java.lang.reflect.Method reloadMethod = 
+                                ReactDelegate.class.getMethod("reload");
+                            if (reloadMethod != null) {
+                                reloadMethod.invoke(reactDelegate);
+                            } else {
+                                throw new NoSuchMethodException();
+                            }
+                        } else {
+                            throw new NoSuchMethodException();
+                        }
+                    } catch (Throwable e) {
+                        currentActivity.runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                currentActivity.recreate();
+                            }
+                        });
+                    }
                 }
             }
         });
@@ -173,7 +195,7 @@ public class UpdateModuleImpl {
                     }
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e){
             promise.reject("执行报错:"+e.getMessage());
         }
     }
@@ -187,7 +209,7 @@ public class UpdateModuleImpl {
                     promise.resolve(true);
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e){
             promise.reject("执行报错:"+e.getMessage());
         }
     }
@@ -201,7 +223,7 @@ public class UpdateModuleImpl {
                     promise.resolve(true);
                 }
             });
-        }catch (Exception e){
+        } catch (Exception e){
             promise.reject("执行报错:"+e.getMessage());
         }
 
@@ -237,9 +259,9 @@ public class UpdateModuleImpl {
 
     public static void getLocalHashInfo(UpdateContext updateContext, final String hash, Promise promise) {
         String value = updateContext.getKv("hash_" + hash);
-        if(check(value)){
+        if (check(value)) {
             promise.resolve(value);
-        }else {
+        } else {
             promise.reject("校验报错:json字符串格式错误");
         }
 

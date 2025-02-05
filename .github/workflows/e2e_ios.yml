@@ -26,16 +26,16 @@ concurrency:
 jobs:
   ios:
     name: iOS
-    runs-on: macos-12
+    runs-on: macos-14-arm64
     # TODO matrix across APIs, at least 11 and 15 (lowest to highest)
     timeout-minutes: 60
     env:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
     steps:
       # Set up tool versions
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
-          node-version: 16
+          node-version: 18
 
       - name: Configure JDK 1.11
         uses: actions/setup-java@v3

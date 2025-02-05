@@ -9,9 +9,6 @@ import com.facebook.react.module.model.ReactModuleInfoProvider;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Created by tdzl2003 on 3/31/16.
- */
 public class UpdatePackage extends TurboReactPackage {
     @Nullable
     @Override
@@ -25,21 +22,24 @@ public class UpdatePackage extends TurboReactPackage {
 
     @Override
     public ReactModuleInfoProvider getReactModuleInfoProvider() {
-        return () -> {
-            final Map<String, ReactModuleInfo> moduleInfos = new HashMap<>();
-            boolean isTurboModule = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
-            moduleInfos.put(
-                    UpdateModuleImpl.NAME,
-                    new ReactModuleInfo(
-                            UpdateModuleImpl.NAME,
-                            UpdateModuleImpl.NAME,
-                            false, // canOverrideExistingModule
-                            false, // needsEagerInit
-                            true, // hasConstants
-                            false, // isCxxModule
-                            isTurboModule // isTurboModule
-                    ));
-            return moduleInfos;
+        return new ReactModuleInfoProvider() {
+            @Override
+            public Map<String, ReactModuleInfo> getReactModuleInfos() {
+                final Map<String, ReactModuleInfo> moduleInfos = new HashMap<>();
+                boolean isTurboModule = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
+                moduleInfos.put(
+                        UpdateModuleImpl.NAME,
+                        new ReactModuleInfo(
+                                UpdateModuleImpl.NAME,
+                                UpdateModuleImpl.NAME,
+                                false, // canOverrideExistingModule
+                                false, // needsEagerInit
+                                true, // hasConstants
+                                false, // isCxxModule
+                                isTurboModule // isTurboModule
+                        ));
+                return moduleInfos;
+            }
         };
     }
 }

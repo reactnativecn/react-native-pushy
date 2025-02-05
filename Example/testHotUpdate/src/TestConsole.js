@@ -1,7 +1,8 @@
 /* eslint-disable react-native/no-inline-styles */
 /* eslint-disable react/react-in-jsx-scope */
-import {useCallback, useMemo, useState} from 'react';
+import {useState} from 'react';
 import {
+  Alert,
   ActivityIndicator,
   Modal,
   TextInput,
@@ -13,132 +14,127 @@ import {
   TouchableOpacity,
 } from 'react-native';
 
-import {PushyModule} from 'react-native-update';
+import {PushyModule} from 'react-native-update/src/core';
 const Hash = '9D5CE6EBA420717BE7E7D308B11F8207681B066C951D68F3994D19828F342474';
 const UUID = '00000000-0000-0000-0000-000000000000';
 const DownloadUrl =
   'http://cos.pgyer.com/697913e94d7441f20c686e2b0996a1aa.apk?sign=7a8f11b1df82cba45c8ac30b1acec88c&t=1680404102&response-content-disposition=attachment%3Bfilename%3DtestHotupdate_1.0.apk';
 
-const CustomDialog = ({title, visible, onConfirm}) => {
-  if (!visible) {
-    return null;
-  }
-
-  return (
-    <View style={styles.overlay}>
-      <View style={styles.dialog}>
-        <Text style={styles.title}>{title}</Text>
-        <TouchableOpacity
-          testID="done"
-          style={styles.button}
-          onLongPress={onConfirm}>
-          <Text style={styles.buttonText}>确认</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
-export default function TestConsole({visible}) {
+export default function TestConsole({visible, onClose}) {
   const [text, setText] = useState('');
   const [running, setRunning] = useState(false);
-  const [options, setOptions] = useState();
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [alertMsg, setAlertMsg] = useState('');
-  const NativeTestMethod = useMemo(() => {
-    return [
+  const convertCommands = (cmd, params) => {
+    if (typeof params === 'string') {
+      return `${cmd}\n${params}`;
+    }
+    let paramText = '';
+    for (const [k, v] of Object.entries(params)) {
+      paramText += `\n${k}\n${v}`;
+    }
+    return `${cmd}${paramText}`;
+  };
+  const shortCuts = [
       {
         name: 'setLocalHashInfo',
         invoke: () => {
           setText(
-            `setLocalHashInfo\n${Hash}\n{\"version\":\"1.0.0\",\"size\":\"19M\"}`,
+            convertCommands('setLocalHashInfo', {
+              version: '1.0.0',
+              size: '19M',
+            }),
           );
         },
       },
       {
         name: 'getLocalHashInfo',
         invoke: () => {
-          setText(`getLocalHashInfo\n${Hash}`);
+          setText(convertCommands('getLocalHashInfo', Hash));
         },
       },
       {
         name: 'setUuid',
         invoke: () => {
-          setText(`setUuid\n${UUID}`);
+          setText(convertCommands('setUuid', UUID));
         },
       },
       {
         name: 'reloadUpdate',
         invoke: () => {
-          setText('reloadUpdate');
-          setOptions({hash: Hash});
+          setText(convertCommands('reloadUpdate', {hash: Hash}));
         },
       },
       {
         name: 'setNeedUpdate',
         invoke: () => {
-          setText('setNeedUpdate');
-          setOptions({hash: Hash});
+          setText(convertCommands('setNeedUpdate', {hash: Hash}));
         },
       },
       {
         name: 'markSuccess',
         invoke: () => {
-          setText('markSuccess');
-          setOptions(undefined);
+          setText(convertCommands('markSuccess'));
         },
       },
       {
         name: 'downloadPatchFromPpk',
         invoke: () => {
-          setText('downloadPatchFromPpk');
-          setOptions({updateUrl: DownloadUrl, hash: Hash, originHash: Hash});
+          setText(
+            convertCommands('downloadPatchFromPpk', {
+              updateUrl: DownloadUrl,
+              hash: Hash,
+              originHash: Hash,
+            }),
+          );
         },
       },
       {
         name: 'downloadPatchFromPackage',
         invoke: () => {
-          setText('downloadPatchFromPackage');
-          setOptions({updateUrl: DownloadUrl, hash: Hash});
+          setText(
+            convertCommands('downloadPatchFromPackage', {
+              updateUrl: DownloadUrl,
+              hash: Hash,
+            }),
+          );
         },
       },
       {
         name: 'downloadFullUpdate',
         invoke: () => {
-          setText('downloadFullUpdate');
-          setOptions({updateUrl: DownloadUrl, hash: Hash});
+          setText(
+            convertCommands('downloadFullUpdate', {
+              updateUrl: DownloadUrl,
+              hash: Hash,
+            }),
+          );
         },
       },
       {
         name: 'downloadAndInstallApk',
         invoke: () => {
-          setText('downloadAndInstallApk');
-          setOptions({url: DownloadUrl, target: Hash, hash: Hash});
+          setText(
+            convertCommands('downloadAndInstallApk', {
+              url: DownloadUrl,
+              target: Hash,
+              hash: Hash,
+            }),
+          );
         },
       },
     ];
-  }, []);
-
-  const renderTestView = useCallback(() => {
-    const views = [];
-    for (let i = 0; i < NativeTestMethod.length; i++) {
-      views.push(
-        <TouchableOpacity
-          key={i}
-          testID={NativeTestMethod[i].name}
-          onLongPress={() => {
-            NativeTestMethod[i].invoke();
-          }}>
-          <Text>{NativeTestMethod[i].name}</Text>
-        </TouchableOpacity>,
-      );
-    }
-    return <View>{views}</View>;
-  }, [NativeTestMethod]);
 
   return (
     <Modal visible={visible}>
       <SafeAreaView style={{flex: 1, padding: 10}}>
-        <Text>调试Pushy方法（方法名，参数，值换行）</Text>
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}>
+          <Text>调试Pushy方法（方法名，参数，值换行）</Text>
+          <Button title="Close" onPress={onClose} />
+        </View>
         <TextInput
           autoCorrect={false}
           autoCapitalize="none"
@@ -167,46 +163,49 @@ export default function TestConsole({visible}) {
             marginBottom: 5,
           }}
           testID="submit"
-          onLongPress={async () => {
+          onPress={async () => {
             setRunning(true);
             try {
               const inputs = text.split('\n');
               const methodName = inputs[0];
-              let params = [];
+              let params;
               if (inputs.length === 1) {
-                if (options) {
-                  await PushyModule[methodName](options);
-                } else {
-                  await PushyModule[methodName]();
-                }
+                await PushyModule[methodName]();
               } else {
                 if (inputs.length === 2) {
-                  params = [inputs[1]];
+                  params = inputs[1];
                 } else {
-                  params = [inputs[1], inputs[2]];
+                  params = {};
+                  for (let i = 1; i < inputs.length; i += 2) {
+                    params[inputs[i]] = inputs[i + 1];
+                  }
                   console.log({inputs, params});
                 }
-                await PushyModule[methodName](...params);
+                await PushyModule[methodName](params);
               }
-              setAlertVisible(true);
-              setAlertMsg('done');
+              Alert.alert('done');
             } catch (e) {
-              setAlertVisible(true);
-              setAlertMsg(e.message);
+              Alert.alert(e.message);
             }
             setRunning(false);
           }}>
           <Text style={{color: 'white'}}>执行</Text>
         </TouchableOpacity>
         <Button title="重置" onPress={() => setText('')} />
-        {renderTestView()}
-        <CustomDialog
-          title={alertMsg}
-          visible={alertVisible}
-          onConfirm={() => {
-            setAlertVisible(false);
-          }}
-        />
+        {
+          <View>
+            {shortCuts.map(({name, invoke}, i) => (
+              <TouchableOpacity
+                key={i}
+                testID={name}
+                onPress={() => {
+                  invoke();
+                }}>
+                <Text>{name}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        }
       </SafeAreaView>
     </Modal>
   );

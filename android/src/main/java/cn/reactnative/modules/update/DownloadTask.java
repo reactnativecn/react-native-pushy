@@ -75,7 +75,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 .build();
         Response response = client.newCall(request).execute();
         if (response.code() > 299) {
-            throw new Error("Server return code " + response.code());
+            throw new Error("Server error:" + response.code() + " " + response.message());
         }
         ResponseBody body = response.body();
         long contentLength = body.contentLength();
@@ -430,6 +430,9 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             if (sub.getName().charAt(0) == '.') {
                 continue;
             }
+            if (isFileUpdatedWithinDays(sub, 7)) {
+                continue;
+            }
             if (sub.isFile()) {
                 sub.delete();
             } else {
@@ -439,6 +442,13 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 removeDirectory(sub);
             }
         }
+    }
+
+    private boolean isFileUpdatedWithinDays(File file, int days) {
+        long currentTime = System.currentTimeMillis();
+        long lastModified = file.lastModified();
+        long daysInMillis = days * 24 * 60 * 60 * 1000L;
+        return (currentTime - lastModified) < daysInMillis;
     }
 
     @Override

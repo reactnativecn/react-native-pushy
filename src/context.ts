@@ -7,30 +7,32 @@ const asyncNoop = () => Promise.resolve();
 
 export const defaultContext = {
   checkUpdate: asyncNoop,
-  switchVersion: noop,
-  switchVersionLater: noop,
+  switchVersion: asyncNoop,
+  switchVersionLater: asyncNoop,
   markSuccess: noop,
   dismissError: noop,
   downloadUpdate: asyncNoop,
   downloadAndInstallApk: asyncNoop,
   getCurrentVersionInfo: () => Promise.resolve({}),
+  parseTestQrCode: () => false,
   currentHash: '',
   packageVersion: '',
 };
 
 export const PushyContext = createContext<{
   checkUpdate: () => Promise<void>;
-  switchVersion: () => void;
-  switchVersionLater: () => void;
+  switchVersion: () => Promise<void>;
+  switchVersionLater: () => Promise<void>;
   markSuccess: () => void;
   dismissError: () => void;
-  downloadUpdate: () => Promise<void>;
+  downloadUpdate: () => Promise<boolean | void>;
   downloadAndInstallApk: (url: string) => Promise<void>;
   getCurrentVersionInfo: () => Promise<{
     name?: string;
     description?: string;
     metaInfo?: string;
   }>;
+  parseTestQrCode: (code: string) => boolean;
   currentHash: string;
   packageVersion: string;
   client?: Pushy;

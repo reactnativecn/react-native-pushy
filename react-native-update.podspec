@@ -4,6 +4,8 @@ new_arch_enabled = ENV['RCT_NEW_ARCH_ENABLED'] == '1'
 
 package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 
+podspec_dir = File.dirname(__FILE__)
+
 Pod::Spec.new do |s|
   s.name         = package['name']
   s.version      = package['version']
@@ -20,10 +22,13 @@ Pod::Spec.new do |s|
   s.source_files    = "ios/**/*.{h,m,mm,swift}"
   s.libraries = 'bz2', 'z'
   s.vendored_libraries = 'RCTPushy/libRCTPushy.a'
-  s.pod_target_xcconfig = { 'USER_HEADER_SEARCH_PATHS' => '"$(SRCROOT)/../node_modules/react-native-update/ios"' }
+  s.pod_target_xcconfig = { 
+    'USER_HEADER_SEARCH_PATHS' => "#{podspec_dir}/ios", 
+    "DEFINES_MODULE" => "YES" 
+  }
   s.resource = 'ios/pushy_build_time.txt'
-  s.script_phase = { :name => 'Generate build time', :script => 'set -x;date +%s > ${PODS_ROOT}/../../../RN/node_modules/react-native-update/ios/pushy_build_time.txt', :execution_position => :before_compile }
 
+  s.script_phase = { :name => 'Generate build time', :script => "set -x;date +%s > \"#{podspec_dir}/ios/pushy_build_time.txt\"", :execution_position => :before_compile }
   s.dependency 'React'
   s.dependency "React-Core"
   s.dependency 'SSZipArchive'
@@ -40,7 +45,7 @@ Pod::Spec.new do |s|
                        'android/jni/HDiffPatch/file_for_patch.{h,c}',
                        'android/jni/lzma/C/LzmaDec.{h,c}',
                        'android/jni/lzma/C/Lzma2Dec.{h,c}']
-    ss.private_header_files = 'ios/RCTPushy/HDiffPatch/**/*.h'
+    ss.public_header_files = 'ios/RCTPushy/HDiffPatch/**/*.h'
   end
   
   if defined?(install_modules_dependencies()) != nil
