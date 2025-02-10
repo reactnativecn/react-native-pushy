@@ -288,7 +288,9 @@ export class DownloadTask {
         }
       }
 
-      await zip.decompressFile(entry.filename, params.unzipDirectory);
+       if(entry.filename !== '.DS_Store'){
+        await zip.decompressFile(entry.filename, params.unzipDirectory);
+      }
     }
 
     if (!foundDiff) {

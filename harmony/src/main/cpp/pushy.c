@@ -72,16 +72,18 @@ napi_value HdiffPatch(napi_env env, napi_callback_info info) {
     // 创建结果buffer
     napi_value resultBuffer;
     uint8_t* outPtr;
-    status = napi_create_buffer(env, newsize, (void**)&outPtr, &resultBuffer);
+    void* data;
+
+    status = napi_create_arraybuffer(env, newsize, &data, &resultBuffer);
     if (status != napi_ok) {
         napi_throw_error(env, NULL, "Failed to create result buffer");
         return NULL;
     }
+    outPtr = (uint8_t*)data;
 
     // 执行patch
     _check(kHPatch_ok==hpatch_by_mem(originPtr, originLength, outPtr, newsize,
                                     patchPtr, patchLength, &patInfo), "hpatch");
-
     return resultBuffer;
 
 _clear:
