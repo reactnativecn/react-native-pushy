@@ -1,4 +1,4 @@
-import { TurboModule, TurboModuleContext } from 'rnoh/ts';
+import { TurboModule, TurboModuleContext } from '@rnoh/react-native-openharmony/ts';
 import common from '@ohos.app.ability.common';
 import dataPreferences from '@ohos.data.preferences';
 import { bundleManager } from '@kit.AbilityKit';

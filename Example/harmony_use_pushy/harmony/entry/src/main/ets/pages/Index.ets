@@ -1,26 +1,33 @@
 import { FileJSBundleProvider } from 'pushy/src/main/ets/FileJSBundleProvider';
-import { ComponentBuilderContext, JSBundleProvider, RNOHLogger } from 'rnoh';
+import { ComponentBuilderContext, RNOHCoreContext,RNAbility } from '@rnoh/react-native-openharmony';
 import {
   RNApp,
-  RNAbility,
   AnyJSBundleProvider,
   ResourceJSBundleProvider,
   TraceJSBundleProviderDecorator,
-} from 'rnoh'
+} from '@rnoh/react-native-openharmony'
 import { createRNPackages } from '../RNPackagesFactory'
+import preferences from '@ohos.data.preferences';
+
+const arkTsComponentNames: Array<string> = [
+];
 
 @Builder
-export function CustomComponentBuilder(ctx: ComponentBuilderContext) {
-
+export function buildCustomRNComponent(ctx: ComponentBuilderContext) {
+  // There seems to be a problem with the placement of ArkTS components in mixed mode. Nested Stack temporarily avoided.
+  Stack() {
+  }
+  .position({ x: 0, y: 0 })
 }
 
+
+const wrappedCustomRNComponentBuilder = wrapBuilder(buildCustomRNComponent)
 
 @Entry
 @Component
 struct Index {
-  @StorageLink('RNAbility') private rnAbility: RNAbility | undefined = undefined
+  @StorageLink('RNOHCoreContext') private rnohCoreContext: RNOHCoreContext | undefined = undefined
   @State shouldShow: boolean = false
-  @State message: string = 'Hello World';
 
   aboutToAppear(): void {
     this.shouldShow = true
@@ -30,28 +37,37 @@ struct Index {
     // NOTE: this is required since `Ability`'s `onBackPressed` function always
     // terminates or puts the app in the background, but we want Ark to ignore it completely
     // when handled by RN
-    return this.rnAbility?.onBackPress();
+    this.rnohCoreContext!.dispatchBackPress()
+
+    // this.preferences = preferences.getPreferencesSync(this.context, {name:'update'});
+    return true
   }
 
   build() {
     Column() {
-      if (this.rnAbility && this.shouldShow) {
+      if (this.rnohCoreContext && this.shouldShow) {
         RNApp({
-          rnInstanceConfig: { createRNPackages },
+          rnInstanceConfig: {
+            createRNPackages,
+            enableNDKTextMeasuring: true,
+            enableBackgroundExecutor: false,
+            enableCAPIArchitecture: true,
+            arkTsComponentNames: arkTsComponentNames,
+          },
           initialProps: { "foo": "bar" } as Record<string, string>,
           appKey: "harmony_use_pushy",
-          buildCustomComponent: CustomComponentBuilder,
+          wrappedCustomRNComponentBuilder: wrappedCustomRNComponentBuilder,
           onSetUp: (rnInstance) => {
             rnInstance.enableFeatureFlag("ENABLE_RN_INSTANCE_CLEAN_UP")
           },
           jsBundleProvider: new TraceJSBundleProviderDecorator(
             new AnyJSBundleProvider([
               // MetroJSBundleProvider.fromServerIp('127.0.0.1'),
-              // new ResourceJSBundleProvider(this.rnAbility.context.resourceManager, 'hermes_bundle.hbc'),
-              new FileJSBundleProvider(this.rnAbility.context),
-              new ResourceJSBundleProvider(this.rnAbility.context.resourceManager, 'bundle.harmony.js')
+              // new ResourceJSBundleProvider(rnohCoreContext.uiAbilityContext.resourceManager, 'hermes_bundle.hbc'),
+              new FileJSBundleProvider(this.rnohCoreContext.uiAbilityContext),
+              new ResourceJSBundleProvider(this.rnohCoreContext.uiAbilityContext.resourceManager, 'bundle.harmony.js')
             ]),
-            this.rnAbility.getLogger()),
+            this.rnohCoreContext.logger),
         })
       }
     }

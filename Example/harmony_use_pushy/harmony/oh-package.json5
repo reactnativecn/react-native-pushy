@@ -13,5 +13,8 @@
       "suppressImplicitAnyIndexErrors": true,
       "strict": false
     }
+  },
+  "overrides": {
+    "@rnoh/react-native-openharmony": "0.72.38"
   }
 }

@@ -6003,7 +6003,7 @@ react-is@^17.0.1:
   integrity sha512-w2GsyukL62IJnlaff/nRegPQR94C/XXamvMWmSHRJ4y7Ts/4ocGRmTHvOs8PSE6pB3dWOrD/nueuU5sduBsQ4w==
 
 "react-native-update@file:../..":
-  version "10.15.1"
+  version "10.19.6"
   dependencies:
     nanoid "^3.3.3"
     react-native-url-polyfill "^2.0.0"

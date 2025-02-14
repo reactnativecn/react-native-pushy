@@ -38,10 +38,6 @@
       ]
     },
     {
-      name: 'rnoh',
-      srcPath: '../libs/rnoh',
-    },
-    {
       name: 'pushy',
       srcPath: '../node_modules/react-native-update/harmony',
     }
