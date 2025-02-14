@@ -31,7 +31,7 @@ Pod::Spec.new do |s|
 
   s.dependency 'React'
   s.dependency "React-Core"
-  s.dependency 'PushySSZipArchive'
+  s.dependency 'SSZipArchive'
 
   s.subspec 'RCTPushy' do |ss|
     ss.source_files = 'ios/RCTPushy/*.{h,m,mm,swift}'

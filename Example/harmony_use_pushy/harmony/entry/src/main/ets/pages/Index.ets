@@ -9,8 +9,7 @@ import {
 import { createRNPackages } from '../RNPackagesFactory'
 import preferences from '@ohos.data.preferences';
 
-const arkTsComponentNames: Array<string> = [
-];
+const arkTsComponentNames: Array<string> = [];
 
 @Builder
 export function buildCustomRNComponent(ctx: ComponentBuilderContext) {
