@@ -26,49 +26,49 @@ export class UpdateContext {
         this.initPreferences();
     }
 
-    private async initPreferences() {
+    private initPreferences() {
         try {
-            this.preferences = await preferences.getPreferences(this.context, 'update');
-            const packageVersion = await this.getPackageVersion();
-            const storedVersion = await this.preferences.get('packageVersion', '');
+            this.preferences = preferences.getPreferencesSync(this.context, {name:'update'});
+            const packageVersion =  this.getPackageVersion();
+            const storedVersion =  this.preferences.getSync('packageVersion', '');
             if (packageVersion !== storedVersion) {
-                await this.preferences.clear();
-                await this.preferences.put('packageVersion', packageVersion);
-                await this.preferences.flush();
-                this.cleanUp();
+                 this.preferences.clear();
+                 this.preferences.putSync('packageVersion', packageVersion);
+                 this.preferences.flush();
+                 this.cleanUp();
             }
         } catch (e) {
             console.error('Failed to init preferences:', e);
         }
     }
 
-    public async setKv(key: string, value: string): Promise<void> {
-        await this.preferences.put(key, value);
-        await this.preferences.flush();
+    public setKv(key: string, value: string): void {
+         this.preferences.putSync(key, value);
+         this.preferences.flush();
     }
 
-    public async getKv(key: string): Promise<string> {
-        return await this.preferences.get(key, '') as string;
+    public  getKv(key: string): string {
+        return  this.preferences.getSync(key, '') as string;
     }
 
-    public async isFirstTime(): Promise<boolean> {
-        return await this.preferences.get('firstTime', false) as boolean;
+    public  isFirstTime(): boolean {
+        return  this.preferences.getSync('firstTime', false) as boolean;
     }
 
-    public async rolledBackVersion(): Promise<string> {
-        return await this.preferences.get('rolledBackVersion', '') as string;
+    public  rolledBackVersion(): string {
+        return  this.preferences.getSync('rolledBackVersion', '') as string;
     }
 
-    public async markSuccess(): Promise<void> {
-        await this.preferences.put('firstTimeOk', true);
-        const lastVersion = await this.preferences.get('lastVersion', '') as string;
-        const curVersion = await this.preferences.get('currentVersion', '') as string;
+    public markSuccess(): void {
+        this.preferences.putSync('firstTimeOk', true);
+        const lastVersion = this.preferences.getSync('lastVersion', '') as string;
+        const curVersion =  this.preferences.getSync('currentVersion', '') as string;
         
         if (lastVersion && lastVersion !== curVersion) {
-            await this.preferences.delete('lastVersion');
-            await this.preferences.delete(`hash_${lastVersion}`);
+             this.preferences.deleteSync('lastVersion');
+             this.preferences.deleteSync(`hash_${lastVersion}`);
         }
-        await this.preferences.flush();
+        this.preferences.flush();
         this.cleanUp();
     }
 
@@ -143,23 +143,23 @@ export class UpdateContext {
         }
     }
 
-    public async switchVersion(hash: string): Promise<void> {
+    public switchVersion(hash: string): void {
         try {
             const bundlePath = `${this.rootDir}/${hash}/bundle.harmony.js`;
             if (!fileIo.accessSync(bundlePath)) {
                 throw new Error(`Bundle version ${hash} not found.`);
             }
 
-            const lastVersion = await this.getKv('currentVersion');
-            await this.setKv('currentVersion', hash);
+            const lastVersion = this.getKv('currentVersion');
+            this.setKv('currentVersion', hash);
 
             if (lastVersion && lastVersion !== hash) {
-                await this.setKv('lastVersion', lastVersion);
+                this.setKv('lastVersion', lastVersion);
             }
 
-            await this.setKv('firstTime', 'true');
-            await this.setKv('firstTimeOk', 'false');
-            await this.setKv('rolledBackVersion', null);
+             this.setKv('firstTime', 'true');
+             this.setKv('firstTimeOk', 'false');
+             this.setKv('rolledBackVersion', null);
         } catch (e) {
             console.error('Failed to switch version:', e);
         }
@@ -176,7 +176,7 @@ export class UpdateContext {
             return defaultAssetsUrl;
         }
         if (!this.isFirstTime()) {
-            if (!this.preferences.get('firstTimeOk', true)) {
+            if (!this.preferences.getSync('firstTimeOk', true)) {
                 return this.rollBack();
             }
         }

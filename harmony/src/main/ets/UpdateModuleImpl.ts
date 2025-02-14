@@ -1,8 +1,5 @@
-import { TurboModuleContext } from 'rnoh/ts';
-import dataPreferences from '@ohos.data.preferences';
 import bundleManager from '@ohos.bundle.bundleManager';
 import common from '@ohos.app.ability.common';
-import { BusinessError } from '@ohos.base';
 import { UpdateContext } from './UpdateContext';
 import { DownloadTaskParams } from './DownloadTaskParams';
 import logger from './Logger';

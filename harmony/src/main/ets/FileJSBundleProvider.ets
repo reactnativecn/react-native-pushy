@@ -1,4 +1,4 @@
-import { HotReloadConfig, JSBundleProvider, JSBundleProviderError, JSPackagerClientConfig } from 'rnoh';
+import { HotReloadConfig, JSBundleProvider, JSBundleProviderError, JSPackagerClientConfig } from '@rnoh/react-native-openharmony';
 import fileIo from '@ohos.file.fs';
 import common from '@ohos.app.ability.common';
 import { UpdateContext } from './UpdateContext';
@@ -40,20 +40,15 @@ export class FileJSBundleProvider extends JSBundleProvider {
       }
       throw new Error('Update bundle not found');
     } catch (error) {
-      throw new JSBundleProviderError(`Couldn't load JSBundle from ${this.filePath}`, error)
+      throw new JSBundleProviderError({
+        whatHappened: `Couldn't load JSBundle from ${this.filePath}`,
+        extraData: error,
+        howCanItBeFixed: [`Check if a bundle exists at "${this.filePath}" on your device.`]
+      })
     }
   }
 
   getAppKeys(): string[] {
     return [];
   }
-
-  getHotReloadConfig(): HotReloadConfig | null {
-   return null;
-  }
-
-  getJSPackagerClientConfig(): JSPackagerClientConfig | null {
-    return null;
-  }
-
 }

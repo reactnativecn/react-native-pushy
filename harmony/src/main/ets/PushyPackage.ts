@@ -1,5 +1,5 @@
-import { RNPackage, TurboModulesFactory } from 'rnoh/ts';
-import type { TurboModule, TurboModuleContext } from 'rnoh/ts';
+import { RNPackage, TurboModulesFactory } from '@rnoh/react-native-openharmony/ts';
+import type { TurboModule, TurboModuleContext } from '@rnoh/react-native-openharmony/ts';
 import { PushyTurboModule } from './PushyTurboModule';
 
 class PushyTurboModulesFactory extends TurboModulesFactory {
