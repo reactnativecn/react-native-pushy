@@ -1308,7 +1308,7 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - react-native-update (10.22.0):
+  - react-native-update (10.23.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1322,8 +1322,8 @@ PODS:
     - React-featureflags
     - React-graphics
     - React-ImageManager
-    - react-native-update/HDiffPatch (= 10.22.0)
-    - react-native-update/RCTPushy (= 10.22.0)
+    - react-native-update/HDiffPatch (= 10.23.0)
+    - react-native-update/RCTPushy (= 10.23.0)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-rendererdebug
@@ -1333,7 +1333,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SSZipArchive
     - Yoga
-  - react-native-update/HDiffPatch (10.22.0):
+  - react-native-update/HDiffPatch (10.23.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1356,7 +1356,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SSZipArchive
     - Yoga
-  - react-native-update/RCTPushy (10.22.0):
+  - react-native-update/RCTPushy (10.23.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1667,6 +1667,49 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
+  - RNSVG (15.11.1):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.01.01.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - RNSVG/common (= 15.11.1)
+    - Yoga
+  - RNSVG/common (15.11.1):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.01.01.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - RNVectorIcons (10.2.0):
     - DoubleConversion
     - glog
@@ -1760,6 +1803,7 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - ReactNativeCameraKit (from `../node_modules/react-native-camera-kit`)
+  - RNSVG (from `../node_modules/react-native-svg`)
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
@@ -1900,6 +1944,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   ReactNativeCameraKit:
     :path: "../node_modules/react-native-camera-kit"
+  RNSVG:
+    :path: "../node_modules/react-native-svg"
   RNVectorIcons:
     :path: "../node_modules/react-native-vector-icons"
   Yoga:
@@ -1942,7 +1988,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: 89885d1518433a462fe64b68bf5e097997380090
   React-microtasksnativemodule: 36341e09dcd1df535503e6ed2ddf88f10da56d52
   react-native-safe-area-context: 0d8827b2420dfb4c8a8e27639585e61b912261be
-  react-native-update: 73336810994cf31c5085070faa1ad4ead5b76e3c
+  react-native-update: 4a39d6a9ae4393fbb165af238dc55b1b79e1b9da
   React-nativeconfig: 539ff4de6ce3b694e8e751080568c281c84903ce
   React-NativeModulesApple: 702246817c286d057e23fe4b1302019796e62521
   React-perflogger: f260e2de95f9dbd002035251559c13bf1f0643d4
@@ -1971,6 +2017,7 @@ SPEC CHECKSUMS:
   ReactCodegen: 0a0eef9c8cd84c932ae1868832086c6441811e84
   ReactCommon: 3c1c8c6d777103c0e60e37c6c5f08e828e2a77c9
   ReactNativeCameraKit: d4d3b606063d42d34091d53de6193ed4b330bb0c
+  RNSVG: c50d29abf38abbf48ebfc50b6258f81099aeabae
   RNVectorIcons: a24016b773380b1aa37fca501ec6b94a951890a0
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   SSZipArchive: fe6a26b2a54d5a0890f2567b5cc6de5caa600aef
