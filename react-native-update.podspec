@@ -18,7 +18,7 @@ Pod::Spec.new do |s|
   s.cocoapods_version = '>= 1.6.0'
   s.platform = :ios, "8.0"
   s.platforms = { :ios => "11.0" }
-  s.source = { :git => 'https://github.com/reactnativecn/react-native-pushy.git', :tag => '#{s.version}' }
+  s.source = { :git => 'https://github.com/reactnativecn/react-native-update.git', :tag => '#{s.version}' }
   s.source_files    = "ios/**/*.{h,m,mm,swift}"
   s.libraries = 'bz2', 'z'
   s.vendored_libraries = 'RCTPushy/libRCTPushy.a'

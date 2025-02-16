@@ -22,7 +22,7 @@
 ### 本地开发
 
 ```
-$ git clone git@github.com:reactnativecn/react-native-pushy.git
+$ git clone git@github.com:reactnativecn/react-native-update.git
 $ cd react-native-pushy/Example/testHotUpdate
 $ yarn
 $ yarn start
@@ -34,4 +34,4 @@ $ yarn start
 
 本组件由[React Native 中文网](https://reactnative.cn/)独家发布，如有定制需求可以[联系我们](https://reactnative.cn/about.html#content)。
 
-关于此插件发现任何问题，可以前往[Issues](https://github.com/reactnativecn/react-native-pushy/issues)发帖提问。
+关于此插件发现任何问题，可以前往[Issues](https://github.com/reactnativecn/react-native-update/issues)发帖提问。
