@@ -20,7 +20,7 @@ const defaultServer = {
   backups: ['https://update.reactnative.cn/api'],
   queryUrls: [
     'https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json',
-    'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-pushy@master/endpoints.json',
+    'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json',
   ],
 };
 
