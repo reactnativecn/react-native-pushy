@@ -14,7 +14,7 @@ export const PushyModule =
     : NativeModules.Pushy;
 
 if (!PushyModule) {
-  throw new Error('react-native-update 模块无法加载，请对照安装文档检查配置。');
+  throw new Error('react-native-update 模块无法加载，请尝试重新编译');
 }
 
 const PushyConstants = isTurboModuleEnabled
@@ -32,8 +32,8 @@ export const buildTime: string = PushyConstants.buildTime;
 let uuid = PushyConstants.uuid;
 
 if (Platform.OS === 'android' && !PushyConstants.isUsingBundleUrl) {
-  throw new Error(
-    'react-native-update 模块无法加载，请对照文档检查 Bundle URL 的配置',
+  console.warn(
+    'react-native-update 没有检测到 Bundle URL 的配置，这可能是因为您使用了某种懒加载机制（比如使用 expo，可忽略本警告），或是 Bundle URL 的配置不正确（请对照文档检查）',
   );
 }
 
