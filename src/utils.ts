@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 export function log(...args: any[]) {
-  console.log('pushy: ', ...args);
+  console.log('react-native-update: ', ...args);
 }
 
 export function promiseAny<T>(promises: Promise<T>[]) {

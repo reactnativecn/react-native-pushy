@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import { CheckResult, ProgressData } from './type';
-import { Pushy } from './client';
+import { Pushy, Cresc } from './client';
 
 const noop = () => {};
 const asyncNoop = () => Promise.resolve();
@@ -19,7 +19,7 @@ export const defaultContext = {
   packageVersion: '',
 };
 
-export const PushyContext = createContext<{
+export const UpdateContext = createContext<{
   checkUpdate: () => Promise<void>;
   switchVersion: () => Promise<void>;
   switchVersionLater: () => Promise<void>;
@@ -35,10 +35,12 @@ export const PushyContext = createContext<{
   parseTestQrCode: (code: string) => boolean;
   currentHash: string;
   packageVersion: string;
-  client?: Pushy;
+  client?: Pushy | Cresc;
   progress?: ProgressData;
   updateInfo?: CheckResult;
   lastError?: Error;
 }>(defaultContext);
 
-export const usePushy = () => useContext(PushyContext);
+export const usePushy = () => useContext(UpdateContext);
+
+export const useCresc = () => useContext(UpdateContext);

@@ -1,4 +1,4 @@
-import { CheckResult, PushyOptions, ProgressData, EventType } from './type';
+import { CheckResult, ClientOptions, ProgressData, EventType } from './type';
 import { emptyObj, joinUrls, log, noop, promiseAny, testUrls } from './utils';
 import { EmitterSubscription, Platform } from 'react-native';
 import { PermissionsAndroid } from './permissions';
@@ -15,31 +15,45 @@ import {
   isRolledBack,
 } from './core';
 
-const defaultServer = {
-  main: 'https://update.react-native.cn/api',
-  backups: ['https://update.reactnative.cn/api'],
-  queryUrls: [
-    'https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json',
-    'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json',
-  ],
+const SERVER_PRESETS = {
+  pushy: {
+    main: 'https://update.react-native.cn/api',
+    backups: ['https://update.reactnative.cn/api'],
+    queryUrls: [
+      'https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json',
+      'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json',
+    ],
+  },
+  cresc: {
+    main: 'https://api.cresc.dev',
+    backups: ['https://api.cresc.app'],
+    queryUrls: [
+      'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints_cresc.json',
+    ],
+  },
 };
-
 if (Platform.OS === 'web') {
-  console.warn('react-native-update 不支持 web 端热更，不会执行操作');
+  console.warn(
+    'react-native-update does not support hot updates on the web platform and will not perform any operations',
+  );
 }
 
-export class Pushy {
-  options: PushyOptions = {
-    appKey: '',
-    server: defaultServer,
-    autoMarkSuccess: true,
-    updateStrategy: __DEV__ ? 'alwaysAlert' : 'alertUpdateAndIgnoreError',
-    checkStrategy: 'both',
-    logger: noop,
-    debug: false,
-    throwError: false,
-  };
+const defaultClientOptions: ClientOptions = {
+  appKey: '',
+  autoMarkSuccess: true,
+  updateStrategy: __DEV__ ? 'alwaysAlert' : 'alertUpdateAndIgnoreError',
+  checkStrategy: 'both',
+  logger: noop,
+  debug: false,
+  throwError: false,
+};
 
+export class Pushy {
+  options: ClientOptions = {
+    ...defaultClientOptions,
+    server: SERVER_PRESETS.pushy,
+  };
+  clientType: 'pushy' | 'cresc' = 'pushy';
   lastChecking?: number;
   lastRespJson?: Promise<any>;
 
@@ -50,7 +64,7 @@ export class Pushy {
 
   static marked = false;
   static applyingUpdate = false;
-  version = cInfo.pushy;
+  version = cInfo.rnu;
   loggerPromise = (() => {
     let resolve: (value?: unknown) => void = () => {};
     const promise = new Promise(res => {
@@ -62,7 +76,7 @@ export class Pushy {
     };
   })();
 
-  constructor(options: PushyOptions) {
+  constructor(options: ClientOptions) {
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       if (!options.appKey) {
         throw new Error('appKey is required');
@@ -79,7 +93,7 @@ export class Pushy {
     }
   }
 
-  setOptions = (options: Partial<PushyOptions>) => {
+  setOptions = (options: Partial<ClientOptions>) => {
     for (const [key, value] of Object.entries(options)) {
       if (value !== undefined) {
         (this.options as any)[key] = value;
@@ -124,10 +138,10 @@ export class Pushy {
     return `${endpoint}/checkUpdate/${this.options.appKey}`;
   };
   static assertHash = (hash: string) => {
-    if (!Pushy.downloadedHash) {
+    if (!this.downloadedHash) {
       return;
     }
-    if (hash !== Pushy.downloadedHash) {
+    if (hash !== this.downloadedHash) {
       log(`use downloaded hash ${Pushy.downloadedHash} first`);
       return;
     }
@@ -144,7 +158,7 @@ export class Pushy {
   switchVersion = async (hash: string) => {
     if (__DEV__) {
       console.warn(
-        '您调用了switchVersion方法，但是当前是开发环境，不会进行任何操作。',
+        'switchVersion() is not supported in development environment; no action taken.',
       );
       return;
     }
@@ -158,7 +172,7 @@ export class Pushy {
   switchVersionLater = async (hash: string) => {
     if (__DEV__) {
       console.warn(
-        '您调用了switchVersionLater方法，但是当前是开发环境，不会进行任何操作。',
+        'switchVersionLater() is not supported in development environment; no action taken.',
       );
       return;
     }
@@ -170,19 +184,19 @@ export class Pushy {
   checkUpdate = async (extra?: Record<string, any>) => {
     if (__DEV__ && !this.options.debug) {
       console.info(
-        '您当前处于开发环境且未启用 debug，不会进行热更检查。如需在开发环境中调试热更，请在 client 中设置 debug 为 true',
+        'You are currently in the development environment and have not enabled debug mode. The hot update check will not be performed. If you need to debug hot updates in the development environment, please set debug to true in the client.',
       );
       return;
     }
     if (Platform.OS === 'web') {
-      console.warn('web 端不支持热更新检查');
+      console.warn('web platform does not support hot update check');
       return;
     }
     if (
       this.options.beforeCheckUpdate &&
       (await this.options.beforeCheckUpdate()) === false
     ) {
-      log('beforeCheckUpdate 返回 false, 忽略检查');
+      log('beforeCheckUpdate returned false, skipping check');
       return;
     }
     const now = Date.now();
@@ -310,7 +324,7 @@ export class Pushy {
       this.options.beforeDownloadUpdate &&
       (await this.options.beforeDownloadUpdate(info)) === false
     ) {
-      log('beforeDownloadUpdate 返回 false, 忽略下载');
+      log('beforeDownloadUpdate returned false, skipping download');
       return;
     }
     if (!info.update || !hash) {
@@ -487,5 +501,13 @@ export class Pushy {
       Pushy.progressHandlers[progressKey].remove();
       delete Pushy.progressHandlers[progressKey];
     }
+  };
+}
+
+export class Cresc extends Pushy {
+  clientType: 'cresc' | 'pushy' = 'cresc';
+  options: ClientOptions = {
+    ...defaultClientOptions,
+    server: SERVER_PRESETS.cresc,
   };
 }

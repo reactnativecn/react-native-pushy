@@ -12,19 +12,19 @@ import {
   Platform,
   Linking,
 } from 'react-native';
-import { Pushy } from './client';
+import { Pushy, Cresc } from './client';
 import { currentVersion, packageVersion, getCurrentVersionInfo } from './core';
-import { CheckResult, ProgressData, PushyTestPayload } from './type';
-import { PushyContext } from './context';
+import { CheckResult, ProgressData, UpdateTestPayload } from './type';
+import { ClientContext } from './context';
 import { URL } from 'react-native-url-polyfill';
 import { isInRollout } from './isInRollout';
 import { log } from './utils';
 
-export const PushyProvider = ({
+export const UpdateProvider = ({
   client,
   children,
 }: {
-  client: Pushy;
+  client: Pushy | Cresc;
   children: ReactNode;
 }) => {
   const { options } = client;
@@ -275,8 +275,8 @@ export const PushyProvider = ({
   }, [checkUpdate, options, dismissError, markSuccess]);
 
   const parseTestPayload = useCallback(
-    (payload: PushyTestPayload) => {
-      if (payload && payload.type && payload.type.startsWith('__rnPushy')) {
+    (payload: UpdateTestPayload) => {
+      if (payload && payload.type && payload.type.startsWith('__rnUpdate')) {
         const logger = options.logger || (() => {});
         options.logger = ({ type, data }) => {
           logger({ type, data });
@@ -286,8 +286,8 @@ export const PushyProvider = ({
           checkUpdate({ extra: { toHash: payload.data } }).then(() => {
             if (updateInfoRef.current && updateInfoRef.current.upToDate) {
               Alert.alert(
-                '提示',
-                '当前尚未检测到更新版本，如果是首次扫码，请等待服务器端生成补丁包后再试（约10秒）',
+                'Info',
+                'No update found, please wait 10s for the server to generate the patch package',
               );
             }
             options.logger = logger;
@@ -301,7 +301,7 @@ export const PushyProvider = ({
   );
 
   const parseTestQrCode = useCallback(
-    (code: string | PushyTestPayload) => {
+    (code: string | UpdateTestPayload) => {
       try {
         const payload = typeof code === 'string' ? JSON.parse(code) : code;
         return parseTestPayload(payload);
@@ -335,7 +335,7 @@ export const PushyProvider = ({
   }, [parseTestPayload]);
 
   return (
-    <PushyContext.Provider
+    <ClientContext.Provider
       value={{
         checkUpdate,
         switchVersion,
@@ -354,6 +354,8 @@ export const PushyProvider = ({
         parseTestQrCode,
       }}>
       {children}
-    </PushyContext.Provider>
+    </ClientContext.Provider>
   );
 };
+
+export const PushyProvider = UpdateProvider;
