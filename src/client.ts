@@ -16,6 +16,7 @@ import {
 } from './core';
 
 const SERVER_PRESETS = {
+  // cn
   pushy: {
     main: 'https://update.react-native.cn/api',
     backups: ['https://update.reactnative.cn/api'],
@@ -24,6 +25,7 @@ const SERVER_PRESETS = {
       'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json',
     ],
   },
+  // i18n
   cresc: {
     main: 'https://api.cresc.dev',
     backups: ['https://api.cresc.app'],
@@ -48,6 +50,7 @@ const defaultClientOptions: ClientOptions = {
   throwError: false,
 };
 
+// for China users
 export class Pushy {
   options: ClientOptions = {
     ...defaultClientOptions,
@@ -504,6 +507,7 @@ export class Pushy {
   };
 }
 
+// for international users
 export class Cresc extends Pushy {
   clientType: 'cresc' | 'pushy' = 'cresc';
   options: ClientOptions = {
