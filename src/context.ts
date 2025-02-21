@@ -41,6 +41,8 @@ export const UpdateContext = createContext<{
   lastError?: Error;
 }>(defaultContext);
 
-export const usePushy = () => useContext(UpdateContext);
+export const useUpdate = () => useContext(UpdateContext);
 
-export const useCresc = () => useContext(UpdateContext);
+export const usePushy = useUpdate;
+
+export const useCresc = useUpdate;

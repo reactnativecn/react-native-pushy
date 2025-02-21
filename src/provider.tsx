@@ -15,7 +15,7 @@ import {
 import { Pushy, Cresc } from './client';
 import { currentVersion, packageVersion, getCurrentVersionInfo } from './core';
 import { CheckResult, ProgressData, UpdateTestPayload } from './type';
-import { ClientContext } from './context';
+import { UpdateContext } from './context';
 import { URL } from 'react-native-url-polyfill';
 import { isInRollout } from './isInRollout';
 import { log } from './utils';
@@ -335,7 +335,7 @@ export const UpdateProvider = ({
   }, [parseTestPayload]);
 
   return (
-    <ClientContext.Provider
+    <UpdateContext.Provider
       value={{
         checkUpdate,
         switchVersion,
@@ -354,7 +354,7 @@ export const UpdateProvider = ({
         parseTestQrCode,
       }}>
       {children}
-    </ClientContext.Provider>
+    </UpdateContext.Provider>
   );
 };
 
