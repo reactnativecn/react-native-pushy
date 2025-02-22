@@ -44,7 +44,7 @@ export type EventType =
 export interface EventData {
   currentVersion: string;
   cInfo: {
-    pushy: string;
+    rnu: string;
     rn: string;
     os: string;
     uuid: string;
@@ -65,15 +65,15 @@ export type UpdateEventsLogger = ({
   data: EventData;
 }) => void;
 
-export interface PushyServerConfig {
+export interface UpdateServerConfig {
   main: string;
   backups?: string[];
   queryUrls?: string[];
 }
 
-export interface PushyOptions {
+export interface ClientOptions {
   appKey: string;
-  server?: PushyServerConfig;
+  server?: UpdateServerConfig;
   logger?: UpdateEventsLogger;
   updateStrategy?:
     | 'alwaysAlert'
@@ -90,7 +90,7 @@ export interface PushyOptions {
   beforeDownloadUpdate?: (info: CheckResult) => Promise<boolean>;
 }
 
-export interface PushyTestPayload {
+export interface UpdateTestPayload {
   type: '__rnPushyVersionHash' | string | null;
   data: any;
 }

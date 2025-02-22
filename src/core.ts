@@ -13,8 +13,12 @@ export const PushyModule =
     ? require('./NativePushy').default
     : NativeModules.Pushy;
 
+export const UpdateModule = PushyModule;
+
 if (!PushyModule) {
-  throw new Error('react-native-update 模块无法加载，请对照安装文档检查配置。');
+  throw new Error(
+    'Failed to load react-native-update native module, please try to recompile',
+  );
 }
 
 const PushyConstants = isTurboModuleEnabled
@@ -30,12 +34,6 @@ export const isRolledBack: boolean = typeof rolledBackVersion === 'string';
 
 export const buildTime: string = PushyConstants.buildTime;
 let uuid = PushyConstants.uuid;
-
-if (Platform.OS === 'android' && !PushyConstants.isUsingBundleUrl) {
-  throw new Error(
-    'react-native-update 模块无法加载，请对照文档检查 Bundle URL 的配置',
-  );
-}
 
 export function setLocalHashInfo(hash: string, info: Record<string, any>) {
   PushyModule.setLocalHashInfo(hash, JSON.stringify(info));
@@ -63,7 +61,7 @@ if (!uuid) {
 log('uuid: ' + uuid);
 
 export const cInfo = {
-  pushy: require('../package.json').version,
+  rnu: require('../package.json').version,
   rn: RNVersion,
   os: Platform.OS + ' ' + Platform.Version,
   uuid,

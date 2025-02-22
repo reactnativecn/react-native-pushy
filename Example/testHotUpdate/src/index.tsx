@@ -20,6 +20,7 @@ import {
   Portal,
 } from 'react-native-paper';
 import {Camera} from 'react-native-camera-kit';
+import {LocalSvg} from 'react-native-svg/css';
 
 import TestConsole from './TestConsole';
 
@@ -91,11 +92,21 @@ function App() {
           />
         </Modal>
       </Portal>
-      <Image
-        resizeMode={'contain'}
-        source={require('./assets/shezhi.png')}
-        style={styles.image}
-      />
+      <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
+        <Text>png:</Text>
+        <Image
+          resizeMode={'contain'}
+          source={require('./assets/shezhi.png')}
+          style={styles.image}
+        />
+      </View>
+      <View style={{flexDirection: 'row', alignItems: 'center', gap: 10}}>
+        <Text>svg:</Text>
+        <LocalSvg
+          asset={require('./assets/react-logo.svg')}
+          style={{width: 30, height: 30}}
+        />
+      </View>
       <Text style={styles.instructions}>
         这是版本一 {'\n'}
         当前原生包版本号: {packageVersion}

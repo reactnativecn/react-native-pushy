@@ -1,4 +1,4 @@
-export { Pushy } from './client';
-export { PushyContext, usePushy } from './context';
-export { PushyProvider } from './provider';
-export { PushyModule } from './core';
+export { Pushy, Cresc } from './client';
+export { UpdateContext, usePushy, useCresc, useUpdate } from './context';
+export { PushyProvider, UpdateProvider } from './provider';
+export { PushyModule, UpdateModule } from './core';
