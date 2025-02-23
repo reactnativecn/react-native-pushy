@@ -27,7 +27,9 @@ export const UpdateProvider = ({
   client: Pushy | Cresc;
   children: ReactNode;
 }) => {
+  client = useRef(client).current;
   const { options } = client;
+
   const stateListener = useRef<NativeEventSubscription>();
   const [updateInfo, setUpdateInfo] = useState<CheckResult>();
   const updateInfoRef = useRef(updateInfo);
@@ -239,10 +241,7 @@ export const UpdateProvider = ({
   const markSuccess = client.markSuccess;
 
   useEffect(() => {
-    if (__DEV__ && !options.debug) {
-      console.info(
-        '您当前处于开发环境且未启用debug，不会进行热更检查。如需在开发环境中调试热更，请在client中设置debug为true',
-      );
+    if (!client.assertDebug()) {
       return;
     }
     const { checkStrategy, dismissErrorAfter, autoMarkSuccess } = options;
@@ -272,7 +271,7 @@ export const UpdateProvider = ({
       stateListener.current && stateListener.current.remove();
       clearTimeout(dismissErrorTimer);
     };
-  }, [checkUpdate, options, dismissError, markSuccess]);
+  }, [checkUpdate, options, dismissError, markSuccess, client]);
 
   const parseTestPayload = useCallback(
     (payload: UpdateTestPayload) => {

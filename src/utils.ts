@@ -84,3 +84,23 @@ export const testUrls = async (urls?: string[]) => {
   log('all ping failed, use first url:', urls[0]);
   return urls[0];
 };
+
+export const assertWeb = () => {
+  if (Platform.OS === 'web') {
+    console.warn(
+      'react-native-update does not support the Web platform and will not perform any operations',
+    );
+    return false;
+  }
+  return true;
+};
+
+export const assertDev = (matter: string) => {
+  if (__DEV__) {
+    console.warn(
+      `${matter} is not supported in development environment; no action taken.`,
+    );
+    return false;
+  }
+  return true;
+};

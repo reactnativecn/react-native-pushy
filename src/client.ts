@@ -1,5 +1,14 @@
 import { CheckResult, ClientOptions, ProgressData, EventType } from './type';
-import { emptyObj, joinUrls, log, noop, promiseAny, testUrls } from './utils';
+import {
+  assertDev,
+  assertWeb,
+  emptyObj,
+  joinUrls,
+  log,
+  noop,
+  promiseAny,
+  testUrls,
+} from './utils';
 import { EmitterSubscription, Platform } from 'react-native';
 import { PermissionsAndroid } from './permissions';
 import {
@@ -17,7 +26,7 @@ import {
 
 const SERVER_PRESETS = {
   // cn
-  pushy: {
+  Pushy: {
     main: 'https://update.react-native.cn/api',
     backups: ['https://update.reactnative.cn/api'],
     queryUrls: [
@@ -26,7 +35,7 @@ const SERVER_PRESETS = {
     ],
   },
   // i18n
-  cresc: {
+  Cresc: {
     main: 'https://api.cresc.dev',
     backups: ['https://api.cresc.app'],
     queryUrls: [
@@ -34,11 +43,8 @@ const SERVER_PRESETS = {
     ],
   },
 };
-if (Platform.OS === 'web') {
-  console.warn(
-    'react-native-update does not support hot updates on the web platform and will not perform any operations',
-  );
-}
+
+assertWeb();
 
 const defaultClientOptions: ClientOptions = {
   appKey: '',
@@ -52,11 +58,8 @@ const defaultClientOptions: ClientOptions = {
 
 // for China users
 export class Pushy {
-  options: ClientOptions = {
-    ...defaultClientOptions,
-    server: SERVER_PRESETS.pushy,
-  };
-  clientType: 'pushy' | 'cresc' = 'pushy';
+  options = defaultClientOptions;
+  clientType: 'Pushy' | 'Cresc' = 'Pushy';
   lastChecking?: number;
   lastRespJson?: Promise<any>;
 
@@ -85,6 +88,8 @@ export class Pushy {
         throw new Error('appKey is required');
       }
     }
+    this.clientType = new.target.name as 'Pushy' | 'Cresc';
+    this.options.server = SERVER_PRESETS[this.clientType];
     this.setOptions(options);
     if (isRolledBack) {
       this.report({
@@ -150,6 +155,15 @@ export class Pushy {
     }
     return true;
   };
+  assertDebug = () => {
+    if (__DEV__ && !this.options.debug) {
+      console.info(
+        'You are currently in the development environment and have not enabled debug mode. The hot update check will not be performed. If you need to debug hot updates in the development environment, please set debug to true in the client.',
+      );
+      return false;
+    }
+    return true;
+  };
   markSuccess = () => {
     if (Pushy.marked || __DEV__ || !isFirstTime) {
       return;
@@ -159,10 +173,7 @@ export class Pushy {
     this.report({ type: 'markSuccess' });
   };
   switchVersion = async (hash: string) => {
-    if (__DEV__) {
-      console.warn(
-        'switchVersion() is not supported in development environment; no action taken.',
-      );
+    if (!assertDev('switchVersion()')) {
       return;
     }
     if (Pushy.assertHash(hash) && !Pushy.applyingUpdate) {
@@ -173,10 +184,7 @@ export class Pushy {
   };
 
   switchVersionLater = async (hash: string) => {
-    if (__DEV__) {
-      console.warn(
-        'switchVersionLater() is not supported in development environment; no action taken.',
-      );
+    if (!assertDev('switchVersionLater()')) {
       return;
     }
     if (Pushy.assertHash(hash)) {
@@ -185,14 +193,10 @@ export class Pushy {
     }
   };
   checkUpdate = async (extra?: Record<string, any>) => {
-    if (__DEV__ && !this.options.debug) {
-      console.info(
-        'You are currently in the development environment and have not enabled debug mode. The hot update check will not be performed. If you need to debug hot updates in the development environment, please set debug to true in the client.',
-      );
+    if (!this.assertDebug()) {
       return;
     }
-    if (Platform.OS === 'web') {
-      console.warn('web platform does not support hot update check');
+    if (!assertWeb()) {
       return;
     }
     if (
@@ -508,10 +512,4 @@ export class Pushy {
 }
 
 // for international users
-export class Cresc extends Pushy {
-  clientType: 'cresc' | 'pushy' = 'cresc';
-  options: ClientOptions = {
-    ...defaultClientOptions,
-    server: SERVER_PRESETS.cresc,
-  };
-}
+export class Cresc extends Pushy {}
