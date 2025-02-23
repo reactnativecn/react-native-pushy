@@ -37,7 +37,6 @@ const withUpdate = (config) => {
       const mainApplicationPath = path.join(config.modRequest.platformProjectRoot, 'app/src/main/java', ...config.android.package.split('.'), 'MainApplication.kt');
       const contents = fs.readFileSync(mainApplicationPath, 'utf-8');
 
-      // 添加 import
       const contentsWithImport = mergeContents({
         src: contents,
         newSrc: 'import cn.reactnative.modules.update.UpdateContext',
