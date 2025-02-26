@@ -1308,7 +1308,7 @@ PODS:
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
     - Yoga
-  - react-native-update (10.24.2):
+  - react-native-update (10.25.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1322,8 +1322,8 @@ PODS:
     - React-featureflags
     - React-graphics
     - React-ImageManager
-    - react-native-update/HDiffPatch (= 10.24.2)
-    - react-native-update/RCTPushy (= 10.24.2)
+    - react-native-update/HDiffPatch (= 10.25.0)
+    - react-native-update/RCTPushy (= 10.25.0)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-rendererdebug
@@ -1333,7 +1333,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SSZipArchive
     - Yoga
-  - react-native-update/HDiffPatch (10.24.2):
+  - react-native-update/HDiffPatch (10.25.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1356,7 +1356,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SSZipArchive
     - Yoga
-  - react-native-update/RCTPushy (10.24.2):
+  - react-native-update/RCTPushy (10.25.0):
     - DoubleConversion
     - glog
     - hermes-engine
@@ -1988,7 +1988,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: a381120aea722d2244d4e4b663a10d4c3b2d4e51
   React-microtasksnativemodule: d9b946675010659cddd1c7611c074216579c8ad3
   react-native-safe-area-context: 5e53e2b0fc3a2994ad0c89a2486e545b6566d8c4
-  react-native-update: f3a3a5e028f0513f9350be61abf5c0135574b201
+  react-native-update: 7fd014ef3cd16406bc20284bfb40f9eb0c2ecc8e
   React-nativeconfig: 67fa7a63ea288cb5b1d0dd2deaf240405fec164f
   React-NativeModulesApple: 34b7a4d7441a4ee78d18109ff107c1ccf7c074a9
   React-perflogger: d1149037ac466ad2141d4ae541ca16cb73b2343b
