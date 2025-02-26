@@ -330,10 +330,10 @@ export const UpdateProvider = ({
     };
     const linkingListener = Linking.addEventListener('url', linkingHandler);
     return () => {
-      if (typeof linkingListener.remove === 'function') {
-        linkingListener.remove();
-      } else if ('removeEventListener' in Linking) {
+      if ('removeEventListener' in Linking) {
         (Linking as any).removeEventListener('url', linkingHandler);
+      } else {
+        linkingListener.remove();
       }
     };
   }, [parseTestPayload]);
