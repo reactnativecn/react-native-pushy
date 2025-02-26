@@ -361,6 +361,7 @@ export class Pushy {
     let succeeded = '';
     this.report({ type: 'downloading' });
     let lastError: any;
+    let errorMessages: string[] = [];
     const diffUrl = await testUrls(joinUrls(paths, diff));
     if (diffUrl) {
       log('downloading diff');
@@ -372,11 +373,13 @@ export class Pushy {
         });
         succeeded = 'diff';
       } catch (e: any) {
-        lastError = e;
+        const errorMessage = `diff error: ${e.message}`;
+        errorMessages.push(errorMessage);
+        lastError = new Error(errorMessage);
         if (__DEV__) {
           succeeded = 'diff';
         } else {
-          log(`diff error: ${e.message}, try pdiff`);
+          log(errorMessage);
         }
       }
     }
@@ -390,11 +393,13 @@ export class Pushy {
         });
         succeeded = 'pdiff';
       } catch (e: any) {
-        lastError = e;
+        const errorMessage = `pdiff error: ${e.message}`;
+        errorMessages.push(errorMessage);
+        lastError = new Error(errorMessage);
         if (__DEV__) {
           succeeded = 'pdiff';
         } else {
-          log(`pdiff error: ${e.message}, try full patch`);
+          log(errorMessage);
         }
       }
     }
@@ -408,11 +413,13 @@ export class Pushy {
         });
         succeeded = 'full';
       } catch (e: any) {
-        lastError = e;
+        const errorMessage = `full patch error: ${e.message}`;
+        errorMessages.push(errorMessage);
+        lastError = new Error(errorMessage);
         if (__DEV__) {
           succeeded = 'full';
         } else {
-          log(`full patch error: ${e.message}`);
+          log(errorMessage);
         }
       }
     }
@@ -427,6 +434,7 @@ export class Pushy {
       this.report({
         type: 'errorUpdate',
         data: { newVersion: hash },
+        message: errorMessages.join(';'),
       });
       if (lastError) {
         throw lastError;

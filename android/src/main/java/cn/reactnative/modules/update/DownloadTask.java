@@ -49,7 +49,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
     private void removeDirectory(File file) throws IOException {
         if (UpdateContext.DEBUG) {
-            Log.d("RNUpdate", "Removing " + file);
+            Log.d("react-native-update", "Removing " + file);
         }
         if (file.isDirectory()) {
             File[] files = file.listFiles();
@@ -88,7 +88,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         BufferedSink sink = Okio.buffer(Okio.sink(writePath));
 
         if (UpdateContext.DEBUG) {
-            Log.d("RNUpdate", "Downloading " + url);
+            Log.d("react-native-update", "Downloading " + url);
         }
 
         long bytesRead = 0;
@@ -98,7 +98,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             received += bytesRead;
             sink.emit();
             if (UpdateContext.DEBUG) {
-                Log.d("RNUpdate", "Progress " + received + "/" + contentLength);
+                Log.d("react-native-update", "Progress " + received + "/" + contentLength);
             }
             
             int percentage = (int)(received * 100.0 / contentLength + 0.5);
@@ -115,7 +115,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         sink.close();
 
         if (UpdateContext.DEBUG) {
-            Log.d("RNUpdate", "Download finished");
+            Log.d("react-native-update", "Download finished");
         }
     }
 
@@ -244,7 +244,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
 
 
         if (UpdateContext.DEBUG) {
-            Log.d("RNUpdate", "Unzip finished");
+            Log.d("react-native-update", "Unzip finished");
         }
     }
 
@@ -260,7 +260,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 File lastTarget = null;
                 for (File target: targets) {
                     if (UpdateContext.DEBUG) {
-                        Log.d("RNUpdate", "Copying from resource " + fn + " to " + target);
+                        Log.d("react-native-update", "Copying from resource " + fn + " to " + target);
                     }
                     if (lastTarget != null) {
                         copyFile(lastTarget, target);
@@ -352,7 +352,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
         copyFromResource(copyList);
 
         if (UpdateContext.DEBUG) {
-            Log.d("RNUpdate", "Unzip finished");
+            Log.d("react-native-update", "Unzip finished");
         }
 
     }
@@ -418,12 +418,12 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
             throw new Error("bundle patch not found");
         }
         if (UpdateContext.DEBUG) {
-            Log.d("RNUpdate", "Unzip finished");
+            Log.d("react-native-update", "Unzip finished");
         }
     }
     private void doCleanUp(DownloadTaskParams param) throws IOException {
         if (UpdateContext.DEBUG) {
-            Log.d("RNUpdate", "Start cleaning up");
+            Log.d("react-native-update", "Start cleaning up");
         }
         File root = param.unzipDirectory;
         for (File sub : root.listFiles()) {
@@ -499,7 +499,7 @@ class DownloadTask extends AsyncTask<DownloadTaskParams, long[], Void> {
                 default:
                     break;
             }
-            Log.e("pushy", "download task failed", e);
+            Log.e("react-native-update", "download task failed", e);
 
             if (params[0].listener != null) {
                 params[0].listener.onDownloadFailed(e);
