@@ -325,11 +325,16 @@ export const UpdateProvider = ({
     };
 
     Linking.getInitialURL().then(parseLinking);
-    const linkingListener = Linking.addEventListener('url', ({ url }) =>
-      parseLinking(url),
-    );
+    const linkingHandler = ({ url }: { url: string }) => {
+      parseLinking(url);
+    };
+    const linkingListener = Linking.addEventListener('url', linkingHandler);
     return () => {
-      linkingListener.remove();
+      if (typeof linkingListener.remove === 'function') {
+        linkingListener.remove();
+      } else if ('removeEventListener' in Linking) {
+        (Linking as any).removeEventListener('url', linkingHandler);
+      }
     };
   }, [parseTestPayload]);
 
