@@ -20,7 +20,7 @@ export const defaultContext = {
 };
 
 export const UpdateContext = createContext<{
-  checkUpdate: () => Promise<void>;
+  checkUpdate: () => Promise<void | CheckResult>;
   switchVersion: () => Promise<void>;
   switchVersionLater: () => Promise<void>;
   markSuccess: () => void;

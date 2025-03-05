@@ -188,7 +188,7 @@ export const UpdateProvider = ({
             } else {
               Linking.openURL(downloadUrl);
             }
-            return;
+            return info;
           }
           alertUpdate('提示', '您的应用版本已更新，点击更新下载安装新版本', [
             {
@@ -209,7 +209,7 @@ export const UpdateProvider = ({
           options.updateStrategy === 'silentAndLater'
         ) {
           downloadUpdate(info);
-          return;
+          return info;
         }
         alertUpdate(
           '提示',
@@ -226,6 +226,7 @@ export const UpdateProvider = ({
           ],
         );
       }
+      return info;
     },
     [
       client,
