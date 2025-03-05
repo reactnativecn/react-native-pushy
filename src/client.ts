@@ -82,13 +82,13 @@ export class Pushy {
     };
   })();
 
-  constructor(options: ClientOptions) {
+  constructor(options: ClientOptions, clientType?: 'Pushy' | 'Cresc') {
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       if (!options.appKey) {
         throw new Error('appKey is required');
       }
     }
-    this.clientType = new.target.name as 'Pushy' | 'Cresc';
+    this.clientType = clientType || 'Pushy';
     this.options.server = SERVER_PRESETS[this.clientType];
     this.setOptions(options);
     if (isRolledBack) {
@@ -521,4 +521,8 @@ export class Pushy {
 }
 
 // for international users
-export class Cresc extends Pushy {}
+export class Cresc extends Pushy {
+  constructor(options: ClientOptions) {
+    super(options, 'Cresc');
+  }
+}
