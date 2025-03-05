@@ -250,7 +250,7 @@ export class Pushy {
     } catch (e: any) {
       this.report({
         type: 'errorChecking',
-        message: 'Can not connect to update server. Trying backup endpoints.',
+        message: `Can not connect to update server: ${e.message}. Trying backup endpoints.`,
       });
       const backupEndpoints = await this.getBackupEndpoints();
       if (backupEndpoints) {
