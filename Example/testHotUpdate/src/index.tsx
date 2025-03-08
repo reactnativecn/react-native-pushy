@@ -25,7 +25,7 @@ import {LocalSvg} from 'react-native-svg/css';
 import TestConsole from './TestConsole';
 
 import _updateConfig from '../update.json';
-import {PushyProvider, Pushy, usePushy} from 'react-native-update';
+import {UpdateProvider, Pushy, Cresc, useUpdate} from 'react-native-update';
 const {appKey} = _updateConfig[Platform.OS];
 
 function App() {
@@ -40,7 +40,7 @@ function App() {
     currentHash,
     parseTestQrCode,
     progress: {received, total} = {},
-  } = usePushy();
+  } = useUpdate();
   const [useDefaultAlert, setUseDefaultAlert] = useState(true);
   const [showTestConsole, setShowTestConsole] = useState(false);
   const [showUpdateBanner, setShowUpdateBanner] = useState(false);
@@ -203,17 +203,24 @@ const styles = StyleSheet.create({
   image: {},
 });
 
-const pushyClient = new Pushy({
+// use Pushy for China users
+// const updateClient = new Pushy({
+//   appKey,
+//   debug: true,
+// });
+
+// use Cresc for global users
+const updateClient = new Cresc({
   appKey,
   debug: true,
 });
 
 export default function Root() {
   return (
-    <PushyProvider client={pushyClient}>
+    <UpdateProvider client={updateClient}>
       <PaperProvider>
         <App />
       </PaperProvider>
-    </PushyProvider>
+    </UpdateProvider>
   );
 }

@@ -78,6 +78,7 @@ RCT_EXPORT_MODULE(RCTPushy);
         BOOL needClearPushyInfo = ![curPackageVersion isEqualToString:packageVersion];
         if (needClearPushyInfo) {
             [defaults setObject:nil forKey:keyPushyInfo];
+            [defaults setObject:nil forKey:keyHashInfo];
             [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked];
             
             // ...need clear files later

@@ -4,7 +4,9 @@ const {
   version: v,
 } = require('react-native/Libraries/Core/ReactNativeVersion');
 const RNVersion = `${v.major}.${v.minor}.${v.patch}`;
-const isTurboModuleEnabled = (global as any).__turboModuleProxy != null;
+const isTurboModuleEnabled =
+  // https://github.com/facebook/react-native/pull/48362
+  (global as any).__turboModuleProxy || (global as any).RN$Bridgeless;
 
 export const PushyModule =
   Platform.OS === 'web'

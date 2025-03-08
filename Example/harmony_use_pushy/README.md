@@ -1,11 +1,16 @@
 ## 运行harmony_use_pushy项目步骤
 
-### 1. 在项目根目录执行下面命令安装第三方依赖。
+### 1. 先在react-native-update根目录执行下面命令同步C++模块。
+```
+yarn submodule
+```
+
+### 2. 在项目根目录执行下面命令安装第三方依赖。
 ```
 yarn install
 ```
 
-### 2. 在项目根目录执行下面命令生成bundle包文件。
+### 3. 在项目根目录执行下面命令生成bundle包文件。
 ```
 yarn build
 ```
@@ -13,8 +18,8 @@ yarn build
 
 **注意⚠️**：在使用pushy bundle --platform harmony命令进行打包的默认bundle包名是Hbundle.harmony.js，不要随意修改包名，因为diff是匹配该包名进行生成的。
 
-### 3. 使用DevEco Studio IDE打开harmony目录然后执行sync运行项目
+### 4. 使用DevEco Studio IDE打开harmony目录然后执行sync运行项目
 ![image](./sync.png)
 
-### 4 运行效果图
+### 5 运行效果图
 ![image](./demo.png)

@@ -98,23 +98,20 @@ public class UpdateModuleImpl {
                 }
             });
         }catch (Exception e){
-            promise.reject("执行报错:" + e.getMessage());
+            promise.reject("downloadPatchFromPpk failed: "+e.getMessage());
         }
     }
 
     public static void reloadUpdate(UpdateContext updateContext, ReactApplicationContext mContext, ReadableMap options, Promise promise) {
         final String hash = options.getString("hash");
-
-        if (hash == null || hash.isEmpty()) {
-            promise.reject("hash不能为空");
-            return;
-        }
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
             public void run() {
+
+                updateContext.switchVersion(hash);
+                final Context application = mContext.getApplicationContext();
+                JSBundleLoader loader = JSBundleLoader.createFileLoader(UpdateContext.getBundleUrl(application));
                 try {
-                    updateContext.switchVersion(hash);
-                    final Context application = mContext.getApplicationContext();
                     ReactInstanceManager instanceManager = updateContext.getCustomReactInstanceManager();
 
                     if (instanceManager == null) {
@@ -122,12 +119,10 @@ public class UpdateModuleImpl {
                     }
 
                     try {
-                        JSBundleLoader loader = JSBundleLoader.createFileLoader(UpdateContext.getBundleUrl(application));
                         Field loadField = instanceManager.getClass().getDeclaredField("mBundleLoader");
                         loadField.setAccessible(true);
                         loadField.set(instanceManager, loader);
                     } catch (Throwable err) {
-                        promise.reject("pushy:"+err.getMessage());
                         Field jsBundleField = instanceManager.getClass().getDeclaredField("mJSBundleFile");
                         jsBundleField.setAccessible(true);
                         jsBundleField.set(instanceManager, UpdateContext.getBundleUrl(application));
@@ -137,31 +132,36 @@ public class UpdateModuleImpl {
                     promise.resolve(true);
 
                 } catch (Throwable err) {
-                    promise.reject(err);
-                    Log.e("pushy", "switchVersion failed ", err);
                     final Activity currentActivity = mContext.getCurrentActivity();
                     if (currentActivity == null) {
                         return;
                     }
                     try {
-                        // Try to get getReactDelegate method using reflection
                         java.lang.reflect.Method getReactDelegateMethod = 
                             ReactActivity.class.getMethod("getReactDelegate");
-                        if (getReactDelegateMethod != null) {
-                            ReactDelegate reactDelegate = (ReactDelegate) 
-                                getReactDelegateMethod.invoke(currentActivity);
-                            
-                            // Try to get reload method using reflection
-                            java.lang.reflect.Method reloadMethod = 
-                                ReactDelegate.class.getMethod("reload");
-                            if (reloadMethod != null) {
-                                reloadMethod.invoke(reactDelegate);
-                            } else {
-                                throw new NoSuchMethodException();
-                            }
-                        } else {
-                            throw new NoSuchMethodException();
-                        }
+
+                        ReactDelegate reactDelegate = (ReactDelegate) 
+                            getReactDelegateMethod.invoke(currentActivity);
+
+                        Field reactHostField = ReactDelegate.class.getDeclaredField("mReactHost");
+                        reactHostField.setAccessible(true);
+                        Object reactHost = reactHostField.get(reactDelegate);
+
+                        // Access the mReactHostDelegate field
+                        Field reactHostDelegateField = reactHost.getClass().getDeclaredField("mReactHostDelegate");
+                        reactHostDelegateField.setAccessible(true);
+                        Object reactHostDelegate = reactHostDelegateField.get(reactHost);
+
+                        // Modify the jsBundleLoader field
+                        Field jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("jsBundleLoader");
+                        jsBundleLoaderField.setAccessible(true);
+                        jsBundleLoaderField.set(reactHostDelegate, loader);
+                        
+                        // Get the reload method with a String parameter
+                        java.lang.reflect.Method reloadMethod = reactHost.getClass().getMethod("reload", String.class);
+
+                        // Invoke the reload method with a reason
+                        reloadMethod.invoke(reactHost, "react-native-update");
                     } catch (Throwable e) {
                         currentActivity.runOnUiThread(new Runnable() {
                             @Override
@@ -171,72 +171,54 @@ public class UpdateModuleImpl {
                         });
                     }
                 }
+                promise.resolve(true);
             }
         });
     }
 
 
-    public static void setNeedUpdate(UpdateContext updateContext, ReadableMap options,Promise promise) {
-        try {
-            final String hash = options.getString("hash");
-            if(hash==null || hash.isEmpty()){
-                promise.reject("hash不能为空");
-                return;
-            }
-            UiThreadUtil.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    try {
-                        updateContext.switchVersion(hash);
-                        promise.resolve(true);
-                    } catch (Throwable err) {
-                        promise.reject("switchVersionLater failed:"+err.getMessage());
-                        Log.e("pushy", "switchVersionLater failed", err);
-                    }
+    public static void setNeedUpdate(UpdateContext updateContext, ReadableMap options, Promise promise) {
+        final String hash = options.getString("hash");
+        UiThreadUtil.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    updateContext.switchVersion(hash);
+                    promise.resolve(true);
+                } catch (Throwable err) {
+                    promise.reject("switchVersionLater failed: "+err.getMessage());
+                    Log.e("pushy", "switchVersionLater failed", err);
                 }
-            });
-        } catch (Exception e){
-            promise.reject("执行报错:"+e.getMessage());
-        }
+            }
+        });
     }
 
-    public static void markSuccess(UpdateContext updateContext,Promise promise) {
-        try {
-            UiThreadUtil.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    updateContext.markSuccess();
-                    promise.resolve(true);
-                }
-            });
-        } catch (Exception e){
-            promise.reject("执行报错:"+e.getMessage());
-        }
+    public static void markSuccess(UpdateContext updateContext, Promise promise) {
+        UiThreadUtil.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateContext.markSuccess();
+                promise.resolve(true);
+            }
+        });
     }
 
     public static void setUuid(UpdateContext updateContext, String uuid, Promise promise) {
-        try {
-            UiThreadUtil.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    updateContext.setKv("uuid", uuid);
-                    promise.resolve(true);
-                }
-            });
-        } catch (Exception e){
-            promise.reject("执行报错:"+e.getMessage());
-        }
-
+        UiThreadUtil.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                updateContext.setKv("uuid", uuid);
+                promise.resolve(true);
+            }
+        });
     }
 
     public static boolean check(String json) {
         ObjectMapper mapper = new ObjectMapper();
         try {
             mapper.readValue(json, Map.class);
-            System.out.println("String can be converted to Map");
             return  true;
         } catch (IOException e) {
-            System.out.println("String cannot be converted to Map");
             return  false;
         }
     }
@@ -246,12 +228,12 @@ public class UpdateModuleImpl {
         UiThreadUtil.runOnUiThread(new Runnable() {
             @Override
             public void run() {
-                if(!check(info)){
-                    updateContext.setKv("hash_" + hash, info);
-                    promise.reject("校验报错:json字符串格式错误");
-                }else {
+                if (check(info)) {
                     updateContext.setKv("hash_" + hash, info);
                     promise.resolve(true);
+                } else {
+                    updateContext.setKv("hash_" + hash, info);
+                    promise.reject("setLocalHashInfo failed: invalid json string");
                 }
             }
         });
@@ -262,7 +244,7 @@ public class UpdateModuleImpl {
         if (check(value)) {
             promise.resolve(value);
         } else {
-            promise.reject("校验报错:json字符串格式错误");
+            promise.reject("getLocalHashInfo failed: invalid json string");
         }
 
     }

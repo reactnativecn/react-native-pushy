@@ -27,7 +27,9 @@ export const UpdateProvider = ({
   client: Pushy | Cresc;
   children: ReactNode;
 }) => {
+  client = useRef(client).current;
   const { options } = client;
+
   const stateListener = useRef<NativeEventSubscription>();
   const [updateInfo, setUpdateInfo] = useState<CheckResult>();
   const updateInfoRef = useRef(updateInfo);
@@ -186,7 +188,7 @@ export const UpdateProvider = ({
             } else {
               Linking.openURL(downloadUrl);
             }
-            return;
+            return info;
           }
           alertUpdate('提示', '您的应用版本已更新，点击更新下载安装新版本', [
             {
@@ -207,7 +209,7 @@ export const UpdateProvider = ({
           options.updateStrategy === 'silentAndLater'
         ) {
           downloadUpdate(info);
-          return;
+          return info;
         }
         alertUpdate(
           '提示',
@@ -224,6 +226,7 @@ export const UpdateProvider = ({
           ],
         );
       }
+      return info;
     },
     [
       client,
@@ -239,10 +242,7 @@ export const UpdateProvider = ({
   const markSuccess = client.markSuccess;
 
   useEffect(() => {
-    if (__DEV__ && !options.debug) {
-      console.info(
-        '您当前处于开发环境且未启用debug，不会进行热更检查。如需在开发环境中调试热更，请在client中设置debug为true',
-      );
+    if (!client.assertDebug()) {
       return;
     }
     const { checkStrategy, dismissErrorAfter, autoMarkSuccess } = options;
@@ -272,7 +272,7 @@ export const UpdateProvider = ({
       stateListener.current && stateListener.current.remove();
       clearTimeout(dismissErrorTimer);
     };
-  }, [checkUpdate, options, dismissError, markSuccess]);
+  }, [checkUpdate, options, dismissError, markSuccess, client]);
 
   const parseTestPayload = useCallback(
     (payload: UpdateTestPayload) => {
@@ -326,11 +326,16 @@ export const UpdateProvider = ({
     };
 
     Linking.getInitialURL().then(parseLinking);
-    const linkingListener = Linking.addEventListener('url', ({ url }) =>
-      parseLinking(url),
-    );
+    const linkingHandler = ({ url }: { url: string }) => {
+      parseLinking(url);
+    };
+    const linkingListener = Linking.addEventListener('url', linkingHandler);
     return () => {
-      linkingListener.remove();
+      if ('removeEventListener' in Linking) {
+        (Linking as any).removeEventListener('url', linkingHandler);
+      } else {
+        linkingListener.remove();
+      }
     };
   }, [parseTestPayload]);
 

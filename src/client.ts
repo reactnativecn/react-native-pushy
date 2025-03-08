@@ -1,5 +1,14 @@
 import { CheckResult, ClientOptions, ProgressData, EventType } from './type';
-import { emptyObj, joinUrls, log, noop, promiseAny, testUrls } from './utils';
+import {
+  assertDev,
+  assertWeb,
+  emptyObj,
+  joinUrls,
+  log,
+  noop,
+  promiseAny,
+  testUrls,
+} from './utils';
 import { EmitterSubscription, Platform } from 'react-native';
 import { PermissionsAndroid } from './permissions';
 import {
@@ -17,7 +26,7 @@ import {
 
 const SERVER_PRESETS = {
   // cn
-  pushy: {
+  Pushy: {
     main: 'https://update.react-native.cn/api',
     backups: ['https://update.reactnative.cn/api'],
     queryUrls: [
@@ -26,7 +35,7 @@ const SERVER_PRESETS = {
     ],
   },
   // i18n
-  cresc: {
+  Cresc: {
     main: 'https://api.cresc.dev',
     backups: ['https://api.cresc.app'],
     queryUrls: [
@@ -34,11 +43,8 @@ const SERVER_PRESETS = {
     ],
   },
 };
-if (Platform.OS === 'web') {
-  console.warn(
-    'react-native-update does not support hot updates on the web platform and will not perform any operations',
-  );
-}
+
+assertWeb();
 
 const defaultClientOptions: ClientOptions = {
   appKey: '',
@@ -52,11 +58,8 @@ const defaultClientOptions: ClientOptions = {
 
 // for China users
 export class Pushy {
-  options: ClientOptions = {
-    ...defaultClientOptions,
-    server: SERVER_PRESETS.pushy,
-  };
-  clientType: 'pushy' | 'cresc' = 'pushy';
+  options = defaultClientOptions;
+  clientType: 'Pushy' | 'Cresc' = 'Pushy';
   lastChecking?: number;
   lastRespJson?: Promise<any>;
 
@@ -79,12 +82,14 @@ export class Pushy {
     };
   })();
 
-  constructor(options: ClientOptions) {
+  constructor(options: ClientOptions, clientType?: 'Pushy' | 'Cresc') {
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
       if (!options.appKey) {
         throw new Error('appKey is required');
       }
     }
+    this.clientType = clientType || 'Pushy';
+    this.options.server = SERVER_PRESETS[this.clientType];
     this.setOptions(options);
     if (isRolledBack) {
       this.report({
@@ -150,6 +155,15 @@ export class Pushy {
     }
     return true;
   };
+  assertDebug = () => {
+    if (__DEV__ && !this.options.debug) {
+      console.info(
+        'You are currently in the development environment and have not enabled debug mode. The hot update check will not be performed. If you need to debug hot updates in the development environment, please set debug to true in the client.',
+      );
+      return false;
+    }
+    return true;
+  };
   markSuccess = () => {
     if (Pushy.marked || __DEV__ || !isFirstTime) {
       return;
@@ -159,10 +173,7 @@ export class Pushy {
     this.report({ type: 'markSuccess' });
   };
   switchVersion = async (hash: string) => {
-    if (__DEV__) {
-      console.warn(
-        'switchVersion() is not supported in development environment; no action taken.',
-      );
+    if (!assertDev('switchVersion()')) {
       return;
     }
     if (Pushy.assertHash(hash) && !Pushy.applyingUpdate) {
@@ -173,10 +184,7 @@ export class Pushy {
   };
 
   switchVersionLater = async (hash: string) => {
-    if (__DEV__) {
-      console.warn(
-        'switchVersionLater() is not supported in development environment; no action taken.',
-      );
+    if (!assertDev('switchVersionLater()')) {
       return;
     }
     if (Pushy.assertHash(hash)) {
@@ -185,14 +193,10 @@ export class Pushy {
     }
   };
   checkUpdate = async (extra?: Record<string, any>) => {
-    if (__DEV__ && !this.options.debug) {
-      console.info(
-        'You are currently in the development environment and have not enabled debug mode. The hot update check will not be performed. If you need to debug hot updates in the development environment, please set debug to true in the client.',
-      );
+    if (!this.assertDebug()) {
       return;
     }
-    if (Platform.OS === 'web') {
-      console.warn('web platform does not support hot update check');
+    if (!assertWeb()) {
       return;
     }
     if (
@@ -222,10 +226,11 @@ export class Pushy {
       // @ts-ignore
       delete fetchBody.buildTime;
     }
+    const stringifyBody = JSON.stringify(fetchBody);
     // harmony fetch body is not string
     let body: any = fetchBody;
     if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      body = JSON.stringify(fetchBody);
+      body = stringifyBody;
     }
     const fetchPayload = {
       method: 'POST',
@@ -239,13 +244,13 @@ export class Pushy {
     try {
       this.report({
         type: 'checking',
-        message: this.options.appKey + ': ' + body,
+        message: this.options.appKey + ': ' + stringifyBody,
       });
       resp = await fetch(this.getCheckUrl(), fetchPayload);
     } catch (e: any) {
       this.report({
         type: 'errorChecking',
-        message: 'Can not connect to update server. Trying backup endpoints.',
+        message: `Can not connect to update server: ${e.message}. Trying backup endpoints.`,
       });
       const backupEndpoints = await this.getBackupEndpoints();
       if (backupEndpoints) {
@@ -357,6 +362,7 @@ export class Pushy {
     let succeeded = '';
     this.report({ type: 'downloading' });
     let lastError: any;
+    let errorMessages: string[] = [];
     const diffUrl = await testUrls(joinUrls(paths, diff));
     if (diffUrl) {
       log('downloading diff');
@@ -368,11 +374,13 @@ export class Pushy {
         });
         succeeded = 'diff';
       } catch (e: any) {
-        lastError = e;
+        const errorMessage = `diff error: ${e.message}`;
+        errorMessages.push(errorMessage);
+        lastError = new Error(errorMessage);
         if (__DEV__) {
           succeeded = 'diff';
         } else {
-          log(`diff error: ${e.message}, try pdiff`);
+          log(errorMessage);
         }
       }
     }
@@ -386,11 +394,13 @@ export class Pushy {
         });
         succeeded = 'pdiff';
       } catch (e: any) {
-        lastError = e;
+        const errorMessage = `pdiff error: ${e.message}`;
+        errorMessages.push(errorMessage);
+        lastError = new Error(errorMessage);
         if (__DEV__) {
           succeeded = 'pdiff';
         } else {
-          log(`pdiff error: ${e.message}, try full patch`);
+          log(errorMessage);
         }
       }
     }
@@ -404,11 +414,13 @@ export class Pushy {
         });
         succeeded = 'full';
       } catch (e: any) {
-        lastError = e;
+        const errorMessage = `full patch error: ${e.message}`;
+        errorMessages.push(errorMessage);
+        lastError = new Error(errorMessage);
         if (__DEV__) {
           succeeded = 'full';
         } else {
-          log(`full patch error: ${e.message}`);
+          log(errorMessage);
         }
       }
     }
@@ -423,6 +435,7 @@ export class Pushy {
       this.report({
         type: 'errorUpdate',
         data: { newVersion: hash },
+        message: errorMessages.join(';'),
       });
       if (lastError) {
         throw lastError;
@@ -509,9 +522,7 @@ export class Pushy {
 
 // for international users
 export class Cresc extends Pushy {
-  clientType: 'cresc' | 'pushy' = 'cresc';
-  options: ClientOptions = {
-    ...defaultClientOptions,
-    server: SERVER_PRESETS.cresc,
-  };
+  constructor(options: ClientOptions) {
+    super(options, 'Cresc');
+  }
 }
