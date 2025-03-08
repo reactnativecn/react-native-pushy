@@ -145,7 +145,6 @@ export class UpdateContext {
 
             const lastVersion = this.getKv('currentVersion');
             this.setKv('currentVersion', hash);
-            const currentVersion = this.getKv('currentVersion');
             if (lastVersion && lastVersion !== hash) {
                 this.setKv('lastVersion', lastVersion);
             }
