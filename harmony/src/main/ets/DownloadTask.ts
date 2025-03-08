@@ -296,7 +296,7 @@ export class DownloadTask {
       }
 
       if(fn !== '.DS_Store'){
-        await zip.decompressFile(entry.filename, params.unzipDirectory);
+        await zip.decompressFile(fn, params.unzipDirectory);
       }
     }
 
