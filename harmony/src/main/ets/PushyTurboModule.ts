@@ -7,6 +7,7 @@ import { BusinessError } from '@ohos.base';
 import logger from './Logger';
 import { UpdateModuleImpl } from './UpdateModuleImpl';
 import { UpdateContext } from './UpdateContext';
+import { EventHub } from './EventHub';
 
 const TAG = "PushyTurboModule"
 
@@ -18,9 +19,8 @@ export class PushyTurboModule extends TurboModule {
     super(ctx);
     logger.debug(TAG, ",PushyTurboModule constructor");
     this.mUiCtx = ctx.uiAbilityContext
-    let rnInstance = ctx.rnInstance
     this.context = new UpdateContext(this.mUiCtx)
-    // rnInstance.emitDeviceEvent("Pushy",{code: err.code, message: err.message});
+    EventHub.getInstance().setRNInstance(ctx.rnInstance)
   }
 
 

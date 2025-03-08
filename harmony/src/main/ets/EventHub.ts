@@ -3,6 +3,7 @@ type EventCallback = (data: any) => void;
 export class EventHub {
   private static instance: EventHub;
   private listeners: Map<string, Set<EventCallback>>;
+  private rnInstance: any;
 
   private constructor() {
     this.listeners = new Map();
@@ -27,12 +28,12 @@ export class EventHub {
   }
 
   public emit(event: string, data: any): void {
-    this.listeners.get(event)?.forEach(callback => {
-      try {
-        callback(data);
-      } catch (error) {
-        console.error(`Error in event listener for ${event}:`, error);
-      }
-    });
+    if (this.rnInstance) {
+      this.rnInstance.emitDeviceEvent(event, data);
+    }
+  }
+
+  setRNInstance(instance: any) {
+    this.rnInstance = instance;
   }
 }

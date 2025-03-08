@@ -65,9 +65,13 @@ export class DownloadTask {
             0,
             params.targetFile.lastIndexOf('/'),
           );
-          await fileIo.mkdir(targetDir);
+          const exists = fileIo.accessSync(targetDir);
+          if(!exists){
+            await fileIo.mkdir(targetDir);
+          }
         }
       } catch (error) {
+        throw error;
       }
 
       const response = await httpRequest.request(params.url, {
@@ -78,12 +82,11 @@ export class DownloadTask {
           'Content-Type': 'application/octet-stream',
         },
       });
-
       if (response.responseCode > 299) {
         throw new Error(`Server error: ${response.responseCode}`);
       }
 
-      const contentLength = parseInt(response.header['Content-Length'] || '0');
+      const contentLength = parseInt(response.header['content-length'] || '0');
       const writer = await fileIo.open(
         params.targetFile,
         fileIo.OpenMode.CREATE | fileIo.OpenMode.READ_WRITE,
@@ -102,8 +105,12 @@ export class DownloadTask {
         this.onProgressUpdate(received, contentLength);
       }
       await fileIo.close(writer);
-      const stat = await fileIo.stat(params.targetFile);
-      const fileSize = stat.size;
+      const stats = await fileIo.stat(params.targetFile);
+      const fileSize = stats.size;
+      if (fileSize !== contentLength) {
+        throw new Error(`Download incomplete: expected ${contentLength} bytes but got ${stats.size} bytes`);
+      }
+
     } catch (error) {
       console.error('Download failed:', error);
       throw error;
@@ -113,7 +120,7 @@ export class DownloadTask {
   }
 
   private onProgressUpdate(received: number, total: number): void {
-    this.eventHub.emit('downloadProgress', {
+    this.eventHub.emit('RCTPushyDownloadProgress', {
       received,
       total,
       hash: this.hash,
@@ -288,7 +295,7 @@ export class DownloadTask {
         }
       }
 
-       if(entry.filename !== '.DS_Store'){
+      if(fn !== '.DS_Store'){
         await zip.decompressFile(entry.filename, params.unzipDirectory);
       }
     }
