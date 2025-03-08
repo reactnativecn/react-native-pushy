@@ -28,7 +28,7 @@ export function generatePushyBuildTime(str?: string) {
                         pushy_build_time: buildTime,
                         versionName: versionName 
                     };
-                    fs.writeFileSync(metaFilePath, JSON.stringify(metaContent, null, 4));
+                    // fs.writeFileSync(metaFilePath, JSON.stringify(metaContent, null, 4));
                     console.log(`Build time written to ${metaFilePath}`);
                 },
                 dependencies: [],
