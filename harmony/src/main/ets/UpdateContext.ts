@@ -29,6 +29,17 @@ export class UpdateContext {
     private initPreferences() {
         try {
             this.preferences = preferences.getPreferencesSync(this.context, {name:'update'});
+            const packageVersion =  this.getPackageVersion();
+            const storedVersion =  this.preferences.getSync('packageVersion', '');
+            if(!storedVersion){
+                this.preferences.putSync('packageVersion', packageVersion);
+                this.preferences.flush();
+            } else if (storedVersion && packageVersion !== storedVersion) {
+                this.preferences.clear();
+                this.preferences.putSync('packageVersion', packageVersion);
+                this.preferences.flush();
+                this.cleanUp();
+            }
         } catch (e) {
             console.error('Failed to init preferences:', e);
         }
