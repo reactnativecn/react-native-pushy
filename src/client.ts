@@ -9,7 +9,7 @@ import {
   promiseAny,
   testUrls,
 } from './utils';
-import { EmitterSubscription, Platform } from 'react-native';
+import { EmitterSubscription, Platform, DeviceEventEmitter } from 'react-native';
 import { PermissionsAndroid } from './permissions';
 import {
   PushyModule,
@@ -350,14 +350,25 @@ export class Pushy {
       return;
     }
     if (onDownloadProgress) {
-      Pushy.progressHandlers[hash] = pushyNativeEventEmitter.addListener(
-        'RCTPushyDownloadProgress',
-        progressData => {
-          if (progressData.hash === hash) {
-            onDownloadProgress(progressData);
-          }
-        },
-      );
+      if (Platform.OS === 'harmony') {
+        Pushy.progressHandlers[hash] = DeviceEventEmitter.addListener(
+          'RCTPushyDownloadProgress',
+          progressData => {
+            if (progressData.hash === hash) {
+              onDownloadProgress(progressData);
+            }
+          },
+        );
+      } else {
+        Pushy.progressHandlers[hash] = pushyNativeEventEmitter.addListener(
+          'RCTPushyDownloadProgress',
+          progressData => {
+            if (progressData.hash === hash) {
+              onDownloadProgress(progressData);
+            }
+          },
+        );
+      }
     }
     let succeeded = '';
     this.report({ type: 'downloading' });

@@ -31,11 +31,14 @@ export class UpdateContext {
             this.preferences = preferences.getPreferencesSync(this.context, {name:'update'});
             const packageVersion =  this.getPackageVersion();
             const storedVersion =  this.preferences.getSync('packageVersion', '');
-            if (packageVersion !== storedVersion) {
-                 this.preferences.clear();
-                 this.preferences.putSync('packageVersion', packageVersion);
-                 this.preferences.flush();
-                 this.cleanUp();
+            if(!storedVersion){
+                this.preferences.putSync('packageVersion', packageVersion);
+                this.preferences.flush();
+            } else if (storedVersion && packageVersion !== storedVersion) {
+                this.preferences.clear();
+                this.preferences.putSync('packageVersion', packageVersion);
+                this.preferences.flush();
+                this.cleanUp();
             }
         } catch (e) {
             console.error('Failed to init preferences:', e);
@@ -137,8 +140,9 @@ export class UpdateContext {
             params.unzipDirectory = `${this.rootDir}/${hash}`;
 
             const downloadTask = new DownloadTask(this.context);
-            await downloadTask.execute(params);
+            return  await downloadTask.execute(params);
         } catch (e) {
+            throw e;
             console.error('Failed to download APK patch:', e);
         }
     }
@@ -152,14 +156,13 @@ export class UpdateContext {
 
             const lastVersion = this.getKv('currentVersion');
             this.setKv('currentVersion', hash);
-
             if (lastVersion && lastVersion !== hash) {
                 this.setKv('lastVersion', lastVersion);
             }
 
              this.setKv('firstTime', 'true');
              this.setKv('firstTimeOk', 'false');
-             this.setKv('rolledBackVersion', null);
+             this.setKv('rolledBackVersion', "");
         } catch (e) {
             console.error('Failed to switch version:', e);
         }
@@ -211,7 +214,7 @@ export class UpdateContext {
     }
 
     public getCurrentVersion() : string {
-        const currentVersion = this.preferences.getSync('currentVersion', '') as string;
+        const currentVersion = this.getKv('currentVersion');
         return currentVersion;
     }
 
