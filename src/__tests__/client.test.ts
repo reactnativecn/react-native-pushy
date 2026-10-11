@@ -1001,12 +1001,14 @@ describe('downloadUpdate fallback chain', () => {
     downloadFullUpdate = mock(() => Promise.resolve()),
     addProgressListener = mock(() => ({ remove: mock(() => {}) })),
     setLocalHashInfo = mock(() => {}),
+    fetchWithTimeout = mock(() => Promise.resolve()),
   }: {
     downloadPatchFromPpk?: ReturnType<typeof mock>;
     downloadPatchFromPackage?: ReturnType<typeof mock>;
     downloadFullUpdate?: ReturnType<typeof mock>;
     addProgressListener?: ReturnType<typeof mock>;
     setLocalHashInfo?: ReturnType<typeof mock>;
+    fetchWithTimeout?: ReturnType<typeof mock>;
   } = {}) => {
     setupClientMocks({
       downloadPatchFromPpk,
@@ -1029,7 +1031,7 @@ describe('downloadUpdate fallback chain', () => {
           ? Math.min(100, Math.max(0, Math.floor((received / total) * 100)))
           : 0,
       DEFAULT_FETCH_TIMEOUT_MS: 5000,
-      fetchWithTimeout: mock(() => Promise.resolve()),
+      fetchWithTimeout,
       info: mock(() => {}),
       joinUrls: (paths: string[], fileName?: string) =>
         fileName ? paths.map((p) => `${p}/${fileName}`) : undefined,
@@ -1043,8 +1045,18 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPpk,
       downloadPatchFromPackage,
       downloadFullUpdate,
+      fetchWithTimeout,
     };
   };
+
+  // The telemetry POSTs a download sent, as { type, detail } pairs.
+  const serverReports = (fetchWithTimeout: ReturnType<typeof mock>) =>
+    fetchWithTimeout.mock.calls
+      .filter(([url]: any[]) => String(url).includes('/report/'))
+      .map(([, init]: any[]): { type: string; detail?: string } => {
+        const { type, detail } = JSON.parse(String(init.body));
+        return { type, detail };
+      });
 
   const updateInfo = {
     update: true as const,
@@ -1553,6 +1565,50 @@ describe('downloadUpdate fallback chain', () => {
         }),
       })
     );
+  });
+
+  test('a download rescued after a network error is not a patch failure', async () => {
+    const timeout: any = Error('请求超时。');
+    timeout.code = 'DOWNLOAD_FAILED';
+    const { fetchWithTimeout } = setupDownloadMocks({
+      downloadPatchFromPpk: mock(() => Promise.reject(timeout)),
+    });
+    const { Pushy, sharedState } = await importFreshClient(
+      'dl-fallback-transport-report'
+    );
+    sharedState.downloadedHash = undefined;
+    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+
+    expect(await client.downloadUpdate(updateInfo)).toBe('new-hash');
+
+    expect(serverReports(fetchWithTimeout)).toEqual([
+      { type: 'download_success' },
+    ]);
+  });
+
+  test('a rescued patch failure is reported once, with only the patch error', async () => {
+    const patchError: any = Error('hpatch failed');
+    patchError.code = 'PATCH_FAILED';
+    const timeout: any = Error('请求超时。');
+    timeout.code = 'DOWNLOAD_FAILED';
+    const { fetchWithTimeout } = setupDownloadMocks({
+      downloadPatchFromPpk: mock(() => Promise.reject(patchError)),
+      downloadPatchFromPackage: mock(() => Promise.reject(timeout)),
+    });
+    const { Pushy, sharedState } = await importFreshClient(
+      'dl-fallback-patch-report'
+    );
+    sharedState.downloadedHash = undefined;
+    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+
+    expect(await client.downloadUpdate(updateInfo)).toBe('new-hash');
+
+    // The test i18n renders bare keys: the pdiff timeout is not in detail.
+    expect(
+      serverReports(fetchWithTimeout).filter(
+        ({ type }) => type === 'patch_fail'
+      )
+    ).toEqual([{ type: 'patch_fail', detail: 'error_diff_failed' }]);
   });
 
   test('a `[PATCH_FAILED] ` message prefix classifies like a code property (bridge contract)', async () => {

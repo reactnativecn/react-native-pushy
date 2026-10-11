@@ -827,13 +827,11 @@ export class Pushy {
         ).catch((e: any) => {
           log('telemetry report failed:', e?.message || e);
         });
+      // A download rescued by a later strategy reports its patch-health
+      // signal through downloadFallback, which only counts patch-apply
+      // failures; downloadSuccess's data.error (any earlier failure, network
+      // errors included) stays local.
       send(serverType, message || undefined);
-      // A download that only succeeded after an incremental patch failed is
-      // still a patch_fail signal server-side (diff quality), carried in
-      // data.error alongside the downloadSuccess event.
-      if (serverType === 'download_success' && data.error) {
-        send('patch_fail', String(data.error));
-      }
     } catch (e: any) {
       log('telemetry error:', e?.message || e);
     }
@@ -1493,6 +1491,9 @@ export class Pushy {
     // downloadFallback report carries that as its code even when a later,
     // unrelated transport failure happened to be the last error seen.
     let patchFailed = false;
+    // The errors of the strategies that failed at the patch stage. A strategy
+    // that failed to apply is never retried, so these do not repeat.
+    const patchErrorMessages: string[] = [];
 
     // The ordered attempts come from decideDownload (the pure decision layer);
     // this side only executes them: probe candidate URLs, run the matching
@@ -1586,6 +1587,7 @@ export class Pushy {
             log(errorMessage);
             if (lastError.code === 'PATCH_FAILED') {
               patchFailed = true;
+              patchErrorMessages.push(errorMessage);
             }
             if (!isMirrorRetryableCode(lastError.code)) {
               // The bytes arrived but could not be applied (patch/manifest
@@ -1625,7 +1627,9 @@ export class Pushy {
           newVersion: hash,
           succeeded,
         },
-        message: errorMessages.join(';'),
+        // Only the patch failures: a mirror's timeout alongside them would
+        // otherwise be read as the cause server-side.
+        message: (patchFailed ? patchErrorMessages : errorMessages).join(';'),
       });
     }
     if (!succeeded) {
