@@ -212,7 +212,13 @@ Pod::Spec.new do |s|
   s.subspec 'RCTPushy' do |ss|
     ss.dependency 'react-native-update/Core'
     ss.source_files = ['ios/RCTPushy/*.{h,m,mm}']
-    ss.public_header_files = ['ios/RCTPushy/*.h']
+    ss.public_header_files = ['ios/RCTPushy/RCTPushy.h',
+                              'ios/RCTPushy/RCTPushyConfiguration.h',
+                              'ios/RCTPushy/RCTPushyDownloader.h']
+    # RCTPushyInternal.h is shared between RCTPushy.mm and
+    # RCTPushyOrchestrator.mm only; it pulls in C++ headers, so it must stay
+    # out of the module umbrella.
+    ss.private_header_files = ['ios/RCTPushy/RCTPushyInternal.h']
   end
 
   # Conditionally add Expo subspec and check ExpoModulesCore version

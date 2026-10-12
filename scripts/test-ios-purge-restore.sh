@@ -26,9 +26,9 @@ build() {
   destination="$BUILD_DIR/$variant"
   mkdir -p "$destination"
   if [ "$variant" = baseline ]; then
-    python3 "$TEST_DIR/extract.py" "$ROOT_DIR/ios/RCTPushy/RCTPushy.mm" "$destination"
+    python3 "$TEST_DIR/extract.py" "$ROOT_DIR/ios/RCTPushy" "$destination"
   else
-    python3 "$TEST_DIR/extract.py" "$ROOT_DIR/ios/RCTPushy/RCTPushy.mm" "$destination" --mutation "$variant"
+    python3 "$TEST_DIR/extract.py" "$ROOT_DIR/ios/RCTPushy" "$destination" --mutation "$variant"
   fi
   # Compile the real production bodies and state_core; only their external I/O
   # collaborators live in the test host. No RN, CocoaPods, simulator or network.

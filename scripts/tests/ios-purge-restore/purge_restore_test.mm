@@ -27,6 +27,9 @@ static void TestLog(NSString *, ...) {}
 #define RCTLogWarn TestLog
 #define RCTLogError TestLog
 
+// Pod-internal linkage (RCTPushyInternal.h); one translation unit here.
+#define PUSHY_HIDDEN
+
 #include "globals.inc"
 
 static const char *testName = "setup";

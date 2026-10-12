@@ -1,7 +1,8 @@
 # Deterministic native purge-restore ordering tests
 
 Follow-up to #646. These tests exercise the tvOS Release branch of the real
-`RCTPushy.mm` startup/commit/reset code in a macOS Foundation-only executable.
+`RCTPushy.mm` / `RCTPushyOrchestrator.mm` startup/commit/reset code in a macOS
+Foundation-only executable.
 There are no production code changes, React Native mocks to install, CocoaPods,
 simulator builds, network requests, or sleeps.
 
@@ -25,8 +26,10 @@ python3 -m unittest discover -s scripts/tests/ios-purge-restore -p test_extract.
 
 ## Production code, not a second state machine
 
-`extract.py` reads the checkout's `ios/RCTPushy/RCTPushy.mm` on every build. It
-copies the exact definitions (with `#line` locations) of `bundleURL`,
+`extract.py` reads the checkout's `ios/RCTPushy/RCTPushy.mm` and
+`RCTPushyOrchestrator.mm` on every build (each definition must exist exactly
+once across them; pod-internal `PUSHY_HIDDEN` definitions count like `static`
+ones). It copies the exact definitions (with `#line` locations) of `bundleURL`,
 `resolveLaunchBundleURL`, `restorePurgedLaunch`, `commitRoundWithGeneration`,
 `resetToPackagedBundle`, their state/defaults helpers, and the relevant globals
 into build-only `.inc` files. These are compiled unchanged with the actual
