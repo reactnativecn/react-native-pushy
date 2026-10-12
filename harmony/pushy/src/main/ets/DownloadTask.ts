@@ -46,80 +46,16 @@ import { BUNDLE_DELTA_ENTRY } from './Texts';
 
 const TAG = 'DownloadTask';
 
-export interface PatchManifestArrays {
-  copyFroms: string[];
-  copyTos: string[];
-  // 与 copyFroms/copyTos 逐位对齐的 copiesCrc(CLI >= 2.21.2 的 pdiff
-  // manifest 携带,键是 to);无声明时为 null。拷贝前用它校验包内资源内容,
-  // 不符则整次 patch 失败落 full——重打包二进制不能静默拷出漂移的资源。
-  copyCrcs: (number | null)[];
-  deletes: string[];
-  // __diff.json 中对应 bundle patch 条目的 hbcTransform 元数据(原始 JSON
-  // 字符串);为空时 native 走现状路径
-  hbcTransformMeta: string;
-}
-
-export function parseManifestToArrays(
-  manifest: Record<string, any>,
-  normalizeResourceCopies: boolean,
-): PatchManifestArrays {
-  const copyFroms: string[] = [];
-  const copyTos: string[] = [];
-  const copyCrcs: (number | null)[] = [];
-  const deletesValue = manifest.deletes;
-  const deletes = Array.isArray(deletesValue)
-    ? deletesValue.map(item => String(item))
-    : deletesValue && typeof deletesValue === 'object'
-      ? Object.keys(deletesValue)
-      : [];
-
-  const copies = (manifest.copies || {}) as Record<string, string>;
-  const copiesCrcValue = manifest.copiesCrc;
-  const copiesCrc =
-    copiesCrcValue && typeof copiesCrcValue === 'object'
-      ? (copiesCrcValue as Record<string, number>)
-      : ({} as Record<string, number>);
-  for (const to of Object.keys(copies)) {
-    const rawFrom = copies[to];
-    let from = String(rawFrom || '');
-    if (normalizeResourceCopies) {
-      from = from.replace('resources/rawfile/', '');
-      if (!from) {
-        from = to;
-      }
-    }
-    copyFroms.push(from);
-    copyTos.push(to);
-    const crc = copiesCrc[to];
-    copyCrcs.push(typeof crc === 'number' && Number.isFinite(crc) ? crc : null);
-  }
-
-  const hbcTransform = manifest.hbcTransform as
-    | Record<string, object>
-    | undefined;
-  const hbcTransformEntry =
-    hbcTransform && typeof hbcTransform === 'object'
-      ? hbcTransform[BUNDLE_DELTA_ENTRY]
-      : undefined;
-  const hbcTransformMeta =
-    hbcTransformEntry && typeof hbcTransformEntry === 'object'
-      ? JSON.stringify(hbcTransformEntry)
-      : '';
-
-  return {
-    copyFroms,
-    copyTos,
-    copyCrcs,
-    deletes,
-    hbcTransformMeta,
-  };
-}
-
+// staging 目录里的条目名 + __diff.json 原文:由原生内核统一校验与解析
+// (cpp/patch_core/patch_manifest.h),这里不解析 manifest。
 interface DeltaInputs {
   entryNames: string[];
-  manifestArrays: PatchManifestArrays;
+  manifestJson: string;
 }
 
+// 包内 rawfile 在 HAP 中的路径前缀:pdiff 的拷贝源按 HAP 路径命名,
+// resourceManager 按去掉前缀后的路径读取。原生解析时只剥开头一次。
+const RAWFILE_COPY_SOURCE_PREFIX = 'resources/rawfile/';
 const DIFF_MANIFEST_ENTRY = '__diff.json';
 const TEMP_ORIGIN_BUNDLE_ENTRY = `.origin.${HARMONY_BUNDLE_FILE_NAME}`;
 const DOWNLOAD_CALL_TIMEOUT_MS = 10 * 60 * 1000;
@@ -434,19 +370,11 @@ export class DownloadTask {
     ) as Record<string, any>;
   }
 
-  private async readManifestArrays(
-    directory: string,
-    normalizeResourceCopies: boolean,
-  ): Promise<PatchManifestArrays> {
+  // __diff.json 原文;归档里没有时为空串(原生内核报 "diff.json not found")。
+  private async readManifestJson(directory: string): Promise<string> {
     const manifestPath = `${directory}/${DIFF_MANIFEST_ENTRY}`;
     if (!fileIo.accessSync(manifestPath)) {
-      return {
-        copyFroms: [],
-        copyTos: [],
-        copyCrcs: [],
-        deletes: [],
-        hbcTransformMeta: '',
-      };
+      return '';
     }
 
     const manifestStat = await fileIo.stat(manifestPath);
@@ -456,42 +384,39 @@ export class DownloadTask {
         `delta manifest too large: ${manifestStat.size} bytes`,
       );
     }
-    return parseManifestToArrays(
-      this.parseJsonEntry(await this.readFileContent(manifestPath)),
-      normalizeResourceCopies,
+    return new util.TextDecoder().decodeToString(
+      new Uint8Array(await this.readFileContent(manifestPath)),
     );
   }
 
-
   /**
-   * pdiff 的 bundle 补丁:hpatch 需要文件源,先把二进制内嵌的 bundle 从
-   * rawfile descriptor 异步流式拷到 staging 里的临时文件(不整包读进内存、
-   * 不在 UI 线程同步 IO),补丁完成后删除。
+   * pdiff:hpatch 需要文件源,先把二进制内嵌的 bundle 从 rawfile descriptor
+   * 异步流式拷到 staging 里的临时文件(不整包读进内存、不在 UI 线程同步
+   * IO),原生内核只重建 bundle,拷贝分组交回由 copyFromResource 完成。
    */
-  private async applyBundlePatchFromEmbeddedBundle(
-    workingDirectory: string,
-    bundleDeltaPath: string,
-    outputFile: string,
-    hbcTransformMeta = '',
-  ): Promise<void> {
-    const originBundlePath = `${workingDirectory}/${TEMP_ORIGIN_BUNDLE_ENTRY}`;
+  private async applyPatchFromEmbeddedBundle(
+    work: string,
+    inputs: DeltaInputs,
+  ): Promise<CopyGroupResult[]> {
+    const originBundlePath = `${work}/${TEMP_ORIGIN_BUNDLE_ENTRY}`;
     try {
       await withRawFd(
         this.context.resourceManager,
         HARMONY_BUNDLE_FILE_NAME,
         descriptor => saveFileToSandbox(descriptor, originBundlePath),
       );
-      await NativePatchCore.applyDeltaFromSource({
-        copyFroms: [],
-        copyTos: [],
-        deletes: [],
-        sourceRoot: workingDirectory,
-        targetRoot: workingDirectory,
+      return await NativePatchCore.applyArchiveDelta({
+        archiveType: ARCHIVE_PATCH_TYPE_FROM_PACKAGE,
+        entryNames: inputs.entryNames,
+        manifestJson: inputs.manifestJson,
+        bundleDeltaEntry: BUNDLE_DELTA_ENTRY,
+        copySourcePrefix: RAWFILE_COPY_SOURCE_PREFIX,
+        sourceRoot: work,
+        targetRoot: work,
         originBundlePath,
-        bundleDeltaPath,
-        bundleOutputPath: outputFile,
-        enableMerge: false,
-        bundleHbcTransformMeta: hbcTransformMeta,
+        bundleDeltaPath: `${work}/${BUNDLE_DELTA_ENTRY}`,
+        bundleOutputPath: `${work}/${HARMONY_BUNDLE_FILE_NAME}`,
+        hostCopiesResources: true,
       });
     } catch (error) {
       throw createPushyError(
@@ -1024,16 +949,12 @@ export class DownloadTask {
     return work;
   }
 
-  /** 解压目录里的条目名 + __diff.json 解析结果,供 patch plan 使用。 */
-  private async readDeltaInputs(
-    work: string,
-    normalizeResourceCopies: boolean,
-  ): Promise<DeltaInputs> {
+  private async readDeltaInputs(work: string): Promise<DeltaInputs> {
     const results = await Promise.all([
       this.listEntryNames(work),
-      this.readManifestArrays(work, normalizeResourceCopies),
+      this.readManifestJson(work),
     ]);
-    return { entryNames: results[0], manifestArrays: results[1] };
+    return { entryNames: results[0], manifestJson: results[1] };
   }
 
   private async doFullPatch(params: DownloadTaskParams): Promise<void> {
@@ -1043,73 +964,27 @@ export class DownloadTask {
 
   private async doPatchFromApp(params: DownloadTaskParams): Promise<void> {
     const work = await this.downloadAndExtract(params);
-    const inputs = await this.readDeltaInputs(work, true);
-    const manifestArrays = inputs.manifestArrays;
-
-    NativePatchCore.buildArchivePlan(
-      ARCHIVE_PATCH_TYPE_FROM_PACKAGE,
-      inputs.entryNames,
-      manifestArrays.copyFroms,
-      manifestArrays.copyTos,
-      manifestArrays.deletes,
-      BUNDLE_DELTA_ENTRY,
-    );
-
-    const bundleDeltaPath = `${work}/${BUNDLE_DELTA_ENTRY}`;
-    if (!fileIo.accessSync(bundleDeltaPath)) {
-      throw createPushyError(ERROR_DELTA_FAILED, 'bundle delta not found');
-    }
-    await this.applyBundlePatchFromEmbeddedBundle(
+    const copyGroups = await this.applyPatchFromEmbeddedBundle(
       work,
-      bundleDeltaPath,
-      `${work}/${HARMONY_BUNDLE_FILE_NAME}`,
-      manifestArrays.hbcTransformMeta,
+      await this.readDeltaInputs(work),
     );
-    // 组按 from 聚合;同一 from 的内容必然一致,所以每组一个 CRC 即可
-    // (与 manifest 逐位对齐的 copyCrcs 里取第一个非空值)。
-    const crcByFrom = new Map<string, number>();
-    manifestArrays.copyFroms.forEach((from, index) => {
-      const crc = manifestArrays.copyCrcs[index];
-      if (crc !== null && !crcByFrom.has(from)) {
-        crcByFrom.set(from, crc);
-      }
-    });
-    await this.copyFromResource(
-      NativePatchCore.buildCopyGroups(
-        manifestArrays.copyFroms,
-        manifestArrays.copyTos,
-      ),
-      work,
-      crcByFrom,
-    );
+    await this.copyFromResource(copyGroups, work);
     await this.deleteArchiveAndSidecar(params.targetFile);
   }
 
   private async doPatchFromPpk(params: DownloadTaskParams): Promise<void> {
     const work = await this.downloadAndExtract(params);
-    const inputs = await this.readDeltaInputs(work, false);
-    const manifestArrays = inputs.manifestArrays;
-
-    const plan = NativePatchCore.buildArchivePlan(
-      ARCHIVE_PATCH_TYPE_FROM_PPK,
-      inputs.entryNames,
-      manifestArrays.copyFroms,
-      manifestArrays.copyTos,
-      manifestArrays.deletes,
-      BUNDLE_DELTA_ENTRY,
-    );
-    await NativePatchCore.applyDeltaFromSource({
-      copyFroms: manifestArrays.copyFroms,
-      copyTos: manifestArrays.copyTos,
-      deletes: manifestArrays.deletes,
+    const inputs = await this.readDeltaInputs(work);
+    await NativePatchCore.applyArchiveDelta({
+      archiveType: ARCHIVE_PATCH_TYPE_FROM_PPK,
+      entryNames: inputs.entryNames,
+      manifestJson: inputs.manifestJson,
+      bundleDeltaEntry: BUNDLE_DELTA_ENTRY,
       sourceRoot: params.originDirectory,
       targetRoot: work,
       originBundlePath: `${params.originDirectory}/${HARMONY_BUNDLE_FILE_NAME}`,
       bundleDeltaPath: `${work}/${BUNDLE_DELTA_ENTRY}`,
       bundleOutputPath: `${work}/${HARMONY_BUNDLE_FILE_NAME}`,
-      mergeSourceSubdir: plan.mergeSourceSubdir,
-      enableMerge: plan.enableMerge,
-      bundleHbcTransformMeta: manifestArrays.hbcTransformMeta,
     });
     logger.info(TAG, 'Delta from PPK completed');
     await this.deleteArchiveAndSidecar(params.targetFile);
@@ -1118,7 +993,6 @@ export class DownloadTask {
   private async copyFromResource(
     copyGroups: CopyGroupResult[],
     targetRoot: string,
-    crcByFrom?: Map<string, number>,
   ): Promise<void> {
     let currentFrom = '';
     try {
@@ -1130,7 +1004,7 @@ export class DownloadTask {
         if (targets.length === 0) {
           continue;
         }
-        const expectedCrc = crcByFrom?.get(currentFrom);
+        const expectedCrc = group.expectedCrc;
 
         if (currentFrom.startsWith('resources/base/media/')) {
           // Strip only the final extension: 'icon.round.png' -> 'icon.round',

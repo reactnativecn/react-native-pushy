@@ -6,25 +6,16 @@ import { evalHarmonyModule } from './nativeSources';
 // The pure parsers of Harmony DownloadTask.ts, evaluated from source with its
 // platform imports stripped (the download/patch class itself needs a device).
 // InstallRecord.ts imports @ohos modules, so its bundle name is inlined.
+// __diff.json is parsed by the native core only
+// (cpp/patch_core/tests/patch-manifest-vectors.json).
 const HARMONY_BUNDLE_FILE_NAME = 'bundle.harmony.js';
-interface PatchManifestArrays {
-  copyFroms: string[];
-  copyTos: string[];
-  copyCrcs: (number | null)[];
-  deletes: string[];
-  hbcTransformMeta: string;
-}
 
-const { parseContentRangeTotal, parseManifestToArrays } = evalHarmonyModule(
+const { parseContentRangeTotal } = evalHarmonyModule(
   'DownloadTask.ts',
-  '({ parseContentRangeTotal, parseManifestToArrays });',
+  '({ parseContentRangeTotal });',
   { HARMONY_BUNDLE_FILE_NAME, BUNDLE_DELTA_ENTRY }
 ) as {
   parseContentRangeTotal(header: string, expectedStart: number): number;
-  parseManifestToArrays(
-    manifest: Record<string, unknown>,
-    normalizeResourceCopies: boolean
-  ): PatchManifestArrays;
 };
 
 // A 206's Content-Range decides whether appended bytes can be trusted.
@@ -74,119 +65,6 @@ describe('harmony parseContentRangeTotal', () => {
     expect(parseContentRangeTotal('bytes 100-99/200', 100)).toBe(-1);
     expect(parseContentRangeTotal('bytes 100-99/*', 100)).toBe(-1);
     expect(parseContentRangeTotal('bytes 100-x/200', 100)).toBe(-1);
-  });
-});
-
-describe('harmony parseManifestToArrays', () => {
-  test('returns empty arrays for an empty manifest', () => {
-    // toEqual across the VM boundary compares plain values.
-    expect(
-      JSON.parse(JSON.stringify(parseManifestToArrays({}, false)))
-    ).toEqual({
-      copyFroms: [],
-      copyTos: [],
-      copyCrcs: [],
-      deletes: [],
-      hbcTransformMeta: '',
-    });
-  });
-
-  test('parses copies and a deletes array', () => {
-    const result = parseManifestToArrays(
-      {
-        copies: {
-          'assets/icon.png': 'assets/original.png',
-          'assets/logo.png': 'assets/brand.png',
-        },
-        deletes: ['assets/old.png', 'assets/removed.txt'],
-      },
-      false
-    );
-    expect([...result.copyFroms]).toEqual([
-      'assets/original.png',
-      'assets/brand.png',
-    ]);
-    expect([...result.copyTos]).toEqual(['assets/icon.png', 'assets/logo.png']);
-    expect([...result.deletes]).toEqual([
-      'assets/old.png',
-      'assets/removed.txt',
-    ]);
-  });
-
-  test('parses deletes given as object keys', () => {
-    const result = parseManifestToArrays(
-      { deletes: { 'assets/old.png': true, 'assets/removed.txt': true } },
-      false
-    );
-    expect([...result.deletes]).toEqual([
-      'assets/old.png',
-      'assets/removed.txt',
-    ]);
-  });
-
-  test('handles missing copies or deletes', () => {
-    const noCopies = parseManifestToArrays({ deletes: ['a.txt'] }, false);
-    expect(noCopies.copyFroms.length).toBe(0);
-    expect(noCopies.deletes.length).toBe(1);
-    const noDeletes = parseManifestToArrays(
-      { copies: { 'a.png': 'b.png' } },
-      false
-    );
-    expect(noDeletes.deletes.length).toBe(0);
-    expect(noDeletes.copyFroms.length).toBe(1);
-  });
-
-  test('normalizes rawfile resource copies only when enabled', () => {
-    const manifest = {
-      copies: { 'assets/icon.png': 'resources/rawfile/assets/icon.png' },
-    };
-    expect(parseManifestToArrays(manifest, true).copyFroms[0]).toBe(
-      'assets/icon.png'
-    );
-    expect(parseManifestToArrays(manifest, false).copyFroms[0]).toBe(
-      'resources/rawfile/assets/icon.png'
-    );
-  });
-
-  test('falls back to the key when the normalized source is empty', () => {
-    const result = parseManifestToArrays(
-      { copies: { 'assets/icon.png': 'resources/rawfile/' } },
-      true
-    );
-    expect(result.copyFroms[0]).toBe('assets/icon.png');
-  });
-
-  test('treats a null source as empty', () => {
-    const result = parseManifestToArrays(
-      { copies: { 'assets/icon.png': null } },
-      false
-    );
-    expect(result.copyFroms[0]).toBe('');
-    expect(result.copyTos[0]).toBe('assets/icon.png');
-  });
-
-  test('aligns copiesCrc with the copies and keeps only finite numbers', () => {
-    const result = parseManifestToArrays(
-      {
-        copies: { a: 'x', b: 'y', c: 'z' },
-        copiesCrc: { a: 123, c: 'nope' },
-      },
-      false
-    );
-    expect([...result.copyCrcs]).toEqual([123, null, null]);
-  });
-
-  test('extracts the bundle entry hbcTransform metadata', () => {
-    const meta = { version: 1, base: 'abc' };
-    const result = parseManifestToArrays(
-      { hbcTransform: { [BUNDLE_DELTA_ENTRY]: meta, other: { x: 1 } } },
-      false
-    );
-    expect(JSON.parse(result.hbcTransformMeta)).toEqual(meta);
-    expect(
-      parseManifestToArrays({ hbcTransform: { other: {} } }, false)
-        .hbcTransformMeta
-    ).toBe('');
   });
 });
 

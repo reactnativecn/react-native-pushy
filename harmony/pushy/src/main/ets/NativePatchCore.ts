@@ -24,29 +24,34 @@ export interface StateCoreResult {
   consumedFirstTime?: boolean;
 }
 
-export interface ArchivePatchPlanResult {
-  mergeSourceSubdir?: string;
-  enableMerge: boolean;
-}
-
 export interface CopyGroupResult {
   from: string;
   toPaths: string[];
+  /** 源内容必须匹配的 CRC32(__diff.json copiesCrc);未声明时缺省 */
+  expectedCrc?: number;
 }
 
-export interface FileSourcePatchRequest {
-  copyFroms: string[];
-  copyTos: string[];
-  deletes: string[];
+/**
+ * 一次 patch 安装的原生部分(cpp/patch_core/archive_patch_core.h
+ * ApplyArchivePatch):校验条目、解析并校验 __diff.json、重建 bundle;
+ * hostCopiesResources 为 false 时同时完成拷贝/删除/合并。
+ */
+export interface ArchivePatchRequest {
+  archiveType: number;
+  /** staging 目录里解压出的条目名 */
+  entryNames: string[];
+  /** __diff.json 原文;归档里没有时为空串 */
+  manifestJson: string;
+  bundleDeltaEntry: string;
+  /** 从拷贝源开头剥掉的前缀(包内 rawfile 路径) */
+  copySourcePrefix?: string;
   sourceRoot: string;
   targetRoot: string;
   originBundlePath: string;
   bundleDeltaPath: string;
   bundleOutputPath: string;
-  mergeSourceSubdir?: string;
-  enableMerge?: boolean;
-  /** __diff.json 中该 bundle patch 条目的 hbcTransform 元数据(原始 JSON) */
-  bundleHbcTransformMeta?: string;
+  /** 资源不在 sourceRoot 下(rawfile):只重建 bundle,拷贝分组交回调用方 */
+  hostCopiesResources?: boolean;
 }
 
 interface NativePatchCoreBindings {
@@ -62,16 +67,8 @@ interface NativePatchCoreBindings {
     flagA?: boolean,
     flagB?: boolean,
   ): StateCoreResult;
-  buildArchivePlan(
-    patchType: number,
-    entryNames: string[],
-    copyFroms: string[],
-    copyTos: string[],
-    deletes: string[],
-    bundlePatchEntryName?: string,
-  ): ArchivePatchPlanResult;
-  buildCopyGroups(copyFroms: string[], copyTos: string[]): CopyGroupResult[];
-  applyDeltaFromSource(options: FileSourcePatchRequest): Promise<void>;
+  /** 工作线程执行;resolve 为调用方仍需完成的拷贝(hostCopiesResources 之外为空) */
+  applyArchiveDelta(request: ArchivePatchRequest): Promise<CopyGroupResult[]>;
   /**
    * 删除 rootDir 下超过 maxAgeDays 且名字不在 keepNames 里的条目(native
    * 工作线程)。keepNames 必须包含所有可能仍在使用的版本:持久化的

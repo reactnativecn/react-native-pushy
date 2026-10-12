@@ -375,16 +375,6 @@ napi_value NewStateResult(
   return result;
 }
 
-napi_value NewArchivePatchPlanResult(
-    napi_env env,
-    const pushy::archive_patch::ArchivePatchPlan& plan) {
-  napi_value result = nullptr;
-  napi_create_object(env, &result);
-  SetStringProperty(env, result, "mergeSourceSubdir", plan.merge_source_subdir);
-  SetBoolProperty(env, result, "enableMerge", plan.enable_merge);
-  return result;
-}
-
 napi_value NewCopyGroupArray(
     napi_env env,
     const std::vector<pushy::archive_patch::CopyGroup>& groups) {
@@ -406,27 +396,16 @@ napi_value NewCopyGroupArray(
           NewString(env, groups[index].to_paths[target_index]));
     }
     napi_set_named_property(env, group, "toPaths", to_paths);
+    if (groups[index].has_expected_crc) {
+      // A CRC32 fits a double exactly, like the manifest's JSON number.
+      napi_value crc = nullptr;
+      napi_create_double(
+          env, static_cast<double>(groups[index].expected_crc), &crc);
+      napi_set_named_property(env, group, "expectedCrc", crc);
+    }
     napi_set_element(env, result, index, group);
   }
   return result;
-}
-
-// The parallel copy lists (+ deletes) as a PatchManifest via the shared
-// delta::BuildPatchManifest. On failure (length mismatch) a JS error is
-// pending and false is returned.
-bool ReadPatchManifest(
-    napi_env env,
-    std::vector<std::string> copy_froms,
-    std::vector<std::string> copy_tos,
-    std::vector<std::string> deletes,
-    pushy::delta::PatchManifest* out) {
-  const pushy::delta::Status status = pushy::delta::BuildPatchManifest(
-      std::move(copy_froms), std::move(copy_tos), std::move(deletes), out);
-  if (!status.ok) {
-    ThrowError(env, status.message);
-    return false;
-  }
-  return true;
 }
 
 napi_value SyncStateWithBinaryVersion(napi_env env, napi_callback_info info) {
@@ -529,107 +508,10 @@ napi_value RunStateCore(napi_env env, napi_callback_info info) {
   return nullptr;
 }
 
-napi_value BuildArchivePatchPlan(napi_env env, napi_callback_info info) {
-  napi_value args[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-  size_t argc = 6;
-  if (!GetArgCount(env, info, &argc, args) || argc < 5) {
-    ThrowError(env, "Wrong number of arguments");
-    return nullptr;
-  }
-
-  int32_t patch_type = 0;
-  if (!GetInt32(env, args[0], &patch_type)) {
-    return nullptr;
-  }
-
-  std::vector<std::string> entry_names;
-  std::vector<std::string> copy_froms;
-  std::vector<std::string> copy_tos;
-  std::vector<std::string> deletes;
-  if (!GetStringArray(env, args[1], &entry_names) ||
-      !GetStringArray(env, args[2], &copy_froms) ||
-      !GetStringArray(env, args[3], &copy_tos) ||
-      !GetStringArray(env, args[4], &deletes)) {
-    return nullptr;
-  }
-  pushy::delta::PatchManifest manifest;
-  if (!ReadPatchManifest(
-          env,
-          std::move(copy_froms),
-          std::move(copy_tos),
-          std::move(deletes),
-          &manifest)) {
-    return nullptr;
-  }
-
-  std::string bundle_patch_entry_name =
-      pushy::archive_patch::DefaultBundleDeltaEntryName();
-  if (argc >= 6) {
-    bool ok = false;
-    const std::string candidate = GetString(env, args[5], &ok);
-    if (!ok) {
-      return nullptr;
-    }
-    if (!candidate.empty()) {
-      bundle_patch_entry_name = candidate;
-    }
-  }
-
-  pushy::archive_patch::ArchivePatchType archive_type;
-  if (!pushy::archive_patch::TryParseArchivePatchType(patch_type, &archive_type)) {
-    ThrowError(env, "Unknown archive delta type");
-    return nullptr;
-  }
-  pushy::archive_patch::ArchivePatchPlan plan;
-  const pushy::delta::Status status = pushy::archive_patch::BuildArchivePatchPlan(
-      archive_type,
-      manifest,
-      entry_names,
-      &plan,
-      bundle_patch_entry_name);
-  if (!status.ok) {
-    ThrowError(env, status.message);
-    return nullptr;
-  }
-
-  return NewArchivePatchPlanResult(env, plan);
-}
-
-napi_value BuildCopyGroups(napi_env env, napi_callback_info info) {
-  napi_value args[2] = {nullptr, nullptr};
-  size_t argc = 2;
-  if (!GetArgCount(env, info, &argc, args) || argc < 2) {
-    ThrowError(env, "Wrong number of arguments");
-    return nullptr;
-  }
-
-  std::vector<std::string> copy_froms;
-  std::vector<std::string> copy_tos;
-  if (!GetStringArray(env, args[0], &copy_froms) ||
-      !GetStringArray(env, args[1], &copy_tos)) {
-    return nullptr;
-  }
-  pushy::delta::PatchManifest manifest;
-  if (!ReadPatchManifest(
-          env, std::move(copy_froms), std::move(copy_tos), {}, &manifest)) {
-    return nullptr;
-  }
-
-  std::vector<pushy::archive_patch::CopyGroup> groups;
-  const pushy::delta::Status status =
-      pushy::archive_patch::BuildCopyGroups(manifest, &groups);
-  if (!status.ok) {
-    ThrowError(env, status.message);
-    return nullptr;
-  }
-
-  return NewCopyGroupArray(env, groups);
-}
-
 // ---------------------------------------------------------------------------
 // Async work plumbing for the heavy patch operations.
 //
-// applyDeltaFromSource and cleanupOldEntries run hdiff / recursive file IO
+// applyArchiveDelta and cleanupOldEntries run hdiff / recursive file IO
 // that can take hundreds of ms to seconds. The Pushy TurboModule executes on
 // the UI thread, so running these synchronously froze the UI. These are now
 // wrapped in napi_create_async_work: arguments are parsed on the JS thread, the
@@ -738,8 +620,9 @@ napi_value QueueWork(
   return promise;
 }
 
-struct ApplyPatchWork {
-  pushy::delta::FileSourcePatchOptions options;
+struct ApplyArchiveDeltaWork {
+  pushy::archive_patch::ArchivePatchRequest request;
+  std::vector<pushy::archive_patch::CopyGroup> host_copies;
   pushy::delta::Status status{false, ""};
 };
 
@@ -822,7 +705,11 @@ bool GetNonNegativeInt64(
   return true;
 }
 
-napi_value ApplyPatchFromFileSource(napi_env env, napi_callback_info info) {
+// applyArchiveDelta(request) -> Promise<CopyGroupResult[]>. The manifest
+// text is parsed (with the rest of the patch) on the worker thread; the
+// promise resolves with the copies the caller still owes (empty unless
+// hostCopiesResources) and rejects with the core's message.
+napi_value ApplyArchiveDelta(napi_env env, napi_callback_info info) {
   napi_value args[1] = {nullptr};
   size_t argc = 1;
   if (!GetArgCount(env, info, &argc, args) || argc < 1) {
@@ -833,60 +720,59 @@ napi_value ApplyPatchFromFileSource(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
-  std::vector<std::string> copy_froms;
-  std::vector<std::string> copy_tos;
-  std::vector<std::string> deletes;
-  std::string source_root;
-  std::string target_root;
-  std::string origin_bundle_path;
-  std::string bundle_patch_path;
-  std::string bundle_output_path;
-  std::string merge_source_subdir;
-  std::string bundle_hbc_transform_meta;
-  bool enable_merge = true;
-
-  if (!GetOptionalStringArrayProperty(env, args[0], "copyFroms", &copy_froms) ||
-      !GetOptionalStringArrayProperty(env, args[0], "copyTos", &copy_tos) ||
-      !GetOptionalStringArrayProperty(env, args[0], "deletes", &deletes) ||
-      !GetOptionalStringProperty(env, args[0], "sourceRoot", &source_root) ||
-      !GetOptionalStringProperty(env, args[0], "targetRoot", &target_root) ||
-      !GetOptionalStringProperty(env, args[0], "originBundlePath", &origin_bundle_path) ||
-      !GetOptionalStringProperty(env, args[0], "bundleDeltaPath", &bundle_patch_path) ||
-      !GetOptionalStringProperty(env, args[0], "bundleOutputPath", &bundle_output_path) ||
-      !GetOptionalStringProperty(env, args[0], "mergeSourceSubdir", &merge_source_subdir) ||
+  ApplyArchiveDeltaWork work;
+  pushy::archive_patch::ArchivePatchRequest& request = work.request;
+  napi_value patch_type_value = nullptr;
+  int32_t patch_type = 0;
+  std::string bundle_patch_entry_name;
+  if (!GetNamedProperty(env, args[0], "archiveType", &patch_type_value) ||
+      !GetInt32(env, patch_type_value, &patch_type) ||
+      !GetOptionalStringArrayProperty(
+          env, args[0], "entryNames", &request.archive.entry_names) ||
       !GetOptionalStringProperty(
-          env, args[0], "bundleHbcTransformMeta", &bundle_hbc_transform_meta) ||
-      !GetOptionalBoolProperty(env, args[0], "enableMerge", true, &enable_merge)) {
+          env, args[0], "manifestJson", &request.archive.manifest_json) ||
+      !GetOptionalStringProperty(
+          env, args[0], "bundleDeltaEntry", &bundle_patch_entry_name) ||
+      !GetOptionalStringProperty(
+          env, args[0], "copySourcePrefix", &request.archive.copy_source_prefix) ||
+      !GetOptionalStringProperty(env, args[0], "sourceRoot", &request.source_root) ||
+      !GetOptionalStringProperty(env, args[0], "targetRoot", &request.target_root) ||
+      !GetOptionalStringProperty(
+          env, args[0], "originBundlePath", &request.origin_bundle_path) ||
+      !GetOptionalStringProperty(
+          env, args[0], "bundleDeltaPath", &request.bundle_patch_path) ||
+      !GetOptionalStringProperty(
+          env, args[0], "bundleOutputPath", &request.bundle_output_path) ||
+      !GetOptionalBoolProperty(
+          env, args[0], "hostCopiesResources", false,
+          &request.host_copies_resources)) {
     return nullptr;
   }
-
-  ApplyPatchWork work;
-  if (!ReadPatchManifest(
-          env,
-          std::move(copy_froms),
-          std::move(copy_tos),
-          std::move(deletes),
-          &work.options.manifest)) {
+  // The shared parser keeps Android and HarmonyOS in agreement on which
+  // integer values are valid; neither silently falls back to kFull.
+  if (!pushy::archive_patch::TryParseArchivePatchType(
+          patch_type, &request.archive.type)) {
+    ThrowError(env, "Unknown archive delta type");
     return nullptr;
   }
-  work.options.source_root = source_root;
-  work.options.target_root = target_root;
-  work.options.origin_bundle_path = origin_bundle_path;
-  work.options.bundle_patch_path = bundle_patch_path;
-  work.options.bundle_output_path = bundle_output_path;
-  work.options.merge_source_subdir = merge_source_subdir;
-  work.options.manifest.bundle_hbc_transform_meta = bundle_hbc_transform_meta;
-  work.options.enable_merge = enable_merge;
+  if (!bundle_patch_entry_name.empty()) {
+    request.archive.bundle_patch_entry_name = bundle_patch_entry_name;
+  }
 
-  return QueueWork<ApplyPatchWork>(
+  return QueueWork<ApplyArchiveDeltaWork>(
       env,
-      "applyDeltaFromSource",
+      "applyArchiveDelta",
       std::move(work),
-      [](ApplyPatchWork& w) {
-        w.status = pushy::delta::ApplyPatchFromFileSource(w.options);
+      [](ApplyArchiveDeltaWork& w) {
+        w.status =
+            pushy::archive_patch::ApplyArchivePatch(w.request, &w.host_copies);
       },
-      [](napi_env cb_env, napi_deferred deferred, const ApplyPatchWork& w) {
-        SettleWithStatus(cb_env, deferred, w.status);
+      [](napi_env cb_env, napi_deferred deferred, const ApplyArchiveDeltaWork& w) {
+        if (!w.status.ok) {
+          RejectDeferredWithMessage(cb_env, deferred, w.status.message.c_str());
+          return;
+        }
+        napi_resolve_deferred(cb_env, deferred, NewCopyGroupArray(cb_env, w.host_copies));
       });
 }
 
@@ -1269,9 +1155,7 @@ static napi_value FlowNormalizeConfiguration(napi_env env,
 napi_value Init(napi_env env, napi_value exports) {
   if (!ExportFunction(env, exports, "syncStateWithBinaryVersion", SyncStateWithBinaryVersion) ||
       !ExportFunction(env, exports, "runStateCore", RunStateCore) ||
-      !ExportFunction(env, exports, "buildArchivePlan", BuildArchivePatchPlan) ||
-      !ExportFunction(env, exports, "buildCopyGroups", BuildCopyGroups) ||
-      !ExportFunction(env, exports, "applyDeltaFromSource", ApplyPatchFromFileSource) ||
+      !ExportFunction(env, exports, "applyArchiveDelta", ApplyArchiveDelta) ||
       !ExportFunction(env, exports, "cleanupOldEntries", CleanupOldEntries) ||
       !ExportFunction(env, exports, "sha256HexFileAsync", Sha256HexFileAsync) ||
       !ExportFunction(env, exports, "sha256HexRawFdAsync", Sha256HexRawFdAsync) ||
