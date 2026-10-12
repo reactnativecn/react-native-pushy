@@ -4,7 +4,6 @@
 #include "jni_natives.h"
 #include "obscured_text.h"
 
-#include <exception>
 #include <string>
 #include <vector>
 
@@ -16,8 +15,10 @@
 
 namespace {
 
+using pushy::jni_util::GuardJni;
 using pushy::jni_util::JArrayToVector;
 using pushy::jni_util::JStringToString;
+using pushy::jni_util::ReadPatchManifest;
 using pushy::jni_util::ThrowRuntimeException;
 using pushy::jni_util::ToJString;
 using pushy::state_ops::StateOperation;
@@ -233,11 +234,11 @@ pushy::state::State ReadStateFromResult(JNIEnv* env, jobject state_result) {
 jobject NewStateCoreResult(
     JNIEnv* env,
     const pushy::state::State& state,
-    bool changed,
-    const std::string& stale_version_to_delete,
-    const std::string& load_version,
-    bool did_rollback,
-    bool consumed_first_time) {
+    bool changed = false,
+    const std::string& stale_version_to_delete = std::string(),
+    const std::string& load_version = std::string(),
+    bool did_rollback = false,
+    bool consumed_first_time = false) {
   jobject result = env->NewObject(g_state.clazz, g_state.constructor);
   if (result == nullptr) {
     return nullptr;
@@ -304,46 +305,6 @@ jobject NewCopyGroupResult(
   return result;
 }
 
-bool ToArchivePatchType(
-    jint patch_type,
-    pushy::archive_patch::ArchivePatchType* out) {
-  // Delegate to the shared parser so Android and HarmonyOS agree on which
-  // integer values are valid and neither silently falls back to kFull.
-  return pushy::archive_patch::TryParseArchivePatchType(
-      static_cast<int>(patch_type), out);
-}
-
-pushy::delta::PatchManifest BuildManifest(
-    const std::vector<std::string>& copy_froms,
-    const std::vector<std::string>& copy_tos,
-    const std::vector<std::string>& deletes) {
-  pushy::delta::PatchManifest manifest;
-  for (size_t index = 0; index < copy_froms.size(); ++index) {
-    manifest.copies.push_back(
-        pushy::delta::CopyOperation{copy_froms[index], copy_tos[index]});
-  }
-  manifest.deletes = deletes;
-  return manifest;
-}
-
-jobject MakeStateResult(
-    JNIEnv* env,
-    const pushy::state::State& state,
-    bool changed = false,
-    const std::string& stale_version_to_delete = std::string(),
-    const std::string& load_version = std::string(),
-    bool did_rollback = false,
-    bool consumed_first_time = false) {
-  return NewStateCoreResult(
-      env,
-      state,
-      changed,
-      stale_version_to_delete,
-      load_version,
-      did_rollback,
-      consumed_first_time);
-}
-
 }  // namespace
 
 bool pushy::jni_natives::InitResultClassCache(JNIEnv* env) {
@@ -368,25 +329,20 @@ jobject pushy::jni_natives::SyncStateWithBinaryVersion(
     jstring package_version,
     jstring build_time,
     jobject state_result) {
-  // C++ exceptions (bad_alloc/length_error from input-proportional STL
-  // allocations) must not unwind through the JNI boundary: convert them to a
-  // Java RuntimeException like every other failure of these entry points.
-  try {
-    if (!RequireReady(env, g_state.ready, "state result")) {
-      return nullptr;
-    }
-    pushy::state::State state = ReadStateFromResult(env, state_result);
-    pushy::state::BinaryVersionSyncResult result = pushy::state::SyncBinaryVersion(
-        state,
-        JStringToString(env, package_version),
-        JStringToString(env, build_time));
-    return MakeStateResult(env, result.state, result.changed);
-  } catch (const std::exception& error) {
-    ThrowRuntimeException(env, error.what());
-  } catch (...) {
-    ThrowRuntimeException(env, "Unexpected native exception in syncStateWithBinaryVersion");
-  }
-  return nullptr;
+  return GuardJni(
+      env, "Unexpected native exception in syncStateWithBinaryVersion",
+      [&]() -> jobject {
+        if (!RequireReady(env, g_state.ready, "state result")) {
+          return nullptr;
+        }
+        pushy::state::State state = ReadStateFromResult(env, state_result);
+        pushy::state::BinaryVersionSyncResult result =
+            pushy::state::SyncBinaryVersion(
+                state,
+                JStringToString(env, package_version),
+                JStringToString(env, build_time));
+        return NewStateCoreResult(env, result.state, result.changed);
+      });
 }
 
 jobject pushy::jni_natives::RunStateCore(
@@ -397,56 +353,52 @@ jobject pushy::jni_natives::RunStateCore(
     jstring string_arg,
     jboolean flag_a,
     jboolean flag_b) {
-  try {
-    if (!RequireReady(env, g_state.ready, "state result")) {
-      return nullptr;
-    }
-    const pushy::state::State state = ReadStateFromResult(env, state_result);
-    switch (static_cast<StateOperation>(operation)) {
-      case StateOperation::kSwitchVersion:
-        return MakeStateResult(
-            env,
-            pushy::state::SwitchVersion(state, JStringToString(env, string_arg)));
-      case StateOperation::kMarkSuccess: {
-        const pushy::state::MarkSuccessResult result =
-            pushy::state::MarkSuccess(state);
-        return MakeStateResult(
-            env,
-            result.state,
-            false,
-            result.stale_version_to_delete);
-      }
-      case StateOperation::kRollback: {
-        const pushy::state::State next = pushy::state::Rollback(state);
-        return MakeStateResult(
-            env, next, false, std::string(), next.current_version, true);
-      }
-      case StateOperation::kClearFirstTime:
-        return MakeStateResult(env, pushy::state::ClearFirstTime(state));
-      case StateOperation::kClearRollbackMark:
-        return MakeStateResult(env, pushy::state::ClearRollbackMark(state));
-      case StateOperation::kResolveLaunch: {
-        const pushy::state::LaunchDecision decision =
-            pushy::state::ResolveLaunchState(
-                state, flag_a == JNI_TRUE, flag_b == JNI_TRUE);
-        return MakeStateResult(
-            env,
-            decision.state,
-            false,
-            std::string(),
-            decision.load_version,
-            decision.did_rollback,
-            decision.consumed_first_time);
-      }
-    }
+  return GuardJni(
+      env, "Unexpected native exception in runStateCore", [&]() -> jobject {
+        if (!RequireReady(env, g_state.ready, "state result")) {
+          return nullptr;
+        }
+        const pushy::state::State state = ReadStateFromResult(env, state_result);
+        switch (static_cast<StateOperation>(operation)) {
+          case StateOperation::kSwitchVersion:
+            return NewStateCoreResult(
+                env,
+                pushy::state::SwitchVersion(
+                    state, JStringToString(env, string_arg)));
+          case StateOperation::kMarkSuccess: {
+            const pushy::state::MarkSuccessResult result =
+                pushy::state::MarkSuccess(state);
+            return NewStateCoreResult(
+                env, result.state, false, result.stale_version_to_delete);
+          }
+          case StateOperation::kRollback: {
+            const pushy::state::State next = pushy::state::Rollback(state);
+            return NewStateCoreResult(
+                env, next, false, std::string(), next.current_version, true);
+          }
+          case StateOperation::kClearFirstTime:
+            return NewStateCoreResult(env, pushy::state::ClearFirstTime(state));
+          case StateOperation::kClearRollbackMark:
+            return NewStateCoreResult(
+                env, pushy::state::ClearRollbackMark(state));
+          case StateOperation::kResolveLaunch: {
+            const pushy::state::LaunchDecision decision =
+                pushy::state::ResolveLaunchState(
+                    state, flag_a == JNI_TRUE, flag_b == JNI_TRUE);
+            return NewStateCoreResult(
+                env,
+                decision.state,
+                false,
+                std::string(),
+                decision.load_version,
+                decision.did_rollback,
+                decision.consumed_first_time);
+          }
+        }
 
-    ThrowRuntimeException(env, "Unknown state operation");
-  } catch (const std::exception& error) {
-    ThrowRuntimeException(env, error.what());
-  } catch (...) {
-    ThrowRuntimeException(env, "Unexpected native exception in runStateCore");
-  }
-  return nullptr;
+        ThrowRuntimeException(env, "Unknown state operation");
+        return nullptr;
+      });
 }
 
 jobject pushy::jni_natives::BuildArchivePlan(
@@ -457,39 +409,32 @@ jobject pushy::jni_natives::BuildArchivePlan(
     jobjectArray copy_froms,
     jobjectArray copy_tos,
     jobjectArray deletes) {
-  try {
-    const std::vector<std::string> from_values = JArrayToVector(env, copy_froms);
-    const std::vector<std::string> to_values = JArrayToVector(env, copy_tos);
-    if (from_values.size() != to_values.size()) {
-      ThrowRuntimeException(env, "copy_froms and copy_tos length mismatch");
-      return nullptr;
-    }
+  return GuardJni(
+      env, "Unexpected native exception while planning archive",
+      [&]() -> jobject {
+        pushy::delta::PatchManifest manifest;
+        if (!ReadPatchManifest(env, copy_froms, copy_tos, deletes, &manifest)) {
+          return nullptr;
+        }
+        // The shared parser keeps Android and HarmonyOS in agreement on which
+        // integer values are valid; neither silently falls back to kFull.
+        pushy::archive_patch::ArchivePatchType archive_type;
+        if (!pushy::archive_patch::TryParseArchivePatchType(
+                static_cast<int>(patch_type), &archive_type)) {
+          ThrowRuntimeException(env, "Unknown archive delta type");
+          return nullptr;
+        }
+        pushy::archive_patch::ArchivePatchPlan plan;
+        pushy::delta::Status status =
+            pushy::archive_patch::BuildArchivePatchPlan(
+                archive_type, manifest, JArrayToVector(env, entry_names), &plan);
+        if (!status.ok) {
+          ThrowRuntimeException(env, status.message);
+          return nullptr;
+        }
 
-    pushy::delta::PatchManifest manifest =
-        BuildManifest(from_values, to_values, JArrayToVector(env, deletes));
-    pushy::archive_patch::ArchivePatchType archive_type;
-    if (!ToArchivePatchType(patch_type, &archive_type)) {
-      ThrowRuntimeException(env, "Unknown archive delta type");
-      return nullptr;
-    }
-    pushy::archive_patch::ArchivePatchPlan plan;
-    pushy::delta::Status status = pushy::archive_patch::BuildArchivePatchPlan(
-        archive_type,
-        manifest,
-        JArrayToVector(env, entry_names),
-        &plan);
-    if (!status.ok) {
-      ThrowRuntimeException(env, status.message);
-      return nullptr;
-    }
-
-    return NewArchivePatchPlanResult(env, plan);
-  } catch (const std::exception& error) {
-    ThrowRuntimeException(env, error.what());
-  } catch (...) {
-    ThrowRuntimeException(env, "Unexpected native exception while planning archive");
-  }
-  return nullptr;
+        return NewArchivePatchPlanResult(env, plan);
+      });
 }
 
 jobjectArray pushy::jni_natives::BuildCopyGroups(
@@ -497,43 +442,36 @@ jobjectArray pushy::jni_natives::BuildCopyGroups(
     jclass,
     jobjectArray copy_froms,
     jobjectArray copy_tos) {
-  try {
-    const std::vector<std::string> from_values = JArrayToVector(env, copy_froms);
-    const std::vector<std::string> to_values = JArrayToVector(env, copy_tos);
-    if (from_values.size() != to_values.size()) {
-      ThrowRuntimeException(env, "copy_froms and copy_tos length mismatch");
-      return nullptr;
-    }
+  return GuardJni(
+      env, "Unexpected native exception in buildCopyGroups",
+      [&]() -> jobjectArray {
+        pushy::delta::PatchManifest manifest;
+        if (!ReadPatchManifest(env, copy_froms, copy_tos, nullptr, &manifest)) {
+          return nullptr;
+        }
+        std::vector<pushy::archive_patch::CopyGroup> groups;
+        pushy::delta::Status status =
+            pushy::archive_patch::BuildCopyGroups(manifest, &groups);
+        if (!status.ok) {
+          ThrowRuntimeException(env, status.message);
+          return nullptr;
+        }
 
-    pushy::delta::PatchManifest manifest = BuildManifest(
-        from_values, to_values, std::vector<std::string>());
-    std::vector<pushy::archive_patch::CopyGroup> groups;
-    pushy::delta::Status status =
-        pushy::archive_patch::BuildCopyGroups(manifest, &groups);
-    if (!status.ok) {
-      ThrowRuntimeException(env, status.message);
-      return nullptr;
-    }
+        if (!RequireReady(env, g_copy_group.ready, "copy group result")) {
+          return nullptr;
+        }
+        jobjectArray result = env->NewObjectArray(
+            static_cast<jsize>(groups.size()), g_copy_group.clazz, nullptr);
+        if (result == nullptr) {
+          return nullptr;
+        }
 
-    if (!RequireReady(env, g_copy_group.ready, "copy group result")) {
-      return nullptr;
-    }
-    jobjectArray result = env->NewObjectArray(
-        static_cast<jsize>(groups.size()), g_copy_group.clazz, nullptr);
-    if (result == nullptr) {
-      return nullptr;
-    }
-
-    for (jsize index = 0; index < static_cast<jsize>(groups.size()); ++index) {
-      jobject group = NewCopyGroupResult(env, groups[index]);
-      env->SetObjectArrayElement(result, index, group);
-      env->DeleteLocalRef(group);
-    }
-    return result;
-  } catch (const std::exception& error) {
-    ThrowRuntimeException(env, error.what());
-  } catch (...) {
-    ThrowRuntimeException(env, "Unexpected native exception in buildCopyGroups");
-  }
-  return nullptr;
+        for (jsize index = 0; index < static_cast<jsize>(groups.size());
+             ++index) {
+          jobject group = NewCopyGroupResult(env, groups[index]);
+          env->SetObjectArrayElement(result, index, group);
+          env->DeleteLocalRef(group);
+        }
+        return result;
+      });
 }

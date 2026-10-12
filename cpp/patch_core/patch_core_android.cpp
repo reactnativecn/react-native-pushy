@@ -2,7 +2,6 @@
 
 #include "jni_natives.h"
 
-#include <exception>
 #include <string>
 #include <vector>
 
@@ -11,8 +10,10 @@
 
 namespace {
 
+using pushy::jni_util::GuardJni;
 using pushy::jni_util::JArrayToVector;
 using pushy::jni_util::JStringToString;
+using pushy::jni_util::ReadPatchManifest;
 using pushy::jni_util::ThrowRuntimeException;
 
 }  // namespace
@@ -31,19 +32,11 @@ void pushy::jni_natives::ApplyDeltaFromSource(
     jobjectArray copy_tos,
     jobjectArray deletes,
     jstring hbc_transform_meta) {
-  // C++ exceptions (bad_alloc/length_error from input-proportional STL
-  // allocations) must not unwind through the JNI boundary: convert them to a
-  // Java RuntimeException like every other failure of this entry point.
-  try {
-    const std::vector<std::string> from_values = JArrayToVector(env, copy_froms);
-    const std::vector<std::string> to_values = JArrayToVector(env, copy_tos);
-
-    if (from_values.size() != to_values.size()) {
-      ThrowRuntimeException(env, "copy_froms and copy_tos length mismatch");
+  GuardJni(env, "Unexpected native exception while applying delta", [&] {
+    pushy::delta::FileSourcePatchOptions options;
+    if (!ReadPatchManifest(env, copy_froms, copy_tos, deletes, &options.manifest)) {
       return;
     }
-
-    pushy::delta::FileSourcePatchOptions options;
     options.source_root = JStringToString(env, source_root);
     options.target_root = JStringToString(env, target_root);
     options.origin_bundle_path = JStringToString(env, origin_bundle_path);
@@ -53,24 +46,12 @@ void pushy::jni_natives::ApplyDeltaFromSource(
     options.enable_merge = enable_merge == JNI_TRUE;
     options.bundle_hbc_transform_meta = JStringToString(env, hbc_transform_meta);
 
-    for (size_t index = 0; index < from_values.size(); ++index) {
-      options.manifest.copies.push_back(pushy::delta::CopyOperation{
-          from_values[index],
-          to_values[index],
-      });
-    }
-    options.manifest.deletes = JArrayToVector(env, deletes);
-
     const pushy::delta::Status status =
         pushy::delta::ApplyPatchFromFileSource(options);
     if (!status.ok) {
       ThrowRuntimeException(env, status.message);
     }
-  } catch (const std::exception& error) {
-    ThrowRuntimeException(env, error.what());
-  } catch (...) {
-    ThrowRuntimeException(env, "Unexpected native exception while applying delta");
-  }
+  });
 }
 
 void pushy::jni_natives::CleanupOldEntries(
@@ -80,7 +61,7 @@ void pushy::jni_natives::CleanupOldEntries(
     jobjectArray keep_names,
     jint max_age_days,
     jstring trash_dir) {
-  try {
+  GuardJni(env, "Unexpected native exception in cleanupOldEntries", [&] {
     const std::string root = JStringToString(env, root_dir);
     const std::vector<std::string> keep = JArrayToVector(env, keep_names);
     const std::string trash = JStringToString(env, trash_dir);
@@ -94,9 +75,5 @@ void pushy::jni_natives::CleanupOldEntries(
     if (!status.ok) {
       ThrowRuntimeException(env, status.message);
     }
-  } catch (const std::exception& error) {
-    ThrowRuntimeException(env, error.what());
-  } catch (...) {
-    ThrowRuntimeException(env, "Unexpected native exception in cleanupOldEntries");
-  }
+  });
 }

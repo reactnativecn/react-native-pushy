@@ -3,9 +3,13 @@
 #include <jni.h>
 
 #include <cstdint>
+#include <exception>
 #include <limits>
 #include <string>
+#include <utility>
 #include <vector>
+
+#include "patch_core.h"
 
 // Small JNI helpers shared by every Android glue translation unit
 // (patch_core_android.cpp, update_core_android.cpp and
@@ -120,6 +124,43 @@ inline void ThrowRuntimeException(JNIEnv* env, const char* message) {
 
 inline void ThrowRuntimeException(JNIEnv* env, const std::string& message) {
   ThrowRuntimeException(env, message.c_str());
+}
+
+// Reads the parallel copy_froms/copy_tos arrays (+ deletes, may be null) into
+// a PatchManifest via delta::BuildPatchManifest. On failure (length mismatch)
+// a RuntimeException is pending and false is returned.
+inline bool ReadPatchManifest(
+    JNIEnv* env,
+    jobjectArray copy_froms,
+    jobjectArray copy_tos,
+    jobjectArray deletes,
+    delta::PatchManifest* out) {
+  const delta::Status status = delta::BuildPatchManifest(
+      JArrayToVector(env, copy_froms), JArrayToVector(env, copy_tos),
+      JArrayToVector(env, deletes), out);
+  if (!status.ok) {
+    ThrowRuntimeException(env, status.message);
+  }
+  return status.ok;
+}
+
+// Runs a native method body so no C++ exception (bad_alloc/length_error from
+// input-proportional STL allocations) ever unwinds through the JNI boundary:
+// it becomes a Java RuntimeException like every other failure of the entry
+// point, carrying `fallback_message` when the exception has no message of its
+// own. Returns a value-initialized Result (nullptr / void) in that case.
+template <typename Body>
+auto GuardJni(JNIEnv* env, const char* fallback_message, Body&& body)
+    -> decltype(body()) {
+  using Result = decltype(body());
+  try {
+    return std::forward<Body>(body)();
+  } catch (const std::exception& error) {
+    ThrowRuntimeException(env, error.what());
+  } catch (...) {
+    ThrowRuntimeException(env, fallback_message);
+  }
+  return Result();
 }
 
 }  // namespace jni_util
