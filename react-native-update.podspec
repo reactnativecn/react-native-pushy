@@ -1,8 +1,6 @@
 require 'json'
 require 'rubygems' # Required for version comparison
 
-
-new_arch_enabled = ENV['RCT_NEW_ARCH_ENABLED'] == '1'
 package = JSON.parse(File.read(File.join(__dir__, 'package.json')))
 podspec_dir = File.dirname(__FILE__)
 
@@ -20,36 +18,39 @@ Pod::Spec.new do |s|
      # Silently ignore errors during check
   end
 
-  # expo-modules-core is a dependency of expo, not of the app: resolve it from
-  # expo's own location. A bare require from this podspec's directory misses
-  # it when npm nests it under expo/node_modules (seen with react-native-tvos),
-  # which left EXPO_SUPPORTS_BUNDLEURL unset; the createBridge fallback that
-  # selects no longer exists in ExpoModulesCore (SDK 57), so the build failed.
-  expo_modules_core_package_json_js =
-    "require.resolve('expo-modules-core/package.json', " \
-    "{ paths: [require('path').dirname(require.resolve('expo/package.json'))] })"
-
-  # Determine final validity by checking Podfile presence AND Expo version
-  valid_expo_project = false # Default
+  # One node call answers every Expo question: expo's version, and where
+  # expo-modules-core lives and its version. expo-modules-core is a dependency
+  # of expo, not of the app: resolve it from expo's own location. A bare
+  # require from this podspec's directory misses it when npm nests it under
+  # expo/node_modules (seen with react-native-tvos), which left
+  # EXPO_SUPPORTS_BUNDLEURL unset; the createBridge fallback that selects no
+  # longer exists in ExpoModulesCore (SDK 57), so the build failed.
+  expo_info = {}
   if is_expo_in_podfile
-    # Only check expo version if use_expo_modules! is present
-    is_version_sufficient = false
+    expo_info_js = <<~JS
+      const path = require('path');
+      const info = {};
+      try {
+        const expoJson = require.resolve('expo/package.json');
+        info.expoVersion = require(expoJson).version;
+        const coreJson = require.resolve('expo-modules-core/package.json',
+                                         { paths: [path.dirname(expoJson)] });
+        info.coreDir = path.dirname(coreJson);
+        info.coreVersion = require(coreJson).version;
+      } catch (e) {}
+      console.log(JSON.stringify(info));
+    JS
     begin
-        expo_version_str = `node --print \"require('expo/package.json').version\"`.strip
-        if expo_version_str && !expo_version_str.empty?
-          match = expo_version_str.match(/^\d+/)
-          if match
-            major_version = match[0].to_i
-            is_version_sufficient = major_version >= 50
-          end
-        end
-    rescue
-        # Node command failed, version remains insufficient
+      output = IO.popen(['node', '-e', expo_info_js], &:read)
+      expo_info = JSON.parse(output) if $?.success?
+    rescue StandardError
+      # node missing or unparseable output: not a supported Expo project.
     end
-    
-    # Final check
-    valid_expo_project = is_version_sufficient
   end
+
+  # use_expo_modules! in the Podfile and Expo SDK >= 50.
+  valid_expo_project =
+    is_expo_in_podfile && expo_info['expoVersion'].to_s[/^\d+/].to_i >= 50
 
   # Set platform based on whether it's a valid Expo project and if we can parse its target
   # React Native's own minimum (defined by react_native_pods.rb, which the
@@ -74,12 +75,8 @@ Pod::Spec.new do |s|
     # --- Try to find and parse ExpoModulesCore.podspec only if it's an Expo project ---
     parsed_expo_ios_target = nil
     parsed_expo_tvos_target = nil
-    expo_modules_core_podspec_path = begin
-        package_json_path = `node -p "#{expo_modules_core_package_json_js}"`.strip
-        File.join(File.dirname(package_json_path), 'ExpoModulesCore.podspec') if $?.success? && package_json_path && !package_json_path.empty?
-    rescue
-        nil
-    end
+    expo_modules_core_podspec_path =
+      expo_info['coreDir'] && File.join(expo_info['coreDir'], 'ExpoModulesCore.podspec')
 
     if expo_modules_core_podspec_path && File.exist?(expo_modules_core_podspec_path)
       begin
@@ -89,11 +86,6 @@ Pod::Spec.new do |s|
           parsed_expo_ios_target = match[1]
           tvos_match = content.match(/s\.platforms\s*=\s*\{[\s\S]*?:tvos\s*=>\s*'([^\']+)'/)
           parsed_expo_tvos_target = tvos_match[1] if tvos_match
-        else
-          match = content.match(/s\.platform\s*=\s*:ios,\s*'([^\']+)'/) # Fallback to s.platform = :ios, 'version'
-          if match && match[1]
-            parsed_expo_ios_target = match[1]
-          end
         end
       rescue => e
         # Pod::UI.warn "Failed to read or parse ExpoModulesCore.podspec content: #{e.message}"
@@ -108,7 +100,7 @@ Pod::Spec.new do |s|
   end
 
   # tvOS (react-native-tvos) shares the iOS sources; the only platform
-  # differences live behind TARGET_OS_TV in RCTPushy.mm (download directory,
+  # differences live behind TARGET_OS_TV in ios/RCTPushy (download directory,
   # purged-cache recovery).
   s.platforms = { :ios => final_ios_deployment_target, :tvos => final_tvos_deployment_target }
 
@@ -135,9 +127,9 @@ Pod::Spec.new do |s|
   # DEFINES_MODULE writes the umbrella under Headers/Public/react_native_update/
   # (underscores). CocoaPods copies public headers to react-native-update/
   # (hyphens). Include the latter so the umbrella can #import "ImportReact.h".
-  s.pod_target_xcconfig = { 
-    'USER_HEADER_SEARCH_PATHS' => "\"$(PODS_ROOT)/Headers/Public/react-native-update\" \"$(PODS_ROOT)/Headers/Public/SSZipArchive\" \"$(PODS_ROOT)/Headers/Public/React-Codegen/RCTPushySpec\"", 
-    "DEFINES_MODULE" => "YES" 
+  s.pod_target_xcconfig = {
+    'USER_HEADER_SEARCH_PATHS' => "\"$(PODS_ROOT)/Headers/Public/react-native-update\"",
+    "DEFINES_MODULE" => "YES"
   }
   # buildTime for binary-rebuild detection (SyncBinaryVersion) and the check
   # request. The stamp is refreshed on every build and ships as a resource.
@@ -168,7 +160,6 @@ Pod::Spec.new do |s|
   # static and dynamic integrations both carry it.
   s.resource_bundles = { 'PushyPrivacy' => ['ios/PrivacyInfo.xcprivacy'] }
 
-  s.dependency 'React'
   s.dependency "React-Core"
   # The unzip guard relies on the 2.x delegate contract
   # (zipArchiveShouldUnzipFileAtIndex:... cancels, _sanitizedPath); a future
@@ -215,26 +206,18 @@ Pod::Spec.new do |s|
     ss.public_header_files = ['ios/RCTPushy/RCTPushy.h',
                               'ios/RCTPushy/RCTPushyConfiguration.h',
                               'ios/RCTPushy/RCTPushyDownloader.h']
-    # RCTPushyInternal.h is shared between RCTPushy.mm and
-    # RCTPushyOrchestrator.mm only; it pulls in C++ headers, so it must stay
-    # out of the module umbrella.
-    ss.private_header_files = ['ios/RCTPushy/RCTPushyInternal.h']
+    # Shared by the pod's own sources only (RCTPushyInternal.h pulls in C++
+    # headers), so they must stay out of the module umbrella.
+    ss.private_header_files = ['ios/RCTPushy/RCTPushyCommon.h',
+                               'ios/RCTPushy/RCTPushyInternal.h']
   end
 
   # Conditionally add Expo subspec and check ExpoModulesCore version
   if valid_expo_project
     supports_bundle_url_final = false # Default
 
-    # 1. Try executing node to get the version string
-    expo_modules_core_version_str = begin
-      `node --print "require(#{expo_modules_core_package_json_js}).version"` # Execute, keep raw output
-    rescue
-      # Node command failed (e.g., node not found, package not found). Return empty string.
-      ''
-    end
-
-    # 2. Process the obtained version string (if not empty)
-    if expo_modules_core_version_str && !expo_modules_core_version_str.empty?
+    expo_modules_core_version_str = expo_info['coreVersion'].to_s
+    if !expo_modules_core_version_str.empty?
         begin
             # Compare versions using Gem::Version (handles trailing newline)
             installed_version = Gem::Version.new(expo_modules_core_version_str)
@@ -253,23 +236,9 @@ Pod::Spec.new do |s|
     end
   end
 
+  # React Native >= 0.71 (react_native_pods.rb) wires codegen, the new
+  # architecture and its dependencies.
   if defined?(install_modules_dependencies()) != nil
-    install_modules_dependencies(s);
-  else
-    if new_arch_enabled
-      folly_compiler_flags = '-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1 -Wno-comma -Wno-shorten-64-to-32'
-
-      s.compiler_flags = folly_compiler_flags + " -DRCT_NEW_ARCH_ENABLED=1"
-
-      s.pod_target_xcconfig = {
-          "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/boost\"",
-          "CLANG_CXX_LANGUAGE_STANDARD" => "c++17"
-      }.merge(s.pod_target_xcconfig)
-      s.dependency "React-Codegen"
-      s.dependency "RCT-Folly"
-      s.dependency "RCTRequired"
-      s.dependency "RCTTypeSafety"
-      s.dependency "ReactCommon/turbomodule/core"
-    end
+    install_modules_dependencies(s)
   end
 end

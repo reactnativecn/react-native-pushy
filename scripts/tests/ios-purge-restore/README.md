@@ -1,8 +1,8 @@
 # Deterministic native purge-restore ordering tests
 
 Follow-up to #646. These tests exercise the tvOS Release branch of the real
-`RCTPushy.mm` / `RCTPushyOrchestrator.mm` startup/commit/reset code in a macOS
-Foundation-only executable.
+`ios/RCTPushy` startup/commit/reset/switch code in a macOS Foundation-only
+executable.
 There are no production code changes, React Native mocks to install, CocoaPods,
 simulator builds, network requests, or sleeps.
 
@@ -26,13 +26,15 @@ python3 -m unittest discover -s scripts/tests/ios-purge-restore -p test_extract.
 
 ## Production code, not a second state machine
 
-`extract.py` reads the checkout's `ios/RCTPushy/RCTPushy.mm` and
-`RCTPushyOrchestrator.mm` on every build (each definition must exist exactly
+`extract.py` reads the checkout's `ios/RCTPushy` sources listed in its
+`SOURCES` (the module's `.mm` files plus `RCTPushyInternal.h`, which holds the
+`PushyFileStamp` struct) on every build (each definition must exist exactly
 once across them; pod-internal `PUSHY_HIDDEN` definitions count like `static`
-ones). It copies the exact definitions (with `#line` locations) of `bundleURL`,
+ones, the header's `extern` declarations never match). It copies the exact definitions (with `#line` locations) of `bundleURL`,
 `resolveLaunchBundleURL`, `restorePurgedLaunch`, `commitRoundWithGeneration`,
 `resetToPackagedBundle`, their state/defaults helpers, the install record
-activation check (`PushyVerifyInstallForActivation`) with `switchVersion:error:`,
+activation check (`PushyVerifyInstallForActivation`) with
+`+[RCTPushyInstaller switchVersion:error:]`,
 and the relevant globals
 into build-only `.inc` files. These are compiled unchanged with the actual
 `cpp/patch_core/state_core.cpp`.

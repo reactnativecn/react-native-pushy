@@ -1,36 +1,18 @@
 #import "RCTPushyConfiguration.h"
-
-// Read through a volatile so the optimizer cannot fold the decode of a constant
-// argument back into a plain string in the binary.
-static volatile unsigned char PushyTextKeyBase = 0x5A;
+#import "RCTPushyCommon.h"
+#include "../../cpp/patch_core/error_codes.h"
+#include "../../cpp/patch_core/obscured_text.h"
 
 NSString *RCTPushyRevealText(const char *hex) {
-    size_t length = strlen(hex) / 2;
-    unsigned char *bytes = (unsigned char *)malloc(length > 0 ? length : 1);
-    if (bytes == NULL) {
-        return @"";
-    }
-    unsigned char base = PushyTextKeyBase;
-    for (size_t i = 0; i < length; i++) {
-        char pair[3] = {hex[i * 2], hex[i * 2 + 1], 0};
-        unsigned char byte = (unsigned char)strtoul(pair, NULL, 16);
-        bytes[i] = byte ^ (unsigned char)(base + 0x1D * i);
-    }
-    // One decode into a byte buffer (the texts are ASCII, see
-    // scripts/encode-native-text.ts) instead of a format call per character.
-    NSString *text = [[NSString alloc] initWithBytes:bytes
-                                              length:length
-                                            encoding:NSUTF8StringEncoding];
-    free(bytes);
-    return text ?: @"";
+    // The texts are ASCII (scripts/encode-native-text.ts).
+    std::string text = pushy::text::Reveal(hex);
+    return [[NSString alloc] initWithBytes:text.data()
+                                    length:text.size()
+                                  encoding:NSUTF8StringEncoding] ?: @"";
 }
 
 NSString *RCTPushyQueryPath(void) {
-    static NSString *path;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        path = RCTPushyRevealText("7514fcd4ad805d55263e08fc99");
-    });
+    static NSString *path = RCTPushyRevealText("7514fcd4ad805d55263e08fc99");
     return path;
 }
 
@@ -56,13 +38,9 @@ static NSArray *PushyConfigUrls(id value, NSString *name, BOOL base) {
             name, base ? @"a non-empty" : @"an"]);
     }
     NSMutableArray *result = [NSMutableArray array];
-    static NSRegularExpression *authority;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        authority = [NSRegularExpression regularExpressionWithPattern:
-            @"^https?://(\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+)(:[0-9]+)?([/?#]|$)"
-            options:0 error:nil];
-    });
+    static NSRegularExpression *authority = [NSRegularExpression regularExpressionWithPattern:
+        @"^https?://(\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+)(:[0-9]+)?([/?#]|$)"
+        options:0 error:nil];
     for (id item in value) {
         NSString *url = [PushyConfigString(item, name, NO) stringByTrimmingCharactersInSet:
             NSCharacterSet.whitespaceAndNewlineCharacterSet];
@@ -133,9 +111,9 @@ NSString *RCTPushyNormalizeConfiguration(NSDictionary *options, NSError **error)
         return data == nil ? nil : [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
     } @catch (NSException *exception) {
         if (error != NULL) {
-            *error = [NSError errorWithDomain:@"cn.reactnative.pushy" code:1 userInfo:@{
+            *error = [NSError errorWithDomain:RCTPushyErrorDomain code:1 userInfo:@{
                 NSLocalizedDescriptionKey: exception.reason ?: @"Invalid native configuration",
-                @"PushyErrorCode": @"INVALID_OPTIONS"
+                RCTPushyErrorCodeKey: @(pushy::error_codes::kInvalidOptions)
             }];
         }
         return nil;

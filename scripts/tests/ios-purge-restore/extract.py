@@ -2,7 +2,7 @@
 """Compile production Objective-C++ methods in a Foundation-only test host.
 
 No generated source is checked in. Bodies, signatures and source locations come
-from RCTPushy.mm on every run. Extraction fails on missing/ambiguous definitions;
+from the ios/RCTPushy sources (SOURCES) on every run. Extraction fails on missing/ambiguous definitions;
 strings/comments cannot affect brace matching. Only the test host supplies I/O.
 """
 
@@ -47,7 +47,9 @@ def definition(source: str, pattern: str, label: str) -> tuple[int, str]:
 
 
 # File-local (static) or shared within the pod (PUSHY_HIDDEN, see
-# RCTPushyInternal.h); the test host compiles everything in one unit.
+# RCTPushyCommon.h); the test host compiles everything in one unit. The
+# header's `extern PUSHY_HIDDEN` declarations never match: they start with
+# `extern`.
 LINKAGE = r'(?:static|PUSHY_HIDDEN)'
 
 
@@ -57,10 +59,6 @@ def function(source: str, name: str) -> tuple[int, str]:
 
 def method(source: str, name: str) -> tuple[int, str]:
     return definition(source, rf'^\+\s*\([^\n)]*\)\s*{re.escape(name)}\b', name)
-
-
-def instance_method(source: str, name: str) -> tuple[int, str]:
-    return definition(source, rf'^-\s*\([^\n)]*\)\s*{re.escape(name)}\b', name)
 
 
 def exported_method(source: str, name: str) -> tuple[int, str]:
@@ -87,14 +85,15 @@ GLOBALS = [
     'legacyParamPackageVersion', 'legacyParamBuildTime', 'paramLastVersion',
     'paramCurrentVersion', 'paramIsFirstTime', 'paramIsFirstLoadOk', 'keyUuid',
     'keyHashInfo', 'keyFirstLoadMarked', 'keyRolledBackMarked',
-    'keyNativeCheckCache', 'BUNDLE_FILE_NAME', 'VERSION_COMPLETE_FILE_NAME', 'ERROR_OPTIONS',
+    'keyNativeCheckCache', 'BUNDLE_FILE_NAME', 'ERROR_OPTIONS',
     'pushyStateLock', 'ignoreRollback', 'pushyIsUsingBundleUrl',
     'pushyResetGeneration', 'pushyNativeConfigGeneration', 'pushyLaunchVersion',
     'pushyCrashHoldActive', 'pushyPurgeRestoreActive', 'pushyPurgeRestoreWindowOpen',
     'pushyHostRoundResult', 'kPushyPurgeRestoreBudget', 'kPushyPurgeRestoreMinimumBudget',
 ]
 HELPERS = [
-    'PushyRevealOnce', 'KeyPackageUpdatedMarked', 'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString',
+    'KeyPackageUpdatedMarked', 'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString',
+    'PushyJsonDictionary', 'PushyJsonString', 'PushyRejectException', 'PushyFileQueue',
     'PushySetNullableString', 'PushyHashInfoKey', 'PushyBinaryIdentityValue',
     'PushyStateFromDefaults', 'PushyApplyStateToDefaults', 'PushySwitchVersionLocked',
     # Canonical config equality (cross-platform contract), tested directly.
@@ -102,7 +101,7 @@ HELPERS = [
     'PushyCanonicalUrlList', 'PushyCanonicalConfig', 'PushyConfigsEquivalent',
     # Install record activation check (cpp/patch_core/install_record.h) and
     # what switchVersion:error: needs around it.
-    'PushyReadInstallRecord', 'PushyInstallRecordMatches', 'PushyHasInstallRecordFile',
+    'PushyInstallRecordFileName', 'PushyVersionDir', 'PushyReadInstallRecord', 'PushyInstallRecordMatches', 'PushyHasInstallRecordFile',
     'PushyHasCompletedVersionAtPath', 'PushyStampFile', 'PushyVerifyInstallForActivation',
     'PushyStringIsBlank', 'PushyIsSafePathComponent',
 ]
@@ -133,9 +132,10 @@ def mutate(text: str, mutation: str) -> str:
     return mutated
 
 
-# The sources the module is split across (RCTPushy.mm: module and launch
-# resolution; RCTPushyOrchestrator.mm: the native round).
-SOURCES = ('RCTPushy.mm', 'RCTPushyOrchestrator.mm')
+# The sources the module is split across (see RCTPushyInternal.h, which
+# also holds the PushyFileStamp struct).
+SOURCES = ('RCTPushyInternal.h', 'RCTPushy.mm', 'RCTPushy+Launch.mm', 'RCTPushyState.mm',
+           'RCTPushyInstallRecord.mm', 'RCTPushyInstaller.mm', 'RCTPushyOrchestrator.mm')
 
 
 def locate(sources: list[tuple[Path, str]], extractor, name: str) -> tuple[Path, int, str]:
@@ -160,7 +160,7 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
     restore = locate(sources, method, 'restorePurgedLaunch')
     commit = locate(sources, method, 'commitRoundWithGeneration')
     helpers = [locate(sources, function, name) for name in HELPERS]
-    switch_version = locate(sources, instance_method, 'switchVersion')
+    switch_version = locate(sources, method, 'switchVersion')
     if mutation == 'grandfather-recorded':
         switch_version = (switch_version[0], switch_version[1],
                           mutate(switch_version[2], mutation))
@@ -177,9 +177,11 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
         'helpers.inc': [locate(sources, struct, name) for name in STRUCTS] + helpers,
         'pushy.inc': [locate(sources, method, 'bundleURL'),
                       locate(sources, method, 'resolveLaunchBundleURL'),
-                      locate(sources, exported_method, 'resetToPackagedBundle'),
-                      switch_version],
-        'orchestrator.inc': [restore, commit],
+                      locate(sources, exported_method, 'resetToPackagedBundle')],
+        'installer.inc': [switch_version],
+        # The launch wait helper precedes restorePurgedLaunch so the host's
+        # dispatch seams apply to it as well.
+        'orchestrator.inc': [locate(sources, function, 'PushyWaitSeconds'), restore, commit],
     }
     output.mkdir(parents=True, exist_ok=True)
     for name, snippets in sections.items():
