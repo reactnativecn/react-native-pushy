@@ -13,7 +13,7 @@
 // serialization — the C++ side mirrors both (Kind::Undefined members are
 // skipped by stringify).
 
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL } from 'node:url';
 import {
   buildCheckRequestBody,
   decideDownload,
