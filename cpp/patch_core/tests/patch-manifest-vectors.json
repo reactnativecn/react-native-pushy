@@ -1,0 +1,327 @@
+{
+  "description": "__diff.json parsing (cpp/patch_core/patch_manifest.h ParsePatchManifest), shared by Android, iOS and HarmonyOS. Each vector feeds `manifest` (serialized) or the raw `text`, with `options` (bundlePatchEntryName defaults to index.bundlejs.patch, copySourcePrefix to none). A vector expects either `error` (a substring of the message) or the parsed `copies` ([from, to, crc-or-null] in document order), `deletes` and `hbcTransformMeta` (all three default to empty). `was` records how the platforms disagreed before the parser was shared.",
+  "vectors": [
+    {
+      "name": "server ppk diff: moved copies and deletes object",
+      "manifest": {
+        "copies": { "assets/b.png": "assets/a.png", "assets/c/d.png": "assets/a.png" },
+        "deletes": { "assets/old.png": 1, "assets/gone/": 1 }
+      },
+      "copies": [
+        ["assets/a.png", "assets/b.png", null],
+        ["assets/a.png", "assets/c/d.png", null]
+      ],
+      "deletes": ["assets/old.png", "assets/gone/"]
+    },
+    {
+      "name": "server package diff: same-path and moved copies with per-target CRCs",
+      "manifest": {
+        "copies": { "assets/a.png": "", "assets/b.png": "assets/old/b.png", "assets/c.png": "" },
+        "copiesCrc": { "assets/a.png": 3421780262, "assets/b.png": 0, "assets/c.png": 4294967295 }
+      },
+      "copies": [
+        ["assets/a.png", "assets/a.png", 3421780262],
+        ["assets/old/b.png", "assets/b.png", 0],
+        ["assets/c.png", "assets/c.png", 4294967295]
+      ]
+    },
+    {
+      "name": "empty object",
+      "manifest": {}
+    },
+    {
+      "name": "null members count as absent",
+      "manifest": { "copies": null, "copiesCrc": null, "deletes": null, "hbcTransform": null }
+    },
+    {
+      "name": "unknown members are ignored",
+      "manifest": { "copies": { "a.png": "b.png" }, "version": 3, "extra": [1, { "x": null }] },
+      "copies": [["b.png", "a.png", null]]
+    },
+    {
+      "name": "deletes as an array of paths",
+      "was": "Android ignored an array (deleted nothing); iOS and HarmonyOS accepted it",
+      "manifest": { "deletes": ["assets/old.png", "assets/removed.txt"] },
+      "deletes": ["assets/old.png", "assets/removed.txt"]
+    },
+    {
+      "name": "deletes array with a non-string entry",
+      "was": "HarmonyOS coerced it with String(); iOS rejected it",
+      "manifest": { "deletes": ["assets/old.png", 7] },
+      "error": "deletes entry is not a string"
+    },
+    {
+      "name": "deletes of another type",
+      "was": "Android and HarmonyOS ignored it; iOS rejected it",
+      "manifest": { "deletes": "assets/old.png" },
+      "error": "deletes is not an object or array"
+    },
+    {
+      "name": "copies as an array",
+      "was": "HarmonyOS read the indices as targets; Android ignored it; iOS rejected it",
+      "manifest": { "copies": ["assets/a.png"] },
+      "error": "copies is not an object"
+    },
+    {
+      "name": "numeric copy source",
+      "was": "HarmonyOS coerced it with String(); Android threw JSONException; iOS rejected it",
+      "manifest": { "copies": { "assets/a.png": 5 } },
+      "error": "copies entry is not a string: assets/a.png"
+    },
+    {
+      "name": "null copy source means the same path",
+      "was": "HarmonyOS kept an empty source (then failed path validation); Android read the string \"null\"; iOS rejected it",
+      "manifest": { "copies": { "assets/a.png": null } },
+      "copies": [["assets/a.png", "assets/a.png", null]]
+    },
+    {
+      "name": "empty copy source means the same path without a prefix option too",
+      "was": "HarmonyOS ppk patches kept the empty source",
+      "manifest": { "copies": { "assets/a.png": "" } },
+      "copies": [["assets/a.png", "assets/a.png", null]]
+    },
+    {
+      "name": "copiesCrc is keyed by target: two targets of one source share its CRC",
+      "was": "Android keyed copiesCrc by source, last target winning",
+      "manifest": {
+        "copies": { "assets/x.png": "assets/a.png", "assets/y.png": "assets/a.png" },
+        "copiesCrc": { "assets/x.png": 123, "assets/y.png": 123 }
+      },
+      "copies": [
+        ["assets/a.png", "assets/x.png", 123],
+        ["assets/a.png", "assets/y.png", 123]
+      ]
+    },
+    {
+      "name": "copiesCrc on only some targets of one source",
+      "manifest": {
+        "copies": { "assets/x.png": "assets/a.png", "assets/y.png": "assets/a.png" },
+        "copiesCrc": { "assets/y.png": 9 }
+      },
+      "copies": [
+        ["assets/a.png", "assets/x.png", null],
+        ["assets/a.png", "assets/y.png", 9]
+      ]
+    },
+    {
+      "name": "copiesCrc conflicting for one source",
+      "was": "Android kept the last CRC per source; iOS and HarmonyOS checked each target",
+      "manifest": {
+        "copies": { "assets/x.png": "assets/a.png", "assets/y.png": "assets/a.png" },
+        "copiesCrc": { "assets/x.png": 1, "assets/y.png": 2 }
+      },
+      "error": "conflicting copiesCrc for source assets/a.png"
+    },
+    {
+      "name": "copiesCrc null skips the check, unknown targets are ignored",
+      "manifest": {
+        "copies": { "a": "x", "b": "y" },
+        "copiesCrc": { "a": null, "zzz": 77 }
+      },
+      "copies": [["x", "a", null], ["y", "b", null]]
+    },
+    {
+      "name": "copiesCrc given as a string",
+      "was": "Android parsed numeric strings; HarmonyOS and iOS skipped the check",
+      "manifest": { "copies": { "a": "x" }, "copiesCrc": { "a": "123" } },
+      "error": "copiesCrc entry is not a CRC32: a"
+    },
+    {
+      "name": "copiesCrc negative",
+      "manifest": { "copies": { "a": "x" }, "copiesCrc": { "a": -1 } },
+      "error": "copiesCrc entry is not a CRC32: a"
+    },
+    {
+      "name": "copiesCrc fractional",
+      "was": "iOS truncated it",
+      "manifest": { "copies": { "a": "x" }, "copiesCrc": { "a": 1.5 } },
+      "error": "copiesCrc entry is not a CRC32: a"
+    },
+    {
+      "name": "copiesCrc beyond 32 bits",
+      "was": "iOS truncated it to 32 bits",
+      "manifest": { "copies": { "a": "x" }, "copiesCrc": { "a": 4294967296 } },
+      "error": "copiesCrc entry is not a CRC32: a"
+    },
+    {
+      "name": "copiesCrc boolean",
+      "was": "iOS read true as CRC 1",
+      "manifest": { "copies": { "a": "x" }, "copiesCrc": { "a": true } },
+      "error": "copiesCrc entry is not a CRC32: a"
+    },
+    {
+      "name": "copiesCrc of another type",
+      "was": "every platform ignored it",
+      "manifest": { "copies": { "a": "x" }, "copiesCrc": [1] },
+      "error": "copiesCrc is not an object"
+    },
+    {
+      "name": "HarmonyOS rawfile prefix is stripped from copy sources",
+      "manifest": {
+        "copies": {
+          "assets/icon.png": "resources/rawfile/assets/icon.png",
+          "assets/media.png": "resources/base/media/media.png"
+        },
+        "copiesCrc": { "assets/icon.png": 5 }
+      },
+      "options": { "copySourcePrefix": "resources/rawfile/", "bundlePatchEntryName": "bundle.harmony.js.patch" },
+      "copies": [
+        ["assets/icon.png", "assets/icon.png", 5],
+        ["resources/base/media/media.png", "assets/media.png", null]
+      ]
+    },
+    {
+      "name": "without the option the prefix stays",
+      "manifest": { "copies": { "assets/icon.png": "resources/rawfile/assets/icon.png" } },
+      "copies": [["resources/rawfile/assets/icon.png", "assets/icon.png", null]]
+    },
+    {
+      "name": "the prefix is stripped only at the start",
+      "was": "HarmonyOS replaced its first occurrence anywhere in the path",
+      "manifest": { "copies": { "a.png": "assets/resources/rawfile/a.png" } },
+      "options": { "copySourcePrefix": "resources/rawfile/" },
+      "copies": [["assets/resources/rawfile/a.png", "a.png", null]]
+    },
+    {
+      "name": "a source that is only the prefix means the same path",
+      "manifest": { "copies": { "assets/icon.png": "resources/rawfile/" } },
+      "options": { "copySourcePrefix": "resources/rawfile/" },
+      "copies": [["assets/icon.png", "assets/icon.png", null]]
+    },
+    {
+      "name": "hbcTransform metadata of the bundle patch entry, re-serialized",
+      "text": "{\"hbcTransform\": {\"other.patch\": {\"v\": 9}, \"index.bundlejs.patch\": {\"v\": 1, \"hbcVersion\": 96, \"layout\": {\"counts\": 19, \"sections\": [[2, 16, [[0, 0, 25]]]]}}}}",
+      "hbcTransformMeta": "{\"v\":1,\"hbcVersion\":96,\"layout\":{\"counts\":19,\"sections\":[[2,16,[[0,0,25]]]]}}"
+    },
+    {
+      "name": "hbcTransform under a platform-specific bundle patch name",
+      "manifest": { "hbcTransform": { "index.bundlejs.patch": { "v": 2 }, "bundle.harmony.js.patch": { "v": 1 } } },
+      "options": { "bundlePatchEntryName": "bundle.harmony.js.patch" },
+      "hbcTransformMeta": "{\"v\":1}"
+    },
+    {
+      "name": "hbcTransform without the bundle patch entry",
+      "manifest": { "hbcTransform": { "other.patch": {} } }
+    },
+    {
+      "name": "hbcTransform entry null",
+      "manifest": { "hbcTransform": { "index.bundlejs.patch": null } }
+    },
+    {
+      "name": "hbcTransform entry that is not an object",
+      "was": "every platform ignored it and applied the patch untransformed",
+      "manifest": { "hbcTransform": { "index.bundlejs.patch": "{\"v\":1}" } },
+      "error": "hbcTransform entry is not an object: index.bundlejs.patch"
+    },
+    {
+      "name": "hbcTransform that is not an object",
+      "was": "every platform ignored it",
+      "manifest": { "hbcTransform": [{ "v": 1 }] },
+      "error": "hbcTransform is not an object"
+    },
+    {
+      "name": "duplicate copy targets: the last source wins",
+      "text": "{\"copies\":{\"a.png\":\"x.png\",\"b.png\":\"y.png\",\"a.png\":\"z.png\"}}",
+      "copies": [["z.png", "a.png", null], ["y.png", "b.png", null]]
+    },
+    {
+      "name": "non-ASCII paths, escaped or raw",
+      "text": "{\"copies\":{\"assets/\\u56fe.png\":\"assets/图片.png\",\"assets/\\ud83d\\ude00.png\":\"\"}}",
+      "copies": [
+        ["assets/图片.png", "assets/图.png", null],
+        ["assets/😀.png", "assets/😀.png", null]
+      ]
+    },
+    {
+      "name": "root array",
+      "text": "[]",
+      "error": "not a JSON object"
+    },
+    {
+      "name": "root string",
+      "text": "\"copies\"",
+      "error": "not a JSON object"
+    },
+    {
+      "name": "empty text",
+      "text": "",
+      "error": "invalid JSON"
+    },
+    {
+      "name": "malformed JSON",
+      "text": "{\"copies\":{\"a\":\"b\",}}",
+      "error": "invalid JSON"
+    },
+    {
+      "name": "trailing garbage",
+      "text": "{} {}",
+      "error": "invalid JSON"
+    },
+    {
+      "name": "malicious: copy target escapes the version directory",
+      "manifest": { "copies": { "../escape.txt": "assets/a.png" } },
+      "error": "Unsafe copy target path: ../escape.txt"
+    },
+    {
+      "name": "malicious: nested parent segment in a copy target",
+      "manifest": { "copies": { "assets/../../escape.txt": "assets/a.png" } },
+      "error": "Unsafe copy target path"
+    },
+    {
+      "name": "malicious: absolute copy source",
+      "manifest": { "copies": { "assets/a.png": "/etc/passwd" } },
+      "error": "Unsafe copy source path: /etc/passwd"
+    },
+    {
+      "name": "malicious: absolute copy target",
+      "manifest": { "copies": { "/data/local/tmp/x": "" } },
+      "error": "Unsafe copy"
+    },
+    {
+      "name": "malicious: backslash traversal",
+      "manifest": { "copies": { "assets\\..\\..\\x": "assets/a.png" } },
+      "error": "Unsafe copy target path"
+    },
+    {
+      "name": "malicious: empty and dot segments",
+      "manifest": { "copies": { "assets//a.png": "assets/a.png" } },
+      "error": "Unsafe copy target path"
+    },
+    {
+      "name": "malicious: current-directory segment",
+      "manifest": { "copies": { "./a.png": "assets/a.png" } },
+      "error": "Unsafe copy target path"
+    },
+    {
+      "name": "malicious: NUL truncating to a parent segment",
+      "manifest": { "copies": { "..\u0000x": "assets/a.png" } },
+      "error": "Unsafe copy target path"
+    },
+    {
+      "name": "malicious: control byte in a source",
+      "manifest": { "copies": { "a.png": "assets/a\u0001.png" } },
+      "error": "Unsafe copy source path"
+    },
+    {
+      "name": "malicious: prefix stripping cannot smuggle a parent segment",
+      "manifest": { "copies": { "a.png": "resources/rawfile/../../x" } },
+      "options": { "copySourcePrefix": "resources/rawfile/" },
+      "error": "Unsafe copy source path: ../../x"
+    },
+    {
+      "name": "malicious: delete escapes the version directory",
+      "manifest": { "deletes": { "../../Documents": 1 } },
+      "error": "Unsafe deleted path: ../../Documents"
+    },
+    {
+      "name": "malicious: absolute delete in an array",
+      "manifest": { "deletes": ["/"] },
+      "error": "Unsafe deleted path: /"
+    },
+    {
+      "name": "malicious: empty delete",
+      "manifest": { "deletes": { "": 1 } },
+      "error": "Unsafe deleted path"
+    }
+  ]
+}

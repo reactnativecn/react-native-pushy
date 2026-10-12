@@ -603,7 +603,7 @@ Status ApplyBundlePatchWithHbcTransform(
     const FileSourcePatchOptions& options,
     const BundleRebuilder& bundle_patcher) {
   hbc::HbcTransformMeta meta;
-  if (!hbc::ParseHbcTransformMeta(options.bundle_hbc_transform_meta, &meta)) {
+  if (!hbc::ParseHbcTransformMeta(options.manifest.bundle_hbc_transform_meta, &meta)) {
     return Status::Error("Invalid hbcTransform metadata");
   }
   if (meta.v != hbc::kHbcTransformSupportedVersion) {
@@ -677,7 +677,7 @@ Status ApplyPatchFromFileSource(
   }
 
   Status bundle_status =
-      options.bundle_hbc_transform_meta.empty()
+      options.manifest.bundle_hbc_transform_meta.empty()
           ? bundle_patcher.Apply(
                 options.origin_bundle_path,
                 options.bundle_patch_path,

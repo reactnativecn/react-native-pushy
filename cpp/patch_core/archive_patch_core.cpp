@@ -1,5 +1,8 @@
 #include "archive_patch_core.h"
 
+#include <unordered_map>
+#include <utility>
+
 #include "obscured_text.h"
 
 namespace pushy {
@@ -100,24 +103,105 @@ delta::Status BuildCopyGroups(
     return manifest_status;
   }
 
-  out_groups->clear();
+  // Groups in order of first appearance; the index keeps this linear in the
+  // number of copies (a package diff copies thousands of resources).
+  std::vector<CopyGroup> groups;
+  std::unordered_map<std::string, size_t> group_by_source;
   for (const delta::CopyOperation& copy : manifest.copies) {
-    bool appended = false;
-    for (CopyGroup& group : *out_groups) {
-      if (group.from == copy.from) {
-        group.to_paths.push_back(copy.to);
-        appended = true;
-        break;
-      }
-    }
-    if (!appended) {
+    const auto inserted = group_by_source.emplace(copy.from, groups.size());
+    if (inserted.second) {
       CopyGroup group;
       group.from = copy.from;
-      group.to_paths.push_back(copy.to);
-      out_groups->push_back(group);
+      groups.push_back(std::move(group));
+    }
+    CopyGroup& group = groups[inserted.first->second];
+    group.to_paths.push_back(copy.to);
+    if (copy.has_expected_crc) {
+      group.has_expected_crc = true;
+      group.expected_crc = copy.expected_crc;
     }
   }
+  *out_groups = std::move(groups);
 
+  return delta::Status::Ok();
+}
+
+delta::Status PlanArchivePatch(
+    const ArchivePatchInput& input,
+    ArchivePatchPlan* out_plan) {
+  if (out_plan == nullptr) {
+    return delta::Status::Error("Archive plan output is required");
+  }
+  if (input.type == ArchivePatchType::kFull) {
+    return BuildArchivePatchPlan(
+        input.type, delta::PatchManifest(), input.entry_names, out_plan,
+        input.bundle_patch_entry_name);
+  }
+  // Missing entries first: an archive without __diff.json has no text to
+  // parse, and the entry error is the one worth reporting.
+  if (!HasEntry(input.entry_names, kManifestEntryName)) {
+    return delta::Status::Error("diff.json not found");
+  }
+  if (!HasEntry(input.entry_names, input.bundle_patch_entry_name)) {
+    return delta::Status::Error("bundle delta not found");
+  }
+  delta::PatchManifestOptions options;
+  options.bundle_patch_entry_name = input.bundle_patch_entry_name;
+  options.copy_source_prefix = input.copy_source_prefix;
+  delta::PatchManifest manifest;
+  delta::Status status =
+      delta::ParsePatchManifest(input.manifest_json, options, &manifest);
+  if (!status.ok) {
+    return status;
+  }
+  return BuildArchivePatchPlan(
+      input.type, manifest, input.entry_names, out_plan,
+      input.bundle_patch_entry_name);
+}
+
+delta::Status ApplyArchivePatch(
+    const ArchivePatchRequest& request,
+    std::vector<CopyGroup>* out_host_copies,
+    const delta::BundleRebuilder& bundle_patcher) {
+  if (request.archive.type == ArchivePatchType::kFull) {
+    return delta::Status::Error("A full package has no delta to apply");
+  }
+  if (request.host_copies_resources && out_host_copies == nullptr) {
+    return delta::Status::Error("Host copy groups output is required");
+  }
+  if (out_host_copies != nullptr) {
+    out_host_copies->clear();
+  }
+  ArchivePatchPlan plan;
+  delta::Status status = PlanArchivePatch(request.archive, &plan);
+  if (!status.ok) {
+    return status;
+  }
+  delta::FileSourcePatchOptions options;
+  status = BuildFileSourcePatchOptions(
+      plan, request.source_root, request.target_root,
+      request.origin_bundle_path, request.bundle_patch_path,
+      request.bundle_output_path, &options);
+  if (!status.ok) {
+    return status;
+  }
+  std::vector<CopyGroup> host_copies;
+  if (request.host_copies_resources) {
+    status = BuildCopyGroups(plan.manifest, &host_copies);
+    if (!status.ok) {
+      return status;
+    }
+    options.manifest.copies.clear();
+    options.manifest.deletes.clear();
+    options.enable_merge = false;
+  }
+  status = delta::ApplyPatchFromFileSource(options, bundle_patcher);
+  if (!status.ok) {
+    return status;
+  }
+  if (out_host_copies != nullptr) {
+    *out_host_copies = std::move(host_copies);
+  }
   return delta::Status::Ok();
 }
 

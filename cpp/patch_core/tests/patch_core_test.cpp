@@ -1,7 +1,9 @@
 #include "../archive_patch_core.h"
 #include "../digest.h"
 #include "../patch_core.h"
+#include "../patch_manifest.h"
 #include "../state_core.h"
+#include "../../update_flow_core/flow_json.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -163,7 +165,7 @@ void TestApplyPatchWithHbcTransform() {
   options.bundle_patch_path = patch;
   options.bundle_output_path = JoinPath(temp.path, "out/index.bundlejs");
   options.enable_merge = false;
-  options.bundle_hbc_transform_meta = meta;
+  options.manifest.bundle_hbc_transform_meta = meta;
 
   Status status = ApplyPatchFromFileSource(options);
   Expect(status.ok, "hbc transform patch should succeed: " + status.message);
@@ -195,7 +197,7 @@ void TestApplyPatchWithHbcTransformRejectsBadMeta() {
   options.enable_merge = false;
 
   // 不可解析的元数据 → 失败(绝不能忽略元数据直接 hpatch)
-  options.bundle_hbc_transform_meta = "not json";
+  options.manifest.bundle_hbc_transform_meta = "not json";
   Expect(
       !ApplyPatchFromFileSource(options).ok,
       "malformed hbcTransform metadata must fail");
@@ -207,7 +209,7 @@ void TestApplyPatchWithHbcTransformRejectsBadMeta() {
   const size_t pos = meta.find(needle);
   Expect(pos != std::string::npos, "meta fixture must contain v:1");
   meta.replace(pos, needle.size(), "\"v\":9");
-  options.bundle_hbc_transform_meta = meta;
+  options.manifest.bundle_hbc_transform_meta = meta;
   Status status = ApplyPatchFromFileSource(options);
   Expect(!status.ok, "unsupported hbcTransform version must fail");
   Expect(
@@ -246,7 +248,7 @@ void TestApplyStreamFormatWithHbcTransform() {
   options.bundle_patch_path = JoinPath(g_fixtures_dir, "v96.tstreampatch.bin");
   options.bundle_output_path = JoinPath(temp.path, "out/index.bundlejs");
   options.enable_merge = false;
-  options.bundle_hbc_transform_meta =
+  options.manifest.bundle_hbc_transform_meta =
       ReadFile(JoinPath(g_fixtures_dir, "v96.meta.json"));
 
   Status status = ApplyPatchFromFileSource(options);
@@ -599,7 +601,7 @@ void TestHpatchRejectsOversizedLzmaDictionary() {
   options.bundle_patch_path = tampered;
   options.bundle_output_path = JoinPath(temp.path, "out/index.bundlejs");
   options.enable_merge = false;
-  options.bundle_hbc_transform_meta = ReadFile(JoinPath(g_fixtures_dir, "v96.meta.json"));
+  options.manifest.bundle_hbc_transform_meta = ReadFile(JoinPath(g_fixtures_dir, "v96.meta.json"));
 
   Status status = ApplyPatchFromFileSource(options);
   Expect(!status.ok, "a patch declaring a 4 GB LZMA dictionary must be refused");
@@ -804,6 +806,16 @@ void TestArchivePatchCoreBuildPlanAndCopyGroups() {
   Expect(groups.size() == 1, "copy groups should merge identical sources");
   ExpectEq(groups[0].from, "assets/a.png", "copy group source mismatch");
   Expect(groups[0].to_paths.size() == 2, "copy group target count mismatch");
+  Expect(!groups[0].has_expected_crc, "no CRC declared, none grouped");
+
+  // A CRC declared on a later copy of the source still lands on its group.
+  manifest.copies[1].has_expected_crc = true;
+  manifest.copies[1].expected_crc = 7;
+  status = pushy::archive_patch::BuildCopyGroups(manifest, &groups);
+  Expect(status.ok, status.message);
+  Expect(groups.size() == 1 && groups[0].has_expected_crc &&
+             groups[0].expected_crc == 7,
+         "group CRC comes from whichever copy declared it");
 
   FileSourcePatchOptions options;
   status = pushy::archive_patch::BuildFileSourcePatchOptions(
@@ -1145,6 +1157,320 @@ void TestApplyPatchCopiesVerifyExpectedCrc() {
       "drifted content must not be copied");
 }
 
+// ---- __diff.json (patch_manifest.h) ----
+
+std::string DescribeManifest(const PatchManifest& manifest) {
+  std::string out = "copies=";
+  for (const CopyOperation& copy : manifest.copies) {
+    out += "[" + copy.from + "," + copy.to + "," +
+           (copy.has_expected_crc ? std::to_string(copy.expected_crc)
+                                  : std::string("null")) +
+           "]";
+  }
+  out += " deletes=";
+  for (const std::string& path : manifest.deletes) {
+    out += "[" + path + "]";
+  }
+  out += " meta=" + manifest.bundle_hbc_transform_meta;
+  return out;
+}
+
+// The shared vectors (tests/patch-manifest-vectors.json): server shapes, the
+// cases the platforms used to disagree on, and hostile paths.
+void TestPatchManifestVectors() {
+  const std::string path =
+      JoinPath(g_fixtures_dir, "../patch-manifest-vectors.json");
+  bool ok = false;
+  const flowjson::Value doc = flowjson::Parse(ReadFile(path), &ok);
+  Expect(ok && doc.Get("vectors").IsArray(), "vectors file must parse: " + path);
+  Expect(doc.Get("vectors").Size() >= 40, "vectors file lost its cases");
+  for (const flowjson::Value& vector : doc.Get("vectors").elements()) {
+    const std::string name = vector.Get("name").AsString();
+    const std::string text = vector.Get("text").IsString()
+        ? vector.Get("text").AsString()
+        : flowjson::Stringify(vector.Get("manifest"));
+    pushy::delta::PatchManifestOptions options;
+    options.bundle_patch_entry_name = "index.bundlejs.patch";
+    const flowjson::Value& given = vector.Get("options");
+    if (given.Get("bundlePatchEntryName").IsString()) {
+      options.bundle_patch_entry_name =
+          given.Get("bundlePatchEntryName").AsString();
+    }
+    if (given.Get("copySourcePrefix").IsString()) {
+      options.copy_source_prefix = given.Get("copySourcePrefix").AsString();
+    }
+
+    PatchManifest manifest;
+    manifest.deletes.push_back("sentinel");
+    const Status status =
+        pushy::delta::ParsePatchManifest(text, options, &manifest);
+    if (vector.Get("error").IsString()) {
+      const std::string expected = vector.Get("error").AsString();
+      Expect(!status.ok, name + ": expected an error, got " +
+                             DescribeManifest(manifest));
+      Expect(status.message.find(expected) != std::string::npos,
+             name + ": error [" + status.message + "] lacks [" + expected + "]");
+      Expect(manifest.deletes.size() == 1 && manifest.copies.empty(),
+             name + ": a failed parse must leave the output untouched");
+      continue;
+    }
+    Expect(status.ok, name + ": " + status.message);
+
+    PatchManifest expected;
+    for (const flowjson::Value& copy : vector.Get("copies").elements()) {
+      CopyOperation operation;
+      operation.from = copy.At(0).AsString();
+      operation.to = copy.At(1).AsString();
+      if (copy.At(2).IsNumber()) {
+        operation.has_expected_crc = true;
+        operation.expected_crc = static_cast<uint32_t>(copy.At(2).AsNumber());
+      }
+      expected.copies.push_back(operation);
+    }
+    for (const flowjson::Value& deleted : vector.Get("deletes").elements()) {
+      expected.deletes.push_back(deleted.AsString());
+    }
+    if (vector.Get("hbcTransformMeta").IsString()) {
+      expected.bundle_hbc_transform_meta =
+          vector.Get("hbcTransformMeta").AsString();
+    }
+    ExpectEq(DescribeManifest(manifest), DescribeManifest(expected), name);
+  }
+}
+
+void TestPatchManifestSizeCaps() {
+  pushy::delta::PatchManifestOptions options;
+  options.bundle_patch_entry_name = "index.bundlejs.patch";
+  PatchManifest manifest;
+
+  // Over kMaxManifestBytes: rejected before parsing.
+  std::string big = "{\"pad\":\"";
+  big.append(static_cast<size_t>(pushy::archive_limits::kMaxManifestBytes), 'x');
+  big += "\"}";
+  Status status = pushy::delta::ParsePatchManifest(big, options, &manifest);
+  Expect(!status.ok, "a manifest over kMaxManifestBytes must be rejected");
+
+  // A real-sized manifest well over flowjson's 1 MB response cap still parses.
+  std::string large = "{\"copies\":{";
+  std::string large_crc = "\"copiesCrc\":{";
+  const int copies = 20000;
+  for (int i = 0; i < copies; ++i) {
+    const std::string to = "assets/node_modules/some-package/images/icon_" +
+                           std::to_string(i) + "@3x.png";
+    large += (i ? ",\"" : "\"") + to + "\":\"\"";
+    large_crc += (i ? ",\"" : "\"") + to + "\":" + std::to_string(i);
+  }
+  large += "}," + large_crc + "}}";
+  Expect(large.size() > 2 * 1024 * 1024, "the large manifest must exceed 2 MB");
+  status = pushy::delta::ParsePatchManifest(large, options, &manifest);
+  Expect(status.ok, "a 20000-copy manifest must parse: " + status.message);
+  Expect(manifest.copies.size() == static_cast<size_t>(copies) &&
+             manifest.copies.back().has_expected_crc &&
+             manifest.copies.back().expected_crc == copies - 1,
+         "every copy keeps its CRC");
+
+  // Over kMaxManifestNodes values: rejected.
+  std::string nodes = "{\"deletes\":[";
+  for (size_t i = 0; i < pushy::delta::kMaxManifestNodes; ++i) {
+    nodes += i ? ",\"a\"" : "\"a\"";
+  }
+  nodes += "]}";
+  status = pushy::delta::ParsePatchManifest(nodes, options, &manifest);
+  Expect(!status.ok, "a manifest over kMaxManifestNodes values must be rejected");
+
+  Expect(!pushy::delta::ParsePatchManifest("{}", options, nullptr).ok,
+         "a null output must be rejected");
+}
+
+pushy::archive_patch::ArchivePatchInput PpkInput(const std::string& manifest_json) {
+  pushy::archive_patch::ArchivePatchInput input;
+  input.type = pushy::archive_patch::ArchivePatchType::kPatchFromPpk;
+  input.entry_names = {"__diff.json", "index.bundlejs.patch"};
+  input.manifest_json = manifest_json;
+  return input;
+}
+
+void TestPlanArchivePatch() {
+  pushy::archive_patch::ArchivePatchPlan plan;
+
+  pushy::archive_patch::ArchivePatchInput input = PpkInput("not json");
+  input.entry_names = {"index.bundlejs.patch"};
+  Status status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  ExpectEq(status.message, "diff.json not found",
+           "a missing manifest entry is reported before the text is parsed");
+  input.entry_names = {"__diff.json"};
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  ExpectEq(status.message, "bundle delta not found", "missing bundle patch");
+
+  input = PpkInput("{\"copies\":{\"../x\":\"\"}}");
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  Expect(!status.ok && status.message.find("Unsafe copy") != std::string::npos,
+         "the plan validates the parsed paths: " + status.message);
+
+  input = PpkInput(
+      "{\"copies\":{\"assets/b.png\":\"assets/a.png\"},"
+      "\"deletes\":{\"assets/old.png\":1},"
+      "\"hbcTransform\":{\"index.bundlejs.patch\":{\"v\":1}}}");
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  Expect(status.ok, status.message);
+  Expect(plan.enable_merge && plan.merge_source_subdir.empty(), "ppk merge plan");
+  Expect(plan.manifest.copies.size() == 1 &&
+             plan.manifest.copies[0].from == "assets/a.png" &&
+             plan.manifest.deletes.size() == 1,
+         "the plan carries the parsed manifest");
+  ExpectEq(plan.manifest.bundle_hbc_transform_meta, "{\"v\":1}",
+           "the plan carries the hbcTransform metadata");
+
+  // HarmonyOS: its own bundle patch name keys both the entry check and the
+  // metadata; the rawfile prefix is stripped.
+  input.type = pushy::archive_patch::ArchivePatchType::kPatchFromPackage;
+  input.entry_names = {"__diff.json", "bundle.harmony.js.patch"};
+  input.bundle_patch_entry_name = "bundle.harmony.js.patch";
+  input.copy_source_prefix = "resources/rawfile/";
+  input.manifest_json =
+      "{\"copies\":{\"assets/a.png\":\"resources/rawfile/assets/a.png\"},"
+      "\"hbcTransform\":{\"bundle.harmony.js.patch\":{\"v\":1}}}";
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  Expect(status.ok, status.message);
+  ExpectEq(plan.merge_source_subdir, "assets", "package merge subdir");
+  ExpectEq(plan.manifest.copies[0].from, "assets/a.png", "prefix stripped");
+  ExpectEq(plan.manifest.bundle_hbc_transform_meta, "{\"v\":1}",
+           "metadata under the platform's bundle patch name");
+
+  // A full package plans nothing and never looks at the text.
+  input = PpkInput("not json");
+  input.type = pushy::archive_patch::ArchivePatchType::kFull;
+  input.entry_names.clear();
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  Expect(status.ok && !plan.enable_merge && plan.manifest.copies.empty(),
+         "full package plan: " + status.message);
+  Expect(!pushy::archive_patch::PlanArchivePatch(input, nullptr).ok,
+         "a null plan output must be rejected");
+}
+
+void TestApplyArchivePatchFromPpk() {
+  TempDir temp;
+  const std::string source = JoinPath(temp.path, "origin");
+  const std::string target = JoinPath(temp.path, "target");
+
+  WriteFile(JoinPath(source, "index.bundlejs"), "old bundle");
+  WriteFile(JoinPath(source, "assets/keep.txt"), "keep");
+  WriteFile(JoinPath(source, "assets/delete.txt"), "delete");
+  WriteFile(JoinPath(source, "assets/from.txt"), "123456789");
+  WriteFile(JoinPath(target, "index.bundlejs.patch"), "unused patch");
+
+  pushy::archive_patch::ArchivePatchRequest request;
+  request.archive = PpkInput(
+      "{\"copies\":{\"assets/renamed.txt\":\"assets/from.txt\"},"
+      "\"copiesCrc\":{\"assets/renamed.txt\":3421780262},"
+      "\"deletes\":{\"assets/delete.txt\":1}}");
+  request.source_root = source;
+  request.target_root = target;
+  request.origin_bundle_path = JoinPath(source, "index.bundlejs");
+  request.bundle_patch_path = JoinPath(target, "index.bundlejs.patch");
+  request.bundle_output_path = JoinPath(target, "index.bundlejs");
+
+  FakeBundlePatcher patcher("patched bundle");
+  std::vector<pushy::archive_patch::CopyGroup> host_copies(1);
+  Status status =
+      pushy::archive_patch::ApplyArchivePatch(request, &host_copies, patcher);
+  Expect(status.ok, status.message);
+  Expect(host_copies.empty(), "nothing is left to the host");
+  ExpectEq(ReadFile(JoinPath(target, "index.bundlejs")), "patched bundle", "bundle");
+  ExpectEq(ReadFile(JoinPath(target, "assets/renamed.txt")), "123456789", "copy");
+  ExpectEq(ReadFile(JoinPath(target, "assets/keep.txt")), "keep", "merge");
+  Expect(!Exists(JoinPath(target, "assets/delete.txt")), "delete honoured");
+
+  // The declared CRC is checked against the source: drift fails the patch.
+  WriteFile(JoinPath(source, "assets/from.txt"), "drifted");
+  const std::string target2 = JoinPath(temp.path, "target2");
+  request.target_root = target2;
+  request.bundle_output_path = JoinPath(target2, "index.bundlejs");
+  status = pushy::archive_patch::ApplyArchivePatch(request, nullptr, patcher);
+  Expect(!status.ok && status.message.find("crc32") != std::string::npos,
+         "a drifted copy source must fail: " + status.message);
+
+  // A manifest error stops before the bundle is touched.
+  FakeBundlePatcher untouched("x");
+  request.archive.manifest_json = "{\"deletes\":[\"../../x\"]}";
+  status = pushy::archive_patch::ApplyArchivePatch(request, nullptr, untouched);
+  Expect(!status.ok && untouched.calls == 0,
+         "an unsafe manifest must fail before patching");
+
+  request.archive.type = pushy::archive_patch::ArchivePatchType::kFull;
+  Expect(!pushy::archive_patch::ApplyArchivePatch(request, nullptr, untouched).ok,
+         "a full package has no patch to apply");
+}
+
+// Android APK / HarmonyOS rawfile packages: only the bundle is rebuilt; the
+// copies come back grouped by source, with the CRC each group must match.
+void TestApplyArchivePatchHostCopies() {
+  TempDir temp;
+  const std::string work = JoinPath(temp.path, "work");
+  WriteFile(JoinPath(work, ".origin.bundle"), "old bundle");
+  WriteFile(JoinPath(work, "index.bundlejs.patch"), "unused patch");
+  WriteFile(JoinPath(work, "assets/new.png"), "new");
+
+  pushy::archive_patch::ArchivePatchRequest request;
+  request.archive = PpkInput(
+      "{\"copies\":{\"res/a.png\":\"\",\"res/b.png\":\"res/a.png\","
+      "\"res/c.png\":\"res/c_old.png\"},"
+      "\"copiesCrc\":{\"res/b.png\":42}}");
+  request.archive.type = pushy::archive_patch::ArchivePatchType::kPatchFromPackage;
+  request.source_root = work;
+  request.target_root = work;
+  request.origin_bundle_path = JoinPath(work, ".origin.bundle");
+  request.bundle_patch_path = JoinPath(work, "index.bundlejs.patch");
+  request.bundle_output_path = JoinPath(work, "index.bundlejs");
+  request.host_copies_resources = true;
+
+  FakeBundlePatcher patcher("patched bundle");
+  Expect(!pushy::archive_patch::ApplyArchivePatch(request, nullptr, patcher).ok,
+         "host copies need an output");
+  Expect(patcher.calls == 0, "nothing runs without the output");
+
+  std::vector<pushy::archive_patch::CopyGroup> groups;
+  Status status = pushy::archive_patch::ApplyArchivePatch(request, &groups, patcher);
+  Expect(status.ok, status.message);
+  ExpectEq(ReadFile(JoinPath(work, "index.bundlejs")), "patched bundle", "bundle");
+  Expect(!Exists(JoinPath(work, "res")), "the core copies nothing itself");
+  ExpectEq(ReadFile(JoinPath(work, "assets/new.png")), "new", "no merge into work");
+  Expect(groups.size() == 2, "two sources");
+  ExpectEq(groups[0].from, "res/a.png", "first group source");
+  Expect(groups[0].to_paths.size() == 2 && groups[0].to_paths[1] == "res/b.png",
+         "targets of one source are grouped in order");
+  Expect(groups[0].has_expected_crc && groups[0].expected_crc == 42,
+         "a CRC declared for any target covers the group");
+  Expect(!groups[1].has_expected_crc, "no CRC declared for the second source");
+}
+
+void TestApplyArchivePatchWithHbcTransform() {
+  TempDir temp;
+  const std::string meta = ReadFile(JoinPath(g_fixtures_dir, "v96.meta.json"));
+  pushy::archive_patch::ArchivePatchRequest request;
+  request.archive = PpkInput(
+      "{\"copies\":{},\"hbcTransform\":{\"index.bundlejs.patch\":" + meta + "}}");
+  request.source_root = JoinPath(temp.path, "src");
+  request.target_root = JoinPath(temp.path, "dst");
+  request.origin_bundle_path = JoinPath(g_fixtures_dir, "v96.hbc");
+  request.bundle_patch_path = JoinPath(g_fixtures_dir, "v96.tpatch.bin");
+  request.bundle_output_path = JoinPath(temp.path, "dst/index.bundlejs");
+  Status status = pushy::archive_patch::ApplyArchivePatch(request, nullptr);
+  Expect(status.ok, "transform-domain patch through the manifest: " + status.message);
+  Expect(ReadFile(request.bundle_output_path) ==
+             ReadFile(JoinPath(g_fixtures_dir, "v96b.hbc")),
+         "restored bundle must equal the new bundle byte-for-byte");
+
+  // Without the metadata the same patch must not silently produce a bundle
+  // that matches: the transform is part of the manifest contract.
+  request.archive.manifest_json = "{}";
+  request.bundle_output_path = JoinPath(temp.path, "dst2/index.bundlejs");
+  status = pushy::archive_patch::ApplyArchivePatch(request, nullptr);
+  Expect(!status.ok || ReadFile(request.bundle_output_path) !=
+                           ReadFile(JoinPath(g_fixtures_dir, "v96b.hbc")),
+         "the metadata is what makes the transform-domain patch apply");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -1189,6 +1515,12 @@ int main(int argc, char** argv) {
       {"Crc32KnownVectors", TestCrc32KnownVectors},
       {"Crc32File", TestCrc32File},
       {"ApplyPatchCopiesVerifyExpectedCrc", TestApplyPatchCopiesVerifyExpectedCrc},
+      {"PatchManifestVectors", TestPatchManifestVectors},
+      {"PatchManifestSizeCaps", TestPatchManifestSizeCaps},
+      {"PlanArchivePatch", TestPlanArchivePatch},
+      {"ApplyArchivePatchFromPpk", TestApplyArchivePatchFromPpk},
+      {"ApplyArchivePatchHostCopies", TestApplyArchivePatchHostCopies},
+      {"ApplyArchivePatchWithHbcTransform", TestApplyArchivePatchWithHbcTransform},
   };
 
   int failures = 0;

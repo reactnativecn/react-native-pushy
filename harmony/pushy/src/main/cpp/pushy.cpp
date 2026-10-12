@@ -875,7 +875,7 @@ napi_value ApplyPatchFromFileSource(napi_env env, napi_callback_info info) {
   work.options.bundle_patch_path = bundle_patch_path;
   work.options.bundle_output_path = bundle_output_path;
   work.options.merge_source_subdir = merge_source_subdir;
-  work.options.bundle_hbc_transform_meta = bundle_hbc_transform_meta;
+  work.options.manifest.bundle_hbc_transform_meta = bundle_hbc_transform_meta;
   work.options.enable_merge = enable_merge;
 
   return QueueWork<ApplyPatchWork>(

@@ -503,7 +503,7 @@ void pushy::jni_natives::ApplyDeltaFromSource(
     options.bundle_output_path = JStringToString(env, bundle_output_path);
     options.merge_source_subdir = JStringToString(env, merge_source_subdir);
     options.enable_merge = enable_merge == JNI_TRUE;
-    options.bundle_hbc_transform_meta = JStringToString(env, hbc_transform_meta);
+    options.manifest.bundle_hbc_transform_meta = JStringToString(env, hbc_transform_meta);
 
     const pushy::delta::Status status =
         pushy::delta::ApplyPatchFromFileSource(options);

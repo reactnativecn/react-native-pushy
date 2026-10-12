@@ -623,7 +623,7 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
         if ([meta isKindOfClass:[NSDictionary class]]) {
             NSString *metaString = PushyJsonString(meta);
             if (metaString != nil) {
-                options.bundle_hbc_transform_meta = PushyToStdString(metaString);
+                options.manifest.bundle_hbc_transform_meta = PushyToStdString(metaString);
             }
         }
     }
