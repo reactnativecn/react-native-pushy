@@ -8,7 +8,7 @@ import {
 import { isReservedEntryName } from './InstallRecord';
 
 // ArkTS mirror of cpp/patch_core/archive_limits.h — keep in sync by hand
-// (harmony/pushy/src/test/check-constant-parity.js asserts the values match).
+// (scripts/check-constant-parity.js asserts the values match).
 // 损坏或恶意更新包的伤害上限:最多耗费有限的磁盘/内存/时间,绝不撑爆磁盘。
 export const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 export const MAX_TOTAL_UNCOMPRESSED_BYTES = 2048 * 1024 * 1024;

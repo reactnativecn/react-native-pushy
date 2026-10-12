@@ -1,5 +1,5 @@
 // The subset of RNOH's RNInstance the SDK needs: device events for download
-// progress. Typed structurally so the hypium tests can pass a mock.
+// progress. Typed structurally so tests can pass a mock.
 export interface DeviceEventEmitter {
   emitDeviceEvent(eventName: string, payload: Object): void;
 }

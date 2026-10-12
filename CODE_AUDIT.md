@@ -20,7 +20,7 @@
 > | 4.12 | 部分：`buildCheckFingerprint` 无 C++ 移植 |
 > | §4 P4 | 开放：鸿蒙 NAPI 结果对象省略空串字段（Android 设 null） |
 > | 5.7 | 部分：RCP 重定向控制（HMS-only）未做 |
-> | 5.8 | 部分：hypium 测试无 CI；`e2e_harmony` 不在门内 |
+> | 5.8 | 部分：`e2e_harmony` 不在门内 |
 > | 5.15 / §5 P4 | 部分：若干纯函数未覆盖；`transferArchive` 未拆；`codelinter` 未接入 |
 > | 6.4 | 未做（流程决策）：`.so` 仍提交在 `android/lib/` |
 >
@@ -166,8 +166,8 @@ Android 已兜住：`Application.mk` 改 `-fexceptions`，每个 JNI 入口经 `
 剩余：`@ohos.net.http` 内部跟随重定向且不暴露最终 URL，https→http 的重定向降级仍可能发生；可接受 HMS-only 的话 RCP（`autoRedirect=false` + effective URL）能完全关闭。
 
 **5.8（P2）鸿蒙 CI 门**（部分修复）
-已做：`harmony-build.yml` 在固定容器里做类型检查（`HARMONY_TYPECHECK_REQUIRED=1` 时失败）与 release HAR 编译，并进 `native-gate`。
-剩余：`harmony/pushy/src/test` 的 hypium 测试没有任何 workflow 跑；`e2e_harmony.yml` 仅手动，不在门内（无托管鸿蒙 runner）。
+已做：`harmony-build.yml` 在固定容器里做类型检查（`HARMONY_TYPECHECK_REQUIRED=1` 时失败）与 release HAR 编译，并进 `native-gate`；hypium 套件已删除，鸿蒙纯逻辑测试改为 `src/__tests__/harmony*.test.ts` 在 bun 下跑（`test.yml`）。
+剩余：`e2e_harmony.yml` 仅手动，不在门内（无托管鸿蒙 runner）。
 
 **5.15（P3）测试**（部分修复）
 已覆盖：ContentRange、InstallRecord、ErrorCodes、ArchiveLimits、NativeConfig、EventHub；C++ 头文件 ↔ ArkTS/Java/JS 镜像的常量对等由 `scripts/check-constant-parity.js`（`bun lint`）断言。

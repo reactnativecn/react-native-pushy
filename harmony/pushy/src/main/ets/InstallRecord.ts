@@ -9,7 +9,7 @@ import {
 } from './ErrorCodes';
 
 // ArkTS mirror of cpp/patch_core/install_record.h — keep in sync by hand
-// (harmony/pushy/src/test/check-constant-parity.js asserts the values match).
+// (scripts/check-constant-parity.js asserts the values match).
 // 两阶段安装的完成记录:作为安装最后一步写进 staging 目录,随后 staging
 // 原子 rename 成版本目录;激活前重新校验 bundle 摘要。空文件 = 旧版 SDK
 // 写的历史标记,仍视为完整安装(无摘要可验)。
