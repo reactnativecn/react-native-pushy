@@ -1,7 +1,7 @@
 import unittest
 
-from extract import (declaration, exported_method, function, instance_method, mask_literals,
-                     method, mutate, struct)
+from extract import (declaration, exported_method, function, mask_literals, method, mutate,
+                     struct)
 
 
 class ExtractionTests(unittest.TestCase):
@@ -24,9 +24,17 @@ class ExtractionTests(unittest.TestCase):
         source = '+ (BOOL)restore:(id)value;\n+ (BOOL)restore:(id)value { return YES; }'
         self.assertEqual(method(source, 'restore'), (2, source.splitlines()[1]))
 
-    def test_objc_instance_method_is_not_a_class_method(self):
-        source = '+ (BOOL)switchVersion:(id)h { return NO; }\n- (BOOL)switchVersion:(id)h { return YES; }'
-        self.assertEqual(instance_method(source, 'switchVersion'), (2, source.splitlines()[1]))
+    def test_objc_class_method_is_not_an_instance_method(self):
+        source = '- (BOOL)switchVersion:(id)h { return NO; }\n+ (BOOL)switchVersion:(id)h { return YES; }'
+        self.assertEqual(method(source, 'switchVersion'), (2, source.splitlines()[1]))
+
+    def test_header_extern_is_not_a_definition(self):
+        source = ('extern PUSHY_HIDDEN NSString *const key;\n'
+                  'PUSHY_HIDDEN NSString *Run(void);\n'
+                  'PUSHY_HIDDEN NSString *const key = @"k";\n'
+                  'PUSHY_HIDDEN NSString *Run(void) {\n    return key;\n}')
+        self.assertEqual(declaration(source, 'key')[0], 3)
+        self.assertEqual(function(source, 'Run')[0], 4)
 
     def test_objc_no_argument_method(self):
         self.assertEqual(method('+ (id)bundleURL\n{ return nil; }', 'bundleURL')[0], 1)

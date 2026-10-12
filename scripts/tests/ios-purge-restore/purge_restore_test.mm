@@ -1,6 +1,7 @@
 // Foundation-only host for the UNMODIFIED production methods extracted at build
 // time. The state lock, defaults transitions, launch resolution, restore window,
-// commit and reset bodies all come from RCTPushy.mm; see README.md for the seams.
+// commit, reset and switchVersion bodies all come from ios/RCTPushy; see
+// README.md for the seams.
 #import <Foundation/Foundation.h>
 #import <dispatch/dispatch.h>
 #import <os/lock.h>
@@ -34,10 +35,6 @@ static void TestLog(NSString *, ...) {}
 // Pod-internal linkage (RCTPushyCommon.h); one translation unit here.
 #undef PUSHY_HIDDEN
 #define PUSHY_HIDDEN
-
-// RCTPushy.mm's own #define, not extracted; InstallRecordActivation checks it
-// against install_record.h.
-#define VERSION_COMPLETE_FILE_NAME_LITERAL ".pushy-complete"
 #include "globals.inc"
 
 static const char *testName = "setup";
@@ -166,9 +163,7 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
 }
 }}
 
-@interface RCTPushy : NSObject {
-    dispatch_queue_t _fileQueue;
-}
+@interface RCTPushy : NSObject
 + (NSURL *)bundleURL;
 + (NSURL *)resolveLaunchBundleURL:(NSString **)rolledBack purgedVersion:(NSString **)purged;
 + (NSURL *)binaryBundleURL;
@@ -176,7 +171,10 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
 + (NSString *)buildTime;
 + (NSString *)downloadDir;
 - (void)resetToPackagedBundle:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
-- (BOOL)switchVersion:(NSString *)hash error:(NSError **)error;
+@end
+
+@interface RCTPushyInstaller : NSObject
++ (BOOL)switchVersion:(NSString *)hash error:(NSError **)error;
 @end
 
 @interface RCTPushyOrchestrator : NSObject
@@ -274,16 +272,15 @@ static dispatch_time_t TestLaunchDeadline(dispatch_time_t when, int64_t delta) {
 }
 
 @implementation RCTPushy
-- (instancetype)init {
-    self = [super init];
-    if (self) { _fileQueue = dispatch_queue_create("pushy.test.files", DISPATCH_QUEUE_SERIAL); }
-    return self;
-}
 + (NSURL *)binaryBundleURL { return [NSURL fileURLWithPath:[root stringByAppendingPathComponent:@"packaged.bundle"]]; }
 + (NSString *)packageVersion { return @"1.0"; }
 + (NSString *)buildTime { return @"123"; }
 + (NSString *)downloadDir { return [root stringByAppendingPathComponent:@"updates"]; }
 #include "pushy.inc"
+@end
+
+@implementation RCTPushyInstaller
+#include "installer.inc"
 @end
 
 @implementation RCTPushyOrchestrator
@@ -557,8 +554,6 @@ static NSString *Sha256Hex(NSData *data) {
 }
 
 static void InstallRecordActivation(void) {
-    Expect([VERSION_COMPLETE_FILE_NAME isEqualToString:@(pushy::install_record::kFileName)],
-           "record file name matches install_record.h");
     NSString *hash = @"0123456789abcdef";
     NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:
         [NSString stringWithFormat:@"pushy-install-record-%@", NSUUID.UUID.UUIDString]];
@@ -567,7 +562,7 @@ static void InstallRecordActivation(void) {
     NSData *bundle = [@"var a = 1;" dataUsingEncoding:NSUTF8StringEncoding];
     Expect([bundle writeToFile:[dir stringByAppendingPathComponent:BUNDLE_FILE_NAME] atomically:YES],
            "write bundle");
-    NSString *marker = [dir stringByAppendingPathComponent:VERSION_COMPLETE_FILE_NAME];
+    NSString *marker = [dir stringByAppendingPathComponent:PushyInstallRecordFileName()];
     auto verify = ^NSString *(id record) {
         NSData *data = [record isKindOfClass:NSData.class]
             ? record : [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
@@ -626,7 +621,7 @@ static void SwitchVersionRecords(void) {
     NSData *bundle = [@"C" dataUsingEncoding:NSUTF8StringEncoding];
     Expect([bundle writeToFile:[dir stringByAppendingPathComponent:BUNDLE_FILE_NAME] atomically:YES],
            "write C bundle");
-    NSString *marker = [dir stringByAppendingPathComponent:VERSION_COMPLETE_FILE_NAME];
+    NSString *marker = [dir stringByAppendingPathComponent:PushyInstallRecordFileName()];
     NSNumber *schema = @(pushy::install_record::kSchema);
     auto setRecord = ^(NSDictionary *record) {
         [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
@@ -646,7 +641,7 @@ static void SwitchVersionRecords(void) {
     };
     auto rejection = ^NSString *(void) {
         NSError *error = nil;
-        if ([engine switchVersion:hash error:&error]) {
+        if ([RCTPushyInstaller switchVersion:hash error:&error]) {
             return nil;
         }
         Expect([error.domain isEqualToString:@(pushy::error_codes::kSwitchVersionFailed)],
