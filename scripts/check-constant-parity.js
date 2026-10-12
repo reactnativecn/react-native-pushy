@@ -152,7 +152,7 @@ const pairs = [
     mirror: `${javaDir}/InstallRecord.java`,
     parse: parseJavaConstants,
     mirrorName: screamingSnake,
-    only: installRecordMirrored,
+    only: ['StagingSuffix'],
   },
   {
     header: 'cpp/patch_core/error_codes.h',

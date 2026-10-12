@@ -64,6 +64,19 @@ const std::vector<NativeClass>& NativeClasses() {
        {"3418e6dcaf87615f271c13f7d0ba9778582610e8f1d5", "723bfed0b88a274923311bb6e5a7826444205fa8d2d1b98373002008e8c4ef8e8e655d3f09b0",
         reinterpret_cast<void*>(&pushy::jni_natives::FlowNormalizeConfiguration)},
    }},
+  {"3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c89b38963553d02d9cda68d8d78",  // InstallRecord
+   {
+       {"3304d7dea39b6440363a", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43bce8",
+        reinterpret_cast<void*>(&pushy::jni_natives::InstallRecordIsComplete)},
+       {"391ff1d2a5aa6b512b291deddfbc9e", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43cf9b83866850224f11fbd9b3de5d5f3a0cecf887",
+        reinterpret_cast<void*>(&pushy::jni_natives::InstallRecordCheckActivation)},
+       {"2912f5dd9d9f69422b311b", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43d9d8ae9a68092f0113fd9887857c422602b9d3d6b880721f210be9c3ee8d8f6a5c3c08b7808a89616b5b7818f0c0acc756564d3517f188",
+        reinterpret_cast<void*>(&pushy::jni_natives::InstallRecordSeal)},
+       {"2a05fbdca19f6d76363e1bf0d8b4", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655a2e4af83897d163a12fecae5b4705357351fae",
+        reinterpret_cast<void*>(&pushy::jni_natives::InstallRecordPromote)},
+       {"3802fad5a28e5b4d236d49aff9b5", "723bfed0b88a274923311bb6e5a7826444205fa8d2d1b98373002008e8c4ef8e8e655d3f09b0",
+        reinterpret_cast<void*>(&pushy::jni_natives::InstallRecordBundleSha256)},
+   }},
   };
   return classes;
 }

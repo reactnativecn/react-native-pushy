@@ -1,25 +1,20 @@
 package cn.reactnative.modules.update;
 
-import android.os.Build;
-import android.util.Log;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 /**
- * Java mirror of cpp/patch_core/install_record.h — keep in sync by hand.
  * The completion record written as the last step of a two-phase install and
- * read back before a version directory is trusted.
+ * read back before a version directory is trusted. The logic is the shared
+ * core's (cpp/patch_core/install_record.h, over JNI); only the paths are
+ * built here. Every call does file IO and checkActivation hashes the whole
+ * bundle: callers run on worker threads (download tasks, the state serial
+ * thread, the sync coordinator), except the launch-time reads of
+ * isInstalled / recordedBundleSha256, which only stat and read the record.
  */
 final class InstallRecord {
-    static final int SCHEMA = 1;
-    static final String FILE_NAME = ".pushy-complete";
+    // Mirrors install_record.h kStagingSuffix (scripts/check-constant-parity.js).
     static final String STAGING_SUFFIX = ".staging";
-    // A record is a few hundred bytes; anything larger is not one.
-    private static final long MAX_RECORD_BYTES = 64 * 1024;
     /** The JS bundle inside a version directory. */
     static final String BUNDLE_FILE_NAME = "index.bundlejs";
 
@@ -35,137 +30,72 @@ final class InstallRecord {
     }
 
     /**
-     * bundleSha256 is mandatory for schema 1: a version whose bundle could
-     * not be hashed must fail its install, never be recorded unverifiable.
-     */
-    static String build(String versionHash, String bundleSha256, String artifactSha256)
-        throws IOException, JSONException {
-        if (bundleSha256 == null || bundleSha256.isEmpty()) {
-            throw new IOException("Bundle version " + versionHash + " has no bundle digest.");
-        }
-        JSONObject record = new JSONObject();
-        record.put("schema", SCHEMA);
-        record.put("versionHash", versionHash);
-        record.put("bundleSha256", bundleSha256);
-        if (artifactSha256 != null && !artifactSha256.isEmpty()) {
-            record.put("artifactSha256", artifactSha256);
-        }
-        return record.toString();
-    }
-
-    /**
-     * Writes the record and fsyncs it, then the directory holding it: the
-     * rename that follows must find the record on disk, and the new
-     * directory entry is only durable once the directory itself is synced.
-     */
-    static void write(File versionDir, String recordJson) throws IOException {
-        File file = new File(versionDir, FILE_NAME);
-        try (FileOutputStream out = new FileOutputStream(file)) {
-            out.write(recordJson.getBytes(StandardCharsets.UTF_8));
-            out.flush();
-            out.getFD().sync();
-        }
-        syncDirectory(versionDir);
-    }
-
-    // java.nio.file (the only way to open a directory for fsync from Java)
-    // is API 26+ on Android; below that the file fsync above is all there
-    // is. Best-effort by design: a file system that refuses to open a
-    // directory for reading must not fail the install. Also called by the
-    // installer on the versions root after the staging -> version rename:
-    // that rename changes the parent's entries, which only the parent's own
-    // sync makes durable.
-    static void syncDirectory(File dir) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            return;
-        }
-        try (java.nio.channels.FileChannel channel = java.nio.channels.FileChannel.open(
-                dir.toPath(), java.nio.file.StandardOpenOption.READ)) {
-            channel.force(true);
-        } catch (Throwable e) {
-            Log.w(Texts.LOG_TAG, "Directory fsync skipped for " + dir + ": " + e);
-        }
-    }
-
-    /**
-     * Parsed record, or null when the file is absent or malformed. An empty
-     * file (legacy marker) yields an empty JSONObject.
-     */
-    static JSONObject read(File versionDir) {
-        File file = new File(versionDir, FILE_NAME);
-        if (!file.isFile()) {
-            return null;
-        }
-        if (file.length() == 0) {
-            return new JSONObject();
-        }
-        try {
-            return new JSONObject(UpdateFileUtils.readSmallUtf8(file, MAX_RECORD_BYTES));
-        } catch (IOException | JSONException e) {
-            return null;
-        }
-    }
-
-    /**
-     * Presence check: the record exists and, unless legacy-empty, names this
-     * version. No digest work — this runs on launch / dedup paths.
-     */
-    static boolean isComplete(File versionDir, String versionHash) {
-        JSONObject record = read(versionDir);
-        return record != null && (record.length() == 0 || names(record, versionHash));
-    }
-
-    /** A schema-1 record for this version (the legacy empty marker has no fields). */
-    private static boolean names(JSONObject record, String versionHash) {
-        return record.optInt("schema", 0) == SCHEMA
-            && versionHash.equals(record.optString("versionHash", ""));
-    }
-
-    /**
      * Launch / dedup presence check: the bundle exists and the record names
-     * this version. No digest work.
+     * this version (or is the legacy empty marker). No digest work.
      */
     static boolean isInstalled(File versionDir, String versionHash) {
-        return bundleFile(versionDir).isFile() && isComplete(versionDir, versionHash);
+        return isComplete(versionDir.getPath(), versionHash, BUNDLE_FILE_NAME);
     }
 
     /**
-     * Activation check of an installed version: the bundle exists and its
-     * bytes match the record's digest. Throws with the reason otherwise.
+     * Activation check: the bundle exists and its bytes match the record's
+     * mandatory digest (the legacy empty marker has none). A directory
+     * without a record passes only when {@code grandfathered} (it is the
+     * persisted current or last version). Throws with the reason otherwise.
      */
-    static void verifyInstalled(File versionDir, String versionHash) throws IOException {
-        File bundle = bundleFile(versionDir);
-        if (!bundle.isFile()) {
-            throw new IOException("Bundle version " + versionHash + " not found.");
-        }
-        verifyForActivation(versionDir, versionHash, bundle);
-    }
-
-    /**
-     * Activation check: re-hashes the bundle against the record's digest,
-     * which schema 1 makes mandatory (only the legacy empty marker has none).
-     * Throws with the reason when the directory must not be activated.
-     */
-    static void verifyForActivation(File versionDir, String versionHash, File bundleFile)
+    static void verifyInstalled(File versionDir, String versionHash, boolean grandfathered)
         throws IOException {
-        JSONObject record = read(versionDir);
-        if (record == null) {
-            throw new IOException("Bundle version " + versionHash + " has no valid completion record.");
-        }
-        if (record.length() == 0) {
-            return;
-        }
-        if (!names(record, versionHash)) {
-            throw new IOException("Bundle version " + versionHash + " completion record mismatch.");
-        }
-        Object digest = record.opt("bundleSha256");
-        String expected = digest instanceof String ? (String) digest : "";
-        if (expected.isEmpty()) {
-            throw new IOException("Bundle version " + versionHash + " completion record mismatch.");
-        }
-        String actual = UpdateFileUtils.sha256Hex(bundleFile);
-        if (!expected.equalsIgnoreCase(actual)) {
-            throw new IOException("Bundle version " + versionHash + " bundle digest mismatch.");
+        String reason = checkActivation(
+            versionDir.getPath(), versionHash, BUNDLE_FILE_NAME, grandfathered);
+        if (reason != null) {
+            throw new IOException(reason);
         }
     }
+
+    /**
+     * Writes the record (with the staged bundle's digest: knownBundleSha256
+     * when the bundle was hashed while extracted, else hashed now) into the
+     * staging directory, atomically and durably.
+     */
+    static void seal(
+        File stagingDir, String versionHash, String artifactSha256, String knownBundleSha256
+    ) throws IOException {
+        String reason = sealStaging(stagingDir.getPath(), versionHash, BUNDLE_FILE_NAME,
+            artifactSha256, knownBundleSha256);
+        if (reason != null) {
+            throw new IOException(reason);
+        }
+    }
+
+    /** Renames the sealed staging directory to the (absent) version directory. */
+    static void promote(File stagingDir, File versionDir) throws IOException {
+        String reason = promoteStaging(stagingDir.getPath(), versionDir.getPath());
+        if (reason != null) {
+            throw new IOException(reason);
+        }
+    }
+
+    /** The record's bundleSha256 (crash attribution); "" when there is none. */
+    static String recordedBundleSha256(File versionDir) {
+        String digest = bundleSha256Of(versionDir.getPath());
+        return digest == null ? "" : digest;
+    }
+
+    private static native boolean isComplete(
+        String versionDir, String versionHash, String bundleFileName);
+
+    // These return null on success, the reason otherwise.
+    private static native String checkActivation(
+        String versionDir, String versionHash, String bundleFileName, boolean grandfathered);
+
+    private static native String sealStaging(
+        String stagingDir,
+        String versionHash,
+        String bundleFileName,
+        String artifactSha256,
+        String knownBundleSha256);
+
+    private static native String promoteStaging(String stagingDir, String versionDir);
+
+    private static native String bundleSha256Of(String versionDir);
 }

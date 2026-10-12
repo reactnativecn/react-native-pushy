@@ -8,7 +8,6 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import com.facebook.react.ReactInstanceManager;
 import java.io.File;
-import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.Executor;
@@ -485,24 +484,16 @@ public class UpdateContext {
         if (!UpdateFileUtils.isSafePathComponent(hash)) {
             throw new IllegalArgumentException("Invalid hash: " + hash);
         }
-        File versionDir = new File(rootDir, hash);
-        if (!InstallRecord.bundleFile(versionDir).isFile()) {
-            throw new IllegalStateException("Bundle version " + hash + " not found.");
-        }
         StateCoreResult currentState = getStateSnapshot();
-        boolean isLegacyActivatedVersion = hash.equals(currentState.currentVersion)
+        // Versions activated before completion records existed are
+        // grandfathered through current/last state, but only while their
+        // directory has no record; any other directory must carry a record
+        // whose bundle digest matches the bytes on disk before the next
+        // launch is pointed at them.
+        boolean grandfathered = hash.equals(currentState.currentVersion)
             || hash.equals(currentState.lastVersion);
-        if (isLegacyActivatedVersion && !new File(versionDir, InstallRecord.FILE_NAME).exists()) {
-            // Versions activated before completion markers were introduced are
-            // explicitly grandfathered through current/last state. A directory
-            // that does carry a record is verified like any other.
-            return;
-        }
-        // An arbitrary markerless directory may be a crash-left partial
-        // install, and the record's bundle digest must match the bytes on
-        // disk before the next launch is pointed at them.
         try {
-            InstallRecord.verifyInstalled(versionDir, hash);
+            InstallRecord.verifyInstalled(new File(rootDir, hash), hash, grandfathered);
         } catch (IOException e) {
             throw new IllegalStateException(e.getMessage(), e);
         }
@@ -904,8 +895,7 @@ public class UpdateContext {
         if (hash == null || hash.isEmpty() || !UpdateFileUtils.isSafePathComponent(hash)) {
             return "";
         }
-        JSONObject record = InstallRecord.read(new File(rootDir, hash));
-        return record == null ? "" : record.optString("bundleSha256", "");
+        return InstallRecord.recordedBundleSha256(new File(rootDir, hash));
     }
 
     /** Raw native check response for JS (§10.3); null when absent. */

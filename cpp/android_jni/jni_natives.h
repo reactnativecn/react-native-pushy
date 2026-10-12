@@ -27,6 +27,11 @@ jstring FlowHandleResponse(JNIEnv* env, jclass, jstring responseText, jstring id
 jboolean FlowConfigsEquivalent(JNIEnv* env, jclass, jstring a, jstring b);
 jstring FlowRunnableConfig(JNIEnv* env, jclass, jstring configJson);
 jstring FlowNormalizeConfiguration(JNIEnv* env, jclass, jstring optionsJson);
+jboolean InstallRecordIsComplete(JNIEnv* env, jclass, jstring version_dir, jstring version_hash, jstring bundle_file_name);
+jstring InstallRecordCheckActivation(JNIEnv* env, jclass, jstring version_dir, jstring version_hash, jstring bundle_file_name, jboolean grandfathered);
+jstring InstallRecordSeal(JNIEnv* env, jclass, jstring staging_dir, jstring version_hash, jstring bundle_file_name, jstring artifact_sha256, jstring known_bundle_sha256);
+jstring InstallRecordPromote(JNIEnv* env, jclass, jstring staging_dir, jstring version_dir);
+jstring InstallRecordBundleSha256(JNIEnv* env, jclass, jstring version_dir);
 
 }  // namespace jni_natives
 }  // namespace pushy

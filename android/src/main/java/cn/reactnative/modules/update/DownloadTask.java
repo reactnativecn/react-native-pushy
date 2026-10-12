@@ -24,7 +24,6 @@ import okhttp3.ResponseBody;
 import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.Okio;
-import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
@@ -501,7 +500,7 @@ class DownloadTask implements Runnable {
      * final bundle's digest) goes into the staging directory, which is then
      * renamed over the version directory in one atomic step.
      */
-    private void promoteStaging() throws IOException, JSONException {
+    private void promoteStaging() throws IOException {
         File work = stagingDirectory();
         if (targetsRunningVersion()) {
             // The process switched to this very version while the task ran
@@ -511,26 +510,11 @@ class DownloadTask implements Runnable {
             UpdateFileUtils.removeDirectory(work);
             return;
         }
-        File bundle = InstallRecord.bundleFile(work);
-        if (!bundle.isFile()) {
-            throw new IOException("bundle missing after install: " + bundle);
-        }
-        String bundleSha256 = stagedBundleSha256 != null
-            ? stagedBundleSha256 : UpdateFileUtils.sha256Hex(bundle);
-        InstallRecord.write(
-            work, InstallRecord.build(params.hash, bundleSha256, artifactSha256));
+        InstallRecord.seal(work, params.hash, artifactSha256, stagedBundleSha256);
         if (params.unzipDirectory.exists()) {
             UpdateFileUtils.removeDirectory(params.unzipDirectory);
         }
-        if (!work.renameTo(params.unzipDirectory)) {
-            throw new IOException("failed to promote staging directory to " + params.unzipDirectory);
-        }
-        // The rename rewrote the versions root's entries; the record's own
-        // directory was synced by InstallRecord.write, the root was not.
-        File versionsRoot = params.unzipDirectory.getParentFile();
-        if (versionsRoot != null) {
-            InstallRecord.syncDirectory(versionsRoot);
-        }
+        InstallRecord.promote(work, params.unzipDirectory);
     }
 
     /**
@@ -691,7 +675,7 @@ class DownloadTask implements Runnable {
      */
     private void ensureNotReinstallingRunningVersion() throws IOException {
         try {
-            InstallRecord.verifyInstalled(params.unzipDirectory, params.hash);
+            InstallRecord.verifyInstalled(params.unzipDirectory, params.hash, false);
         } catch (IOException e) {
             throw new FileOperationException("Running version " + params.hash
                 + " cannot be reinstalled in place: " + e.getMessage());
