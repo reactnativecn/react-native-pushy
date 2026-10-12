@@ -742,6 +742,38 @@ describe('error pipeline (onError + stable codes, EH-1/EH-2/EH-3)', () => {
     expect(sharedState.applyingUpdate).toBe(false);
   });
 
+  test('an onError listener retrying switchVersion after a beforeReload throw is not ignored', async () => {
+    const reloadUpdate = mock(() => Promise.resolve());
+    setupClientMocks({ reloadUpdate });
+    const { Pushy, sharedState } = await importFreshClient();
+    sharedState.downloadedHash = 'next-hash';
+    let hookCalls = 0;
+    const client = new Pushy({
+      appKey: 'demo-app',
+      beforeReload: () => {
+        hookCalls += 1;
+        if (hookCalls === 1) {
+          throw new Error('hook exploded');
+        }
+        return true;
+      },
+    });
+    let retry: Promise<boolean> | undefined;
+    client.onError(() => {
+      // Synchronous retry: applyingUpdate must already be released.
+      retry ??= client.switchVersion('next-hash');
+    });
+
+    await expect(client.switchVersion('next-hash')).rejects.toThrow(
+      'hook exploded'
+    );
+
+    expect(retry).toBeDefined();
+    expect(await retry).toBe(true);
+    expect(hookCalls).toBe(2);
+    expect(reloadUpdate).toHaveBeenCalledTimes(1);
+  });
+
   test('concurrent checkUpdate reusing a failing in-flight check keeps its contracts (JS2-1)', async () => {
     setupClientMocks();
     (globalThis as any).fetch = mock(async () => {

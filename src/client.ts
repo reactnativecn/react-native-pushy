@@ -860,22 +860,7 @@ export class Pushy {
     if (!beforeReload) {
       return true;
     }
-    let shouldReload: boolean | undefined;
-    try {
-      shouldReload = await beforeReload(context);
-    } catch (e) {
-      // A throw from the user's beforeReload hook is business-code failure,
-      // not an update-pipeline one: give it a distinct code so telemetry
-      // excludes it from the server-side patch-health stats.
-      throw this.fail(
-        e,
-        'USER_HOOK_ERROR',
-        context.type === 'switchVersion'
-          ? 'errorSwitchVersion'
-          : 'errorRestart',
-        context.hash ? { data: { newVersion: context.hash } } : {}
-      );
-    }
+    const shouldReload = await beforeReload(context);
     if (shouldReload === false) {
       log('beforeReload returned false, skipping reload');
       return false;
@@ -1095,19 +1080,20 @@ export class Pushy {
     }
     log(`switchVersion: ${hash}`);
     const applyingGeneration = beginApplyingUpdate();
-    let shouldReload = false;
     try {
-      shouldReload = await this.runBeforeReload({
-        type: 'switchVersion',
-        hash,
-      });
-    } finally {
-      if (!shouldReload) {
+      if (!(await this.runBeforeReload({ type: 'switchVersion', hash }))) {
         finishApplyingUpdate(applyingGeneration);
+        return false;
       }
-    }
-    if (!shouldReload) {
-      return false;
+    } catch (e) {
+      // Release before emitting: an onError listener may retry right away.
+      finishApplyingUpdate(applyingGeneration);
+      // A throw from the user's beforeReload hook is business-code failure,
+      // not an update-pipeline one: give it a distinct code so telemetry
+      // excludes it from the server-side patch-health stats.
+      throw this.fail(e, 'USER_HOOK_ERROR', 'errorSwitchVersion', {
+        data: { newVersion: hash },
+      });
     }
     // resetToPackagedBundle may have completed while beforeReload awaited.
     if (!ownsApplyingUpdate(applyingGeneration)) {
@@ -1679,8 +1665,12 @@ export class Pushy {
     }
   };
   restartApp = async () => {
-    if (!(await this.runBeforeReload({ type: 'restartApp' }))) {
-      return;
+    try {
+      if (!(await this.runBeforeReload({ type: 'restartApp' }))) {
+        return;
+      }
+    } catch (e) {
+      throw this.fail(e, 'USER_HOOK_ERROR', 'errorRestart');
     }
     try {
       return await PushyModule.restartApp();
