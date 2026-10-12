@@ -1194,7 +1194,6 @@ export class Pushy {
       appKey: this.options.appKey,
       endpoints: this.options.server?.main,
       queryUrls: this.options.server?.queryUrls,
-      // The client uuid travels inside cInfo, i.e. inside `body`.
       body: stringifyBody,
     });
     const now = Date.now();

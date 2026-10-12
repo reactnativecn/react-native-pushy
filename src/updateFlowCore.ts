@@ -334,8 +334,10 @@ export interface CheckFingerprintInput {
   appKey?: string;
   endpoints?: string[];
   queryUrls?: string[];
-  uuid?: string;
-  /** The exact serialized request body (identity fields + extra). */
+  /**
+   * The exact serialized request body (identity fields + extra; the client
+   * uuid travels inside its cInfo).
+   */
   body: string;
 }
 
@@ -347,16 +349,9 @@ export function buildCheckFingerprint({
   appKey,
   endpoints,
   queryUrls,
-  uuid,
   body,
 }: CheckFingerprintInput): string {
-  return JSON.stringify([
-    appKey ?? '',
-    endpoints ?? [],
-    queryUrls ?? [],
-    uuid ?? '',
-    body,
-  ]);
+  return JSON.stringify([appKey ?? '', endpoints ?? [], queryUrls ?? [], body]);
 }
 
 /**
