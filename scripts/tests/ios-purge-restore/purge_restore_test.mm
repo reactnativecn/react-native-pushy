@@ -512,29 +512,28 @@ static void DefaultsIsolation(void) {
 
 // Canonical config equality shared with JS/Android/Harmony: equal canonical
 // forms are the same config (persistConfiguration no-op, hasJsRound match).
+// Replays the cross-platform vectors every implementation consumes; the file
+// is located from this source file (<repo>/scripts/tests/ios-purge-restore/).
 static void ConfigEquivalence(void) {
-    struct Pair { NSString *a, *b; bool equivalent; const char *why; };
-    const Pair pairs[] = {
-        {@"{\"appKey\":\"k\",\"endpoints\":[\"https://a/\",\"https://a\"]}",
-         @"{\"endpoints\":[\"https://a\"],\"appKey\":\"k\",\"disabled\":false,\"queryUrls\":[],"
-         @"\"rnu\":\"\",\"rn\":\"\",\"afterDownload\":\"none\"}",
-         true, "defaults, key order, trailing slash and duplicates are not changes"},
-        {@"{\"appKey\":\"k\",\"queryUrls\":[\"https://q//\"]}",
-         @"{\"appKey\":\"k\",\"queryUrls\":[\"https://q\",\"https://q/\"]}",
-         true, "every trailing slash is stripped before deduplication"},
-        {@"{\"appKey\":\"k\"}", @"{\"appKey\":\"j\"}", false, "a different appKey is a change"},
-        {@"{\"appKey\":\"k\",\"disabled\":0}", @"{\"appKey\":\"k\"}", false, "0 is not false"},
-        {@"{\"appKey\":\"k\",\"endpoints\":[\"https://a\",\"https://b\"]}",
-         @"{\"appKey\":\"k\",\"endpoints\":[\"https://b\",\"https://a\"]}",
-         false, "endpoint order is significant"},
-        {@"[1]", @"[1]", false, "a non-object is never equivalent"},
-        {@"{", @"{", false, "unparseable text is never equivalent, even to itself"},
-    };
-    for (const auto &pair : pairs) {
-        Expect(PushyConfigsEquivalent(pair.a, pair.b) == pair.equivalent, pair.why);
-        Expect(PushyConfigsEquivalent(pair.b, pair.a) == pair.equivalent, "equivalence is symmetric");
+    NSString *repo = [[[[@__FILE__ stringByDeletingLastPathComponent]
+        stringByDeletingLastPathComponent] stringByDeletingLastPathComponent]
+        stringByDeletingLastPathComponent];
+    NSString *path = [repo stringByAppendingPathComponent:
+        @"cpp/update_flow_core/tests/config-equivalence-vectors.json"];
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    Expect(data != nil, "config-equivalence-vectors.json is readable");
+    NSDictionary *file = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    NSArray *cases = [file isKindOfClass:NSDictionary.class] ? file[@"cases"] : nil;
+    Expect([cases isKindOfClass:NSArray.class] && cases.count >= 30, "vector file has cases");
+    for (NSDictionary *vector in cases) {
+        NSString *a = vector[@"a"], *b = vector[@"b"];
+        bool equivalent = [vector[@"equivalent"] boolValue];
+        std::string why = std::string("vector \"") + [vector[@"name"] UTF8String] + "\"";
+        Expect(PushyConfigsEquivalent(a, b) == equivalent, why.c_str());
+        Expect(PushyConfigsEquivalent(b, a) == equivalent, (why + " (reversed)").c_str());
     }
     Expect(!PushyConfigsEquivalent(nil, @"{\"appKey\":\"k\"}"), "no stored config is a change");
+    std::printf("[PASS] config_equivalence: %lu shared vectors\n", (unsigned long)cases.count);
 }
 
 int main(int argc, char **argv) {
@@ -557,7 +556,6 @@ int main(int argc, char **argv) {
         std::printf("[PASS] defaults_isolation\n");
         testName = "config_equivalence";
         ConfigEquivalence();
-        std::printf("[PASS] config_equivalence\n");
         struct Case { const char *name; void (*run)(); };
         const Case cases[] = {
             {"late_commit", LateCommit},

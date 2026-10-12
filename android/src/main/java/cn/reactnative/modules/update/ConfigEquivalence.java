@@ -48,7 +48,13 @@ final class ConfigEquivalence {
         }
         Object parsed;
         try {
-            parsed = new JSONTokener(json).nextValue();
+            JSONTokener tokener = new JSONTokener(json);
+            parsed = tokener.nextValue();
+            // nextValue() stops after the first value; anything but trailing
+            // whitespace after it is not JSON (as JSON.parse/NSJSONSerialization).
+            if (tokener.nextClean() != 0) {
+                return null;
+            }
         } catch (JSONException e) {
             return null;
         }
