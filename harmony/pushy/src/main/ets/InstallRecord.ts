@@ -1,7 +1,11 @@
 import fileIo from '@ohos.file.fs';
 import { util } from '@kit.ArkTS';
 import NativePatchCore from './NativePatchCore';
-import { ERROR_SWITCH_VERSION_FAILED, createPushyError } from './ErrorCodes';
+import {
+  ERROR_DELTA_FAILED,
+  ERROR_SWITCH_VERSION_FAILED,
+  createPushyError,
+} from './ErrorCodes';
 
 // ArkTS mirror of cpp/patch_core/install_record.h — keep in sync by hand
 // (harmony/pushy/src/test/check-constant-parity.js asserts the values match).
@@ -36,13 +40,19 @@ export function buildInstallRecord(
   bundleSha256: string,
   artifactSha256: string,
 ): string {
+  // schema 1 的 bundleSha256 是必填:算不出摘要的版本必须安装失败,绝不能
+  // 写成一条无法复核的记录。
+  if (!bundleSha256) {
+    throw createPushyError(
+      ERROR_DELTA_FAILED,
+      `Bundle version ${versionHash} has no bundle digest.`,
+    );
+  }
   const record: InstallRecordData = {
     schema: INSTALL_RECORD_SCHEMA,
     versionHash,
+    bundleSha256,
   };
-  if (bundleSha256) {
-    record.bundleSha256 = bundleSha256;
-  }
   if (artifactSha256) {
     record.artifactSha256 = artifactSha256;
   }
@@ -133,8 +143,9 @@ export function isInstallComplete(versionDir: string, versionHash: string): bool
 }
 
 /**
- * 激活前的记录校验(不含摘要):返回需要复核的 bundle 摘要,历史空记录或
- * 无摘要记录返回空串;记录缺失/不符抛 SWITCH_VERSION_FAILED。纯函数。
+ * 激活前的记录校验(不含摘要):返回需要复核的 bundle 摘要,仅历史空记录
+ * 返回空串;记录缺失/不符或缺摘要(schema 1 必填)抛 SWITCH_VERSION_FAILED。
+ * 纯函数。
  */
 export function expectedBundleSha256ForActivation(
   record: InstallRecordData | null,
@@ -158,11 +169,18 @@ export function expectedBundleSha256ForActivation(
       `Bundle version ${versionHash} completion record mismatch.`,
     );
   }
-  return record.bundleSha256 ?? '';
+  const expected = record.bundleSha256;
+  if (typeof expected !== 'string' || expected.length === 0) {
+    throw createPushyError(
+      ERROR_SWITCH_VERSION_FAILED,
+      `Bundle version ${versionHash} completion record mismatch.`,
+    );
+  }
+  return expected;
 }
 
 /**
- * 激活前校验:记录带摘要时在 native 工作线程重新计算 bundle 摘要(整包
+ * 激活前校验:非历史空记录时在 native 工作线程重新计算 bundle 摘要(整包
  * 几十 MB,不能在 UI 线程同步算);不通过则抛错说明原因。
  */
 export async function verifyInstallForActivation(

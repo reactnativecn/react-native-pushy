@@ -1,6 +1,7 @@
 import preferences from '@ohos.data.preferences';
 import fileIo from '@ohos.file.fs';
 import {
+  INSTALL_RECORD_FILE_NAME,
   isInstallComplete,
   readInstallRecord,
   verifyInstallForActivation,
@@ -842,9 +843,10 @@ export class UpdateContext {
 
   /**
    * 激活前置校验(同步,不写任何东西):bundle 在盘上,且要么是本 SDK 记录为
-   * 完整安装的版本(bundle + 记录),要么是标记机制之前就激活过的历史版本
-   * (current/last 里有它)。其他无记录的目录可能是崩溃留下的半成品。
-   * 返回是否还需复核安装记录里的 bundle 摘要(历史版本无记录可核)。
+   * 完整安装的版本(bundle + 记录),要么是标记机制之前就激活过、目录里没有
+   * 记录文件的历史版本(current/last 里有它)。其他无记录的目录可能是崩溃
+   * 留下的半成品;有记录文件的目录即便是 current/last 也照常复核。
+   * 返回是否还需复核安装记录(无记录的历史版本无可核)。
    */
   private assertActivatable(safeHash: string): boolean {
     if (!fileIo.accessSync(this.getBundlePath(safeHash))) {
@@ -854,8 +856,9 @@ export class UpdateContext {
       );
     }
     const legacyActivated =
-      this.readString('currentVersion') === safeHash ||
-      this.readString('lastVersion') === safeHash;
+      !fileIo.accessSync(`${this.rootDir}/${safeHash}/${INSTALL_RECORD_FILE_NAME}`) &&
+      (this.readString('currentVersion') === safeHash ||
+        this.readString('lastVersion') === safeHash);
     if (!this.hasDownloadedVersion(safeHash) && !legacyActivated) {
       throw createPushyError(
         ERROR_SWITCH_VERSION_FAILED,

@@ -14,7 +14,11 @@
 // - versionHash must equal the directory name; bundleSha256 is the digest of
 //   the final index.bundlejs (bundle.harmony.js on Harmony) and is
 //   re-verified at switchVersion time; artifactSha256 is the digest of the
-//   downloaded archive (diagnostics / CDN corruption attribution).
+//   downloaded archive (diagnostics / CDN corruption attribution, optional).
+// - bundleSha256 is MANDATORY for schema 1. A writer whose bundle digest is
+//   empty or fails must fail the install (staging dropped, no record); a
+//   verifier must reject a non-empty record without one (record mismatch),
+//   never activate the version unverified.
 // - Legacy: an EMPTY file is a completed install written by SDK < 10.53
 //   (no digests); it stays trusted for presence, nothing to verify.
 //

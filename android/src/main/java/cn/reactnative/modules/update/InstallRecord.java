@@ -27,14 +27,19 @@ final class InstallRecord {
         return new File(versionDir.getPath() + STAGING_SUFFIX);
     }
 
+    /**
+     * bundleSha256 is mandatory for schema 1: a version whose bundle could
+     * not be hashed must fail its install, never be recorded unverifiable.
+     */
     static String build(String versionHash, String bundleSha256, String artifactSha256)
-        throws JSONException {
+        throws IOException, JSONException {
+        if (bundleSha256 == null || bundleSha256.isEmpty()) {
+            throw new IOException("Bundle version " + versionHash + " has no bundle digest.");
+        }
         JSONObject record = new JSONObject();
         record.put("schema", SCHEMA);
         record.put("versionHash", versionHash);
-        if (bundleSha256 != null && !bundleSha256.isEmpty()) {
-            record.put("bundleSha256", bundleSha256);
-        }
+        record.put("bundleSha256", bundleSha256);
         if (artifactSha256 != null && !artifactSha256.isEmpty()) {
             record.put("artifactSha256", artifactSha256);
         }
@@ -123,7 +128,8 @@ final class InstallRecord {
     }
 
     /**
-     * Activation check: re-hashes the bundle when the record carries a digest.
+     * Activation check: re-hashes the bundle against the record's digest,
+     * which schema 1 makes mandatory (only the legacy empty marker has none).
      * Throws with the reason when the directory must not be activated.
      */
     static void verifyForActivation(File versionDir, String versionHash, File bundleFile)
@@ -139,9 +145,10 @@ final class InstallRecord {
             || !versionHash.equals(record.optString("versionHash", ""))) {
             throw new IOException("Bundle version " + versionHash + " completion record mismatch.");
         }
-        String expected = record.optString("bundleSha256", "");
+        Object digest = record.opt("bundleSha256");
+        String expected = digest instanceof String ? (String) digest : "";
         if (expected.isEmpty()) {
-            return;
+            throw new IOException("Bundle version " + versionHash + " completion record mismatch.");
         }
         String actual = UpdateFileUtils.sha256Hex(bundleFile);
         if (!expected.equalsIgnoreCase(actual)) {

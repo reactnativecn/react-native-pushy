@@ -1,6 +1,7 @@
 import unittest
 
-from extract import declaration, exported_method, function, mask_literals, method, mutate
+from extract import (declaration, exported_method, function, instance_method, mask_literals,
+                     method, mutate, struct)
 
 
 class ExtractionTests(unittest.TestCase):
@@ -23,12 +24,21 @@ class ExtractionTests(unittest.TestCase):
         source = '+ (BOOL)restore:(id)value;\n+ (BOOL)restore:(id)value { return YES; }'
         self.assertEqual(method(source, 'restore'), (2, source.splitlines()[1]))
 
+    def test_objc_instance_method_is_not_a_class_method(self):
+        source = '+ (BOOL)switchVersion:(id)h { return NO; }\n- (BOOL)switchVersion:(id)h { return YES; }'
+        self.assertEqual(instance_method(source, 'switchVersion'), (2, source.splitlines()[1]))
+
     def test_objc_no_argument_method(self):
         self.assertEqual(method('+ (id)bundleURL\n{ return nil; }', 'bundleURL')[0], 1)
 
     def test_exported_reset_method(self):
         source = 'RCT_EXPORT_METHOD(reset:(id)resolve\n rejecter:(id)reject)\n{ ^{ @"}"; }; }'
         self.assertEqual(exported_method(source, 'reset')[1], source)
+
+    def test_struct_definition_keeps_its_terminator(self):
+        source = 'struct Stamp;\nstruct Stamp {\n  bool ok() const { return true; }\n};'
+        self.assertEqual(struct(source, 'Stamp'),
+                         (2, 'struct Stamp {\n  bool ok() const { return true; }\n};'))
 
     def test_static_initializers_and_string_contents(self):
         self.assertEqual(declaration('static std::atomic<bool> active{false};', 'active')[1],
@@ -47,6 +57,10 @@ class ExtractionTests(unittest.TestCase):
     def test_mutations_fail_on_source_drift(self):
         self.assertEqual(mutate('activation = nil;', 'late-activation'), '(void)activation;')
         self.assertEqual(mutate('return YES;', 'skip-reresolve'), 'return !timedOut;')
+        self.assertEqual(
+            mutate('expected.length == 0) {\n  return [NSString stringWithFormat:@"%@ record mismatch.", h];',
+                   'trust-digestless'),
+            'expected.length == 0) {\n  return nil;')
         for source in ('', 'activation = nil; activation = nil;'):
             with self.assertRaises(ValueError):
                 mutate(source, 'late-activation')
