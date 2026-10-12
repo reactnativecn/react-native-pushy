@@ -4,61 +4,35 @@ import {
   ERROR_FILE_OPERATION_FAILED,
   ERROR_DELTA_FAILED,
   createPushyError,
+  getErrorMessage,
 } from './ErrorCodes';
-import { isReservedEntryName } from './InstallRecord';
+import NativePatchCore from './NativePatchCore';
 
-// ArkTS mirror of cpp/patch_core/archive_limits.h — keep in sync by hand
-// (scripts/check-constant-parity.js asserts the values match).
-// 损坏或恶意更新包的伤害上限:最多耗费有限的磁盘/内存/时间,绝不撑爆磁盘。
+// 解压资源上限的计数规则(条目数、单条/总解压量、压缩比、保留名、符号链接、
+// 未知长度下载的磁盘探测计划)只在 cpp/patch_core/archive_limits.h 里实现,
+// 三端共用(这里经 NAPI)。下面只镜像本端仍需自己比较的常量,
+// scripts/check-constant-parity.js 断言与头文件一致。
 export const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
-export const MAX_TOTAL_UNCOMPRESSED_BYTES = 2048 * 1024 * 1024;
-export const MAX_ENTRY_BYTES = 512 * 1024 * 1024;
-export const MAX_ENTRIES = 20000;
-export const MAX_COMPRESSION_RATIO = 100;
-export const RATIO_CHECK_MIN_BYTES = 1 * 1024 * 1024;
 export const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 export const FREE_DISK_MARGIN_BYTES = 64 * 1024 * 1024;
-export const UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES = 8 * 1024 * 1024;
 
 /**
- * 解压前的总量校验(zlib.getOriginalSize 给出的归档解压后总字节数)。
- *
- * 与 archive_limits.h 的偏差(有意为之,无法消除):头文件的压缩比上限是
- * **逐条**的(单条解压量 > RATIO_CHECK_MIN_BYTES 时才查),但鸿蒙的
- * @kit.BasicServicesKit zlib 只提供整包解压量(getOriginalSize)与整包
- * 解压(decompressFile),拿不到任何条目的压缩/解压尺寸,也没有逐条钩子。
- * 因此这里只能按整包近似:总解压量超过上限、或(总量大于
- * RATIO_CHECK_MIN_BYTES 时)总压缩比超过 MAX_COMPRESSION_RATIO 即拒绝——
- * 20MB 归档 100:1 的 2GB 载荷在解压前就被挡下,而不是先解出来再量。
- * 两个方向的差异:
- *  - 更松:单条高压缩比条目被同包大量不可压缩数据"稀释"时整包比可能不超限
- *    (其总量仍受 MAX_TOTAL_UNCOMPRESSED_BYTES 与解压后的逐条
- *    MAX_ENTRY_BYTES 约束,伤害有界);
- *  - 更严:大量各自 < RATIO_CHECK_MIN_BYTES 的高压缩比小文件,逐条不查,
- *    但累加后整包比超限会被拒绝(真实更新包不会出现 100:1 的整包比)。
- * 解压后 measureExtractedDirectory 再逐条核对条目数/单条大小/总字节数。
+ * 解压前的整包校验(zlib.getOriginalSize 给出的归档解压后总字节数):总解压
+ * 量上限与整包压缩比(archive_limits::CheckUncompressedSize)。鸿蒙的 zlib
+ * 只提供整包解压量与整包解压,拿不到条目的压缩尺寸,逐条压缩比无从查起;
+ * 20MB 归档 100:1 的 2GB 载荷在解压前就被挡下,解压后 checkExtractedDirectory
+ * 再逐条核对。
  */
 export function checkUncompressedSize(
   archiveBytes: number,
   uncompressedBytes: number,
 ): void {
-  if (uncompressedBytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
-    throw createPushyError(
-      ERROR_DELTA_FAILED,
-      `archive expands beyond ${MAX_TOTAL_UNCOMPRESSED_BYTES} bytes ` +
-        `(${uncompressedBytes})`,
-    );
-  }
-  if (
-    uncompressedBytes > RATIO_CHECK_MIN_BYTES &&
-    archiveBytes > 0 &&
-    uncompressedBytes > archiveBytes * MAX_COMPRESSION_RATIO
-  ) {
-    throw createPushyError(
-      ERROR_DELTA_FAILED,
-      `archive compression ratio exceeds ${MAX_COMPRESSION_RATIO}:1 ` +
-        `(${uncompressedBytes}/${archiveBytes})`,
-    );
+  const reason = NativePatchCore.checkUncompressedSize(
+    archiveBytes,
+    uncompressedBytes,
+  );
+  if (reason !== undefined) {
+    throw createPushyError(ERROR_DELTA_FAILED, reason);
   }
 }
 
@@ -88,35 +62,6 @@ export function checkOriginalSize(
     );
   }
   return size;
-}
-
-export interface FreeSpaceProbePlan {
-  /** 本次写入前是否需要探测可用空间。 */
-  probe: boolean;
-  /** 探测时要求的字节数(不含 FREE_DISK_MARGIN_BYTES)。 */
-  reserve: number;
-  /** 计划后的"已预留到"位置(相对本次响应体起点)。 */
-  reservedUntil: number;
-}
-
-/**
- * 未知长度下载(分块/编码响应体)的磁盘探测计划:响应到达时只能预留安全
- * 余量,所以任何会写过已预留位置的写入之前都要探测,每次至少预留接下来的
- * UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES(单个 chunk 更大时按 chunk 算)——
- * 任何写入都吃不到余量。已知总长时由响应到达时的一次性检查覆盖,不探测。
- * writtenBefore 是本 chunk 之前已收到的字节数(相对本次响应体)。
- */
-export function planUnknownLengthFreeSpaceProbe(
-  knownTotal: number,
-  writtenBefore: number,
-  chunkBytes: number,
-  reservedUntil: number,
-): FreeSpaceProbePlan {
-  const reserve = Math.max(UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES, chunkBytes);
-  if (knownTotal > 0 || writtenBefore + chunkBytes <= reservedUntil) {
-    return { probe: false, reserve, reservedUntil };
-  }
-  return { probe: true, reserve, reservedUntil: writtenBefore + reserve };
 }
 
 /**
@@ -153,55 +98,18 @@ export async function ensureFreeSpace(
   }
 }
 
-export interface DirectoryMeasure {
-  entries: number;
-  bytes: number;
-}
-
 /**
- * 递归统计目录里的条目数与总字节数;两者任一超过上限立即抛错(不必扫完)。
- * 同一趟遍历里拒绝任意深度的 `.pushy-` 保留条目(完成记录只能由 SDK 写)。
+ * 解压后在 native 工作线程逐条核对刚解压的目录(archive_limits::
+ * CheckExtractedDirectory):条目数、单条大小、总字节数与整包压缩比,拒绝
+ * 任意深度的 `.pushy-` 保留条目(完成记录只能由 SDK 写)与符号链接。
  */
-export async function measureExtractedDirectory(
+export async function checkExtractedDirectory(
   directory: string,
-  acc: DirectoryMeasure = { entries: 0, bytes: 0 },
-): Promise<DirectoryMeasure> {
-  const names = (await fileIo.listFile(directory)).filter(
-    name => name !== '.' && name !== '..',
-  );
-  for (const name of names) {
-    if (isReservedEntryName(name)) {
-      throw createPushyError(
-        ERROR_DELTA_FAILED,
-        `archive contains reserved entry ${name}`,
-      );
-    }
-    const path = `${directory}/${name}`;
-    const stat = await fileIo.stat(path);
-    acc.entries += 1;
-    if (acc.entries > MAX_ENTRIES) {
-      throw createPushyError(
-        ERROR_DELTA_FAILED,
-        `archive has too many entries (> ${MAX_ENTRIES})`,
-      );
-    }
-    if (stat.isDirectory()) {
-      await measureExtractedDirectory(path, acc);
-      continue;
-    }
-    if (stat.size > MAX_ENTRY_BYTES) {
-      throw createPushyError(
-        ERROR_DELTA_FAILED,
-        `archive entry too large: ${name} (${stat.size} bytes)`,
-      );
-    }
-    acc.bytes += stat.size;
-    if (acc.bytes > MAX_TOTAL_UNCOMPRESSED_BYTES) {
-      throw createPushyError(
-        ERROR_DELTA_FAILED,
-        `archive expands beyond ${MAX_TOTAL_UNCOMPRESSED_BYTES} bytes`,
-      );
-    }
+  archiveBytes: number,
+): Promise<void> {
+  try {
+    await NativePatchCore.checkExtractedDirectory(directory, archiveBytes);
+  } catch (e) {
+    throw createPushyError(ERROR_DELTA_FAILED, getErrorMessage(e));
   }
-  return acc;
 }

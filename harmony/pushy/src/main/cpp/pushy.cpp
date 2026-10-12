@@ -13,6 +13,7 @@
 #include <utility>
 #include <vector>
 
+#include "archive_limits.h"
 #include "archive_patch_core.h"
 #include "digest.h"
 #include "install_record.h"
@@ -1036,6 +1037,113 @@ napi_value CheckActivation(napi_env env, napi_callback_info info) {
       SettleInstallRecordWork);
 }
 
+// ---- Archive extraction limits (cpp/patch_core/archive_limits.h) ----
+
+// Reads `count` number arguments (byte counts: integers below 2^53).
+bool GetInt64Args(
+    napi_env env,
+    napi_callback_info info,
+    const char* name,
+    size_t count,
+    int64_t* out) {
+  napi_value args[4] = {nullptr, nullptr, nullptr, nullptr};
+  size_t argc = count;
+  if (count > 4 || !GetArgCount(env, info, &argc, args) || argc < count) {
+    ThrowError(env, std::string(name) + ": wrong number of arguments");
+    return false;
+  }
+  for (size_t i = 0; i < count; i++) {
+    napi_valuetype type = napi_undefined;
+    if (!GetValueType(env, args[i], &type) || type != napi_number ||
+        napi_get_value_int64(env, args[i], &out[i]) != napi_ok) {
+      ThrowError(env, std::string(name) + ": argument " + std::to_string(i) +
+                          " must be a number");
+      return false;
+    }
+  }
+  return true;
+}
+
+// checkUncompressedSize(archiveBytes, uncompressedBytes) -> string | undefined:
+// the reason the whole archive's expansion is refused.
+napi_value CheckUncompressedSize(napi_env env, napi_callback_info info) {
+  int64_t args[2] = {0, 0};
+  if (!GetInt64Args(env, info, "checkUncompressedSize", 2, args)) {
+    return nullptr;
+  }
+  const pushy::delta::Status status =
+      pushy::archive_limits::CheckUncompressedSize(args[0], args[1]);
+  return status.ok ? nullptr : NewString(env, status.message);
+}
+
+// planFreeSpaceProbe(knownTotal, writtenBefore, chunkBytes, reservedUntil)
+// -> {probe, reserve, reservedUntil}, before one chunk of a download is
+// written.
+napi_value PlanFreeSpaceProbe(napi_env env, napi_callback_info info) {
+  int64_t args[4] = {0, 0, 0, 0};
+  if (!GetInt64Args(env, info, "planFreeSpaceProbe", 4, args)) {
+    return nullptr;
+  }
+  const pushy::archive_limits::FreeSpaceProbe plan =
+      pushy::archive_limits::PlanUnknownLengthFreeSpaceProbe(
+          args[0], args[1], args[2], args[3]);
+  napi_value result = nullptr;
+  napi_value reserve = nullptr;
+  napi_value reserved_until = nullptr;
+  if (napi_create_object(env, &result) != napi_ok ||
+      napi_create_int64(env, plan.reserve, &reserve) != napi_ok ||
+      napi_create_int64(env, plan.reserved_until, &reserved_until) != napi_ok) {
+    ThrowError(env, "planFreeSpaceProbe: cannot create the result");
+    return nullptr;
+  }
+  SetBoolProperty(env, result, "probe", plan.probe);
+  napi_set_named_property(env, result, "reserve", reserve);
+  napi_set_named_property(env, result, "reservedUntil", reserved_until);
+  return result;
+}
+
+struct ExtractedDirectoryWork {
+  std::string directory;
+  int64_t archive_bytes = 0;
+  pushy::delta::Status status{false, ""};
+};
+
+// checkExtractedDirectory(directory, archiveBytes) -> Promise<void>: walks
+// the freshly unpacked tree on a libuv worker thread and rejects with the
+// first violation.
+napi_value CheckExtractedDirectory(napi_env env, napi_callback_info info) {
+  napi_value args[2] = {nullptr, nullptr};
+  size_t argc = 2;
+  if (!GetArgCount(env, info, &argc, args) || argc < 2) {
+    ThrowError(env, "checkExtractedDirectory: wrong number of arguments");
+    return nullptr;
+  }
+  ExtractedDirectoryWork work;
+  bool ok = false;
+  work.directory = GetString(env, args[0], &ok);
+  if (!ok) {
+    return nullptr;
+  }
+  napi_valuetype type = napi_undefined;
+  if (work.directory.empty() || !GetValueType(env, args[1], &type) ||
+      type != napi_number ||
+      napi_get_value_int64(env, args[1], &work.archive_bytes) != napi_ok) {
+    ThrowError(env, "checkExtractedDirectory: expected a directory and a size");
+    return nullptr;
+  }
+  return QueueWork<ExtractedDirectoryWork>(
+      env,
+      "checkExtractedDirectory",
+      std::move(work),
+      [](ExtractedDirectoryWork& w) {
+        w.status = pushy::archive_limits::CheckExtractedDirectory(
+            w.directory, w.archive_bytes);
+      },
+      [](napi_env cb_env, napi_deferred deferred, const ExtractedDirectoryWork& w) {
+        SettleWithStatus(cb_env, deferred, w.status);
+      });
+}
+
 bool ExportFunction(
     napi_env env,
     napi_value exports,
@@ -1284,6 +1392,9 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "sealInstallRecord", SealInstallRecord) ||
       !ExportFunction(env, exports, "promoteStaging", PromoteStaging) ||
       !ExportFunction(env, exports, "checkActivation", CheckActivation) ||
+      !ExportFunction(env, exports, "checkUncompressedSize", CheckUncompressedSize) ||
+      !ExportFunction(env, exports, "planFreeSpaceProbe", PlanFreeSpaceProbe) ||
+      !ExportFunction(env, exports, "checkExtractedDirectory", CheckExtractedDirectory) ||
       !ExportFunction(env, exports, "crc32", Crc32) ||
       !ExportFunction(env, exports, "getSupportedDiffVersion", GetSupportedDiffVersion) ||
       !ExportFunction(env, exports, "prepareRound", FlowPrepareRound) ||

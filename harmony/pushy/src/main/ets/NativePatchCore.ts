@@ -54,6 +54,15 @@ export interface ArchivePatchRequest {
   hostCopiesResources?: boolean;
 }
 
+export interface FreeSpaceProbePlan {
+  /** 本次写入前是否需要探测可用空间。 */
+  probe: boolean;
+  /** 探测时要求的字节数(不含 FREE_DISK_MARGIN_BYTES)。 */
+  reserve: number;
+  /** 计划后的"已预留到"位置(相对本次响应体起点)。 */
+  reservedUntil: number;
+}
+
 interface NativePatchCoreBindings {
   syncStateWithBinaryVersion(
     packageVersion: string,
@@ -113,6 +122,24 @@ interface NativePatchCoreBindings {
     bundleFileName: string,
     grandfathered: boolean,
   ): Promise<void>;
+  // 解压资源上限(cpp/patch_core/archive_limits.h,与 Android/iOS 共用)。
+  /** 整包解压量与整包压缩比;超限时返回原因,否则 undefined */
+  checkUncompressedSize(
+    archiveBytes: number,
+    uncompressedBytes: number,
+  ): string | undefined;
+  /** 工作线程遍历刚解压的目录(不跟随符号链接),超限/保留名/符号链接时以原因 reject */
+  checkExtractedDirectory(directory: string, archiveBytes: number): Promise<void>;
+  /**
+   * 未知长度下载每个 chunk 写入前的磁盘探测计划。writtenBefore 是本次响应体
+   * 在该 chunk 之前已收到的字节数;knownTotal > 0 时从不探测。
+   */
+  planFreeSpaceProbe(
+    knownTotal: number,
+    writtenBefore: number,
+    chunkBytes: number,
+    reservedUntil: number,
+  ): FreeSpaceProbePlan;
   /** CRC32(zip/zlib 多项式)。pdiff 拷贝前与 copiesCrc 比对用 */
   crc32(data: Uint8Array | ArrayBuffer): number;
   /** 原生 patch 内核可消费的 diff 轨道版本(2 = hdiffv2 轨道) */

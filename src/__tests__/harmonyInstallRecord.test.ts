@@ -19,7 +19,6 @@ interface InstallRecordModule {
   STAGING_SUFFIX: string;
   HARMONY_BUNDLE_FILE_NAME: string;
   stagingDirectoryFor(versionDir: string): string;
-  isReservedEntryName(name: string): boolean;
   sealInstallRecord(dir: string, hash: string, artifact: string): Promise<void>;
   promoteStaging(staging: string, version: string): Promise<void>;
   isInstallComplete(dir: string, hash: string): boolean;
@@ -57,7 +56,7 @@ function load(rejection?: string) {
   const module = evalHarmonyModule(
     'InstallRecord.ts',
     `({ STAGING_SUFFIX, HARMONY_BUNDLE_FILE_NAME, stagingDirectoryFor,
-       isReservedEntryName, sealInstallRecord, promoteStaging,
+       sealInstallRecord, promoteStaging,
        isInstallComplete, recordedBundleSha256, verifyInstallForActivation });`,
     {
       NativePatchCore,
@@ -90,15 +89,6 @@ describe('harmony install record paths', () => {
       `${DIR}${module.STAGING_SUFFIX}`
     );
     expect(module.HARMONY_BUNDLE_FILE_NAME).toBe(BUNDLE);
-  });
-
-  test('every .pushy- prefixed archive entry is reserved', () => {
-    for (const name of ['.pushy-complete', '.pushy-complete.tmp', '.pushy-x']) {
-      expect(module.isReservedEntryName(name)).toBe(true);
-    }
-    for (const name of [BUNDLE, '.pushyx', 'pushy-complete']) {
-      expect(module.isReservedEntryName(name)).toBe(false);
-    }
   });
 });
 

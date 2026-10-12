@@ -6,6 +6,8 @@
 //
 //   cpp/patch_core/archive_limits.h  <-> harmony/.../ArchiveLimits.ts
 //                                        android/.../ArchiveLimits.java
+//                                        (only the caps a host still
+//                                        compares against itself)
 //   cpp/patch_core/install_record.h  <-> harmony/.../InstallRecord.ts
 //                                        android/.../InstallRecord.java
 //                                        (only the constants a pair lists
@@ -118,6 +120,11 @@ const archiveLimitsRequired = ['UnknownLengthFreeSpaceProbeBytes', 'MaxArchiveBy
 // The accounting itself lives in archive_limits.cpp; each host mirrors only
 // the caps it still compares against on its own (download, manifest,
 // streamed-bytes backstop, free-space margin).
+const archiveLimitsMirroredByArkTs = [
+  'MaxArchiveBytes',
+  'MaxManifestBytes',
+  'FreeDiskMarginBytes',
+];
 const archiveLimitsMirroredByJava = [
   'MaxArchiveBytes',
   'MaxTotalUncompressedBytes',
@@ -137,6 +144,7 @@ const pairs = [
     parse: parseArkTsConstants,
     mirrorName: screamingSnake,
     required: archiveLimitsRequired,
+    only: archiveLimitsMirroredByArkTs,
   },
   {
     header: 'cpp/patch_core/archive_limits.h',

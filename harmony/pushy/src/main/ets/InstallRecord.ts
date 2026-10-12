@@ -12,17 +12,10 @@ import {
 // 稳定错误码。
 // STAGING_SUFFIX 镜像 kStagingSuffix(scripts/check-constant-parity.js 断言)。
 export const STAGING_SUFFIX = '.staging';
-// 归档不得携带任何 `.pushy-` 前缀的条目(任意深度):这些名字保留给 SDK 自己
-// 写的记录,与 Android 的规则一致。
-export const RESERVED_ENTRY_PREFIX = '.pushy-';
 export const HARMONY_BUNDLE_FILE_NAME = 'bundle.harmony.js';
 
 export function stagingDirectoryFor(versionDir: string): string {
   return `${versionDir}${STAGING_SUFFIX}`;
-}
-
-export function isReservedEntryName(name: string): boolean {
-  return name.startsWith(RESERVED_ENTRY_PREFIX);
 }
 
 /**

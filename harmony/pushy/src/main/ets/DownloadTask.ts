@@ -21,11 +21,10 @@ import logger from './Logger';
 import {
   MAX_ARCHIVE_BYTES,
   MAX_MANIFEST_BYTES,
+  checkExtractedDirectory,
   checkOriginalSize,
   checkUncompressedSize,
   ensureFreeSpace,
-  measureExtractedDirectory,
-  planUnknownLengthFreeSpaceProbe,
 } from './ArchiveLimits';
 import {
   HARMONY_BUNDLE_FILE_NAME,
@@ -244,7 +243,7 @@ export class DownloadTask {
    * 解压前读取归档解压后的总字节数(zlib.getOriginalSize,API 12——RNOH 的
    * 最低 API 已覆盖)。读不到就拒绝归档(checkOriginalSize):zlib.decompressFile
    * 没有逐条钩子,不知道展开量就放行等于允许一个 20MB 的归档在
-   * measureExtractedDirectory 跑到之前先把磁盘写满。拒绝带专属错误细节
+   * checkExtractedDirectory 跑到之前先把磁盘写满。拒绝带专属错误细节
    * (ORIGINAL_SIZE_UNAVAILABLE)并单独记日志,与"超限"拒绝可区分。
    */
   private async readOriginalSize(archiveFile: string): Promise<number> {
@@ -270,8 +269,9 @@ export class DownloadTask {
    * 解压 + 资源上限(cpp/patch_core/archive_limits.h)。zlib.decompressFile
    * 没有逐条钩子:解压前用 getOriginalSize 把总解压量与整包压缩比挡在
    * 上限内(20MB 归档 100:1 的 2GB 载荷不会先解出来再量),按已知解压量查
-   * 磁盘,解压量未知直接拒绝;解压后再统计条目数/单条大小/总字节数并拒绝
-   * 任意深度的 `.pushy-` 保留条目(超限即失败,staging 目录由失败清理删除)。
+   * 磁盘,解压量未知直接拒绝;解压后再逐条核对条目数/单条大小/总字节数,
+   * 拒绝任意深度的 `.pushy-` 保留条目与符号链接(规则见
+   * cpp/patch_core/archive_limits.h;超限即失败,staging 目录由失败清理删除)。
    */
   private async extractArchive(
     archiveFile: string,
@@ -292,7 +292,7 @@ export class DownloadTask {
     } catch (e) {
       throw toPushyError(e, ERROR_DELTA_FAILED);
     }
-    await measureExtractedDirectory(unzipDirectory);
+    await checkExtractedDirectory(unzipDirectory, archiveStat.size);
   }
 
   private async recreateDirectory(path: string): Promise<void> {
@@ -574,9 +574,10 @@ export class DownloadTask {
           `archive too large: exceeded ${MAX_ARCHIVE_BYTES}`,
         );
       }
-      // 未知长度:见 planUnknownLengthFreeSpaceProbe。失败保留 partial 供
-      // 下次续传。
-      const plan = planUnknownLengthFreeSpaceProbe(
+      // 未知长度:响应到达时只能预留安全余量,任何会写过已预留位置的写入
+      // 之前都要探测(archive_limits::PlanUnknownLengthFreeSpaceProbe)。
+      // 失败保留 partial 供下次续传。
+      const plan = NativePatchCore.planFreeSpaceProbe(
         totalAll,
         received - data.byteLength,
         data.byteLength,

@@ -3,49 +3,54 @@ import {
   createPushyError,
   ERROR_DELTA_FAILED,
   ERROR_FILE_OPERATION_FAILED,
+  getErrorMessage,
   type PushyError,
 } from '../../harmony/pushy/src/main/ets/ErrorCodes';
-import { evalHarmonyModule } from './nativeSources';
+import { evalHarmonyModule, source } from './nativeSources';
 
-// The pure limit logic of Harmony ArchiveLimits.ts (ArkTS mirror of
-// cpp/patch_core/archive_limits.h), evaluated from source with its file
-// system imports stripped.
-interface FreeSpaceProbePlan {
-  probe: boolean;
-  reserve: number;
-  reservedUntil: number;
-}
-
+// Harmony ArchiveLimits.ts is a thin binding over the shared extraction
+// accounting (cpp/patch_core/archive_limits.h, replayed against
+// tests/archive-limits-vectors.json by the C++ test). What is left to test
+// here: the getOriginalSize gate (Harmony only), what it hands the NAPI
+// module, and the stable error code it maps refusals to.
 interface ArchiveLimits {
-  UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES: number;
-  MAX_TOTAL_UNCOMPRESSED_BYTES: number;
-  MAX_COMPRESSION_RATIO: number;
-  RATIO_CHECK_MIN_BYTES: number;
   ORIGINAL_SIZE_UNAVAILABLE: string;
   checkOriginalSize(size: number | undefined, failure?: string): number;
   checkUncompressedSize(archiveBytes: number, uncompressedBytes: number): void;
-  planUnknownLengthFreeSpaceProbe(
-    knownTotal: number,
-    writtenBefore: number,
-    chunkBytes: number,
-    reservedUntil: number
-  ): FreeSpaceProbePlan;
+  checkExtractedDirectory(
+    directory: string,
+    archiveBytes: number
+  ): Promise<void>;
 }
 
-const limits = evalHarmonyModule(
-  'ArchiveLimits.ts',
-  `({ UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES, MAX_TOTAL_UNCOMPRESSED_BYTES,
-   MAX_COMPRESSION_RATIO, RATIO_CHECK_MIN_BYTES, ORIGINAL_SIZE_UNAVAILABLE,
-   checkOriginalSize, checkUncompressedSize, planUnknownLengthFreeSpaceProbe });`,
-  {
-    ERROR_DELTA_FAILED,
-    ERROR_FILE_OPERATION_FAILED,
-    createPushyError,
-    isReservedEntryName: (name: string) => name.startsWith('.pushy-'),
-  }
-) as ArchiveLimits;
-
-const PROBE = limits.UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES;
+function load(refusal?: string) {
+  const calls: Array<[string, unknown[]]> = [];
+  const NativePatchCore = {
+    checkUncompressedSize: (...args: unknown[]) => {
+      calls.push(['checkUncompressedSize', args]);
+      return refusal;
+    },
+    checkExtractedDirectory: async (...args: unknown[]) => {
+      calls.push(['checkExtractedDirectory', args]);
+      if (refusal !== undefined) {
+        throw new Error(refusal);
+      }
+    },
+  };
+  const limits = evalHarmonyModule(
+    'ArchiveLimits.ts',
+    `({ ORIGINAL_SIZE_UNAVAILABLE, checkOriginalSize, checkUncompressedSize,
+       checkExtractedDirectory });`,
+    {
+      NativePatchCore,
+      ERROR_DELTA_FAILED,
+      ERROR_FILE_OPERATION_FAILED,
+      createPushyError,
+      getErrorMessage,
+    }
+  ) as ArchiveLimits;
+  return { limits, calls };
+}
 
 function refusal(run: () => unknown): PushyError | null {
   try {
@@ -56,78 +61,10 @@ function refusal(run: () => unknown): PushyError | null {
   return null;
 }
 
-// Unknown-length downloads: no write may pass a probed reservation.
-describe('harmony planUnknownLengthFreeSpaceProbe', () => {
-  test('never probes when the total length is known', () => {
-    const plan = limits.planUnknownLengthFreeSpaceProbe(1000, 0, 4096, 0);
-    expect(plan.probe).toBe(false);
-    expect(plan.reservedUntil).toBe(0);
-  });
-
-  test('probes the first chunk and reserves PROBE bytes ahead', () => {
-    const plan = limits.planUnknownLengthFreeSpaceProbe(0, 0, 4096, 0);
-    expect({ ...plan }).toEqual({
-      probe: true,
-      reserve: PROBE,
-      reservedUntil: PROBE,
-    });
-  });
-
-  test('skips chunks that stay inside the reservation, edge included', () => {
-    const plan = limits.planUnknownLengthFreeSpaceProbe(0, 4096, 4096, PROBE);
-    expect(plan.probe).toBe(false);
-    expect(plan.reservedUntil).toBe(PROBE);
-    expect(
-      limits.planUnknownLengthFreeSpaceProbe(0, PROBE - 10, 10, PROBE).probe
-    ).toBe(false);
-  });
-
-  test('re-probes a chunk that would cross the reservation', () => {
-    const plan = limits.planUnknownLengthFreeSpaceProbe(
-      0,
-      PROBE - 10,
-      11,
-      PROBE
-    );
-    expect(plan.probe).toBe(true);
-    expect(plan.reservedUntil).toBe(PROBE - 10 + PROBE);
-  });
-
-  test('reserves a chunk larger than PROBE by its own size', () => {
-    const big = PROBE * 2 + 1;
-    const plan = limits.planUnknownLengthFreeSpaceProbe(0, 100, big, 0);
-    expect({ ...plan }).toEqual({
-      probe: true,
-      reserve: big,
-      reservedUntil: 100 + big,
-    });
-  });
-
-  test('walking a stream never writes past a probed reservation', () => {
-    let reservedUntil = 0;
-    let written = 0;
-    let probes = 0;
-    const chunk = 300 * 1024;
-    for (let i = 0; i < 100; i++) {
-      const plan = limits.planUnknownLengthFreeSpaceProbe(
-        0,
-        written,
-        chunk,
-        reservedUntil
-      );
-      if (plan.probe) {
-        probes += 1;
-      }
-      reservedUntil = plan.reservedUntil;
-      written += chunk;
-      expect(written).toBeLessThanOrEqual(reservedUntil);
-    }
-    expect(probes).toBeLessThan(100);
-  });
-});
-
 // getOriginalSize unavailable: refuse (never pass through), with its own detail.
 describe('harmony checkOriginalSize', () => {
+  const { limits } = load();
+
   test('passes a finite non-negative size through', () => {
     expect(limits.checkOriginalSize(0)).toBe(0);
     expect(limits.checkOriginalSize(12345)).toBe(12345);
@@ -150,44 +87,36 @@ describe('harmony checkOriginalSize', () => {
   });
 });
 
-describe('harmony checkUncompressedSize', () => {
-  test('accepts sizes within the total and ratio limits', () => {
+describe('harmony archive limit bindings', () => {
+  test('hand the sizes and the directory to the core', async () => {
+    const { limits, calls } = load();
     expect(refusal(() => limits.checkUncompressedSize(1024, 4096))).toBeNull();
-    // Below RATIO_CHECK_MIN_BYTES the ratio is not checked.
-    expect(
-      refusal(() =>
-        limits.checkUncompressedSize(1, limits.RATIO_CHECK_MIN_BYTES)
-      )
-    ).toBeNull();
+    await limits.checkExtractedDirectory('/data/_update/abc.staging', 1024);
+    expect(calls).toEqual([
+      ['checkUncompressedSize', [1024, 4096]],
+      ['checkExtractedDirectory', ['/data/_update/abc.staging', 1024]],
+    ]);
   });
 
-  test('refuses an archive that expands beyond the total limit', () => {
-    const error = refusal(() =>
-      limits.checkUncompressedSize(
-        limits.MAX_TOTAL_UNCOMPRESSED_BYTES,
-        limits.MAX_TOTAL_UNCOMPRESSED_BYTES + 1
-      )
-    );
-    expect(error?.code).toBe(ERROR_DELTA_FAILED);
+  test('a refusal is PATCH_FAILED with the core message', async () => {
+    const reason = 'archive compression ratio exceeds 100:1 (2097152/20000)';
+    const { limits } = load(reason);
+    const sync = refusal(() => limits.checkUncompressedSize(20000, 2097152));
+    expect(sync?.code).toBe(ERROR_DELTA_FAILED);
+    expect(sync?.message).toBe(`[${ERROR_DELTA_FAILED}] ${reason}`);
+    let walked: PushyError | null = null;
+    try {
+      await limits.checkExtractedDirectory('/data/_update/abc.staging', 20000);
+    } catch (e) {
+      walked = e as PushyError;
+    }
+    expect(walked?.code).toBe(ERROR_DELTA_FAILED);
+    expect(walked?.message).toBe(`[${ERROR_DELTA_FAILED}] ${reason}`);
   });
 
-  test('refuses a whole-archive ratio above the limit', () => {
-    const archive = limits.RATIO_CHECK_MIN_BYTES;
-    expect(
-      refusal(() =>
-        limits.checkUncompressedSize(
-          archive,
-          archive * limits.MAX_COMPRESSION_RATIO
-        )
-      )
-    ).toBeNull();
-    expect(
-      refusal(() =>
-        limits.checkUncompressedSize(
-          archive,
-          archive * limits.MAX_COMPRESSION_RATIO + 1
-        )
-      )?.code
-    ).toBe(ERROR_DELTA_FAILED);
+  test('the download loop plans its disk probes in the core', () => {
+    const task = source('harmony/pushy/src/main/ets/DownloadTask.ts');
+    expect(task).toContain('NativePatchCore.planFreeSpaceProbe(');
+    expect(task).toContain('await checkExtractedDirectory(');
   });
 });
