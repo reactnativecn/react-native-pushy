@@ -118,22 +118,32 @@ interface NativePatchCoreBindings {
   /** 原生 patch 内核可消费的 diff 轨道版本(2 = hdiffv2 轨道) */
   getSupportedDiffVersion(): number;
 
-  // 更新流程决策层(cpp/update_flow_core,NATIVE_CHECKUPDATE_DESIGN §10):
-  // JSON 字符串进出,与决策层自身的边界一致。返回 undefined = 输入未通过
-  // 解析,编排器跳过本轮检测。
-  buildRequestBody(inputJson: string): string | undefined;
-  orderEndpointCandidates(
-    endpointsJson: string,
+  // 原生冷启动轮次(cpp/update_flow_core/native_round.h,与 Android/iOS 共用):
+  // JSON 字符串进出。返回 undefined = 内核拒收了输入,本轮失败。
+  // envJson 描述本次启动(字段见 native_round.h)。
+  /** {"body": 请求体文本, "query": 首个查询状态};配置不可运行时 undefined */
+  prepareRound(
+    configJson: string,
+    envJson: string,
     randomSample: number,
   ): string | undefined;
+  /**
+   * 下一步查询状态:带 "url"(及 "post")= 发这个请求后再调;"found" = 刚传入
+   * 的文本就是有效响应;都没有 = 查询结束。responseText 为 undefined 表示请求
+   * 失败或尚未发出。
+   */
+  nextQueryStep(
+    stateJson: string,
+    responseText: string | undefined,
+  ): string | undefined;
+  /** 决策(已按本机规划的 attempts)、要持久化的 hashInfo 与响应缓存文本 */
   handleResponse(
     responseText: string,
-    identityJson: string,
-    afterDownload: string,
+    configJson: string,
+    envJson: string,
+    requestBody: string,
+    responseAtSeconds: number,
   ): string | undefined;
-  // 响应 schema 门槛(update_flow_core::IsValidResponse):200 但只带
-  // `{"error":...}` 的节点算失败,不得阻止继续 fallback。
-  isValidResponse(responseText: string): boolean;
 
   // 持久化的原生配置(cpp/update_flow_core/native_config.h,与 Android/iOS
   // 共用)。undefined 视同空串:缺省配置。

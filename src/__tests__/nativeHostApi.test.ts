@@ -72,8 +72,7 @@ function harness() {
       STATUS_NONE,
       NativePatchCore: {
         ...harmonyConfigBindings,
-        getSupportedDiffVersion: () => 2,
-        buildRequestBody: (input: string) => input,
+        prepareRound: () => JSON.stringify({ body: '{}', query: {} }),
         handleResponse: (response: string) => response,
       },
       mockCheck: async () => {

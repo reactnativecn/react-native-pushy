@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { QUERY_PATH, revealText } from '../../harmony/pushy/src/main/ets/Texts';
+import { revealText } from '../../harmony/pushy/src/main/ets/Texts';
 import {
   decodeNativeText,
   encodeNativeText,
@@ -39,25 +39,13 @@ describe('native text encoding', () => {
   });
 
   // The request path is appended by the shared round core
-  // (cpp/update_flow_core/native_round.cpp) and, until they move to it, by
-  // the platforms' own HTTP glue; the default service addresses only live in
-  // the shared normalizer (cpp/update_flow_core/native_config.cpp).
+  // (cpp/update_flow_core/native_round.cpp); the default service addresses
+  // only live in the shared normalizer (cpp/update_flow_core/native_config.cpp).
   test('the request path and the addresses are encoded in cpp/', () => {
-    const decodedIn = (prefix: string) =>
-      paths
-        .filter((path) => path.startsWith(prefix))
-        .flatMap((path) => encodedIn(source(path)))
-        .map(decodeNativeText);
-    for (const platform of ['harmony/']) {
-      expect({
-        platform,
-        found: decodedIn(platform).includes(plainTexts[0]),
-      }).toEqual({
-        platform,
-        found: true,
-      });
-    }
-    const shared = decodedIn('cpp/');
+    const shared = paths
+      .filter((path) => path.startsWith('cpp/'))
+      .flatMap((path) => encodedIn(source(path)))
+      .map(decodeNativeText);
     for (const text of plainTexts) {
       expect({ text, found: shared.includes(text) }).toEqual({
         text,
@@ -74,10 +62,6 @@ describe('native text encoding', () => {
         .map((text) => `${path}: ${text}`);
     });
     expect(offenders).toEqual([]);
-  });
-
-  test('Harmony resolves the path at runtime', () => {
-    expect(QUERY_PATH).toBe('/checkUpdate/');
   });
 
   // Every string literal in shipped native code, comments excluded: none may

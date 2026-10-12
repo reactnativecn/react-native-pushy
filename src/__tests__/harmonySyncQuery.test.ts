@@ -1,137 +1,97 @@
 import { describe, expect, test } from 'bun:test';
 import { evalHarmonyModule } from './nativeSources';
 
-// The endpoint fallback of the Harmony cold-start orchestrator
+// The endpoint walk of the Harmony cold-start orchestrator
 // (SyncCoordinator.runQueryRequest), evaluated from source with its platform
-// imports stripped and HTTP replaced by a scripted fake.
+// imports stripped and HTTP replaced by a scripted fake. The walk's policy —
+// order, list discovery, https-only remote bases, the request budget,
+// response validity — is the shared core's NextQueryStep, pinned by
+// cpp/update_flow_core/tests/native-round-vectors.json; this checks that the
+// glue follows the core's steps.
 
-const VALID = '{"ok":true}';
+const VALID = '{"upToDate":true}';
 
-interface Config {
-  endpoints?: string[];
-  queryUrls?: string[];
+interface Step {
+  url?: string;
+  post?: boolean;
+  found?: boolean;
 }
 
 function run(
-  config: Config,
-  responses: Record<string, string | undefined>,
-  httpsOnly = false
+  steps: Array<Step | undefined>,
+  responses: Record<string, string>
 ) {
-  const requests: string[] = [];
+  const requests: Array<[string, string | undefined]> = [];
+  const calls: Array<[string, string | undefined]> = [];
+  let next = 0;
   const runQueryRequest = evalHarmonyModule(
     'SyncCoordinator.ts',
     'httpRequest = fakeHttp;\nrunQueryRequest;',
     {
-      QUERY_PATH: '/q/',
       logger: { info() {}, warn() {}, error() {} },
       BundlePreparationRound: class {},
       bundlePreparationResult: () => ({}),
       NativePatchCore: {
-        // Keep the configured order: ordering is the C++ core's concern.
-        orderEndpointCandidates: (json: string) => json,
-        isValidResponse: (text: string) => text === VALID,
+        nextQueryStep: (state: string, text: string | undefined) => {
+          calls.push([state, text]);
+          const step = steps[next++];
+          return step === undefined
+            ? undefined
+            : JSON.stringify({ ...step, n: next });
+        },
       },
-      fakeHttp: async (url: string) => {
-        requests.push(url);
+      fakeHttp: async (url: string, body?: string) => {
+        requests.push([url, body]);
         return responses[url];
       },
     }
-  ) as (
-    config: Config,
-    appKey: string,
-    body: string,
-    httpsOnly: boolean
-  ) => Promise<string | undefined>;
-  return runQueryRequest(config, 'key', '{}', httpsOnly).then((result) => ({
+  ) as (query: string, body: string) => Promise<string | undefined>;
+  return runQueryRequest('{"n":0}', 'BODY').then((result) => ({
     result,
     requests,
+    calls,
   }));
 }
 
-describe('harmony query endpoint fallback', () => {
-  test('falls back through configured endpoints, deduped by normalized base', async () => {
-    const { result, requests } = await run(
-      { endpoints: ['https://a/', 'https://a', '', 'https://b'] },
-      { 'https://b/q/key': VALID }
-    );
-    expect(result).toBe(VALID);
-    expect(requests).toEqual(['https://a/q/key', 'https://b/q/key']);
-  });
-
-  test('an invalid response does not stop the fallback', async () => {
-    const { result } = await run(
-      { endpoints: ['https://a', 'https://b'] },
-      { 'https://a/q/key': '{"error":"x"}', 'https://b/q/key': VALID }
-    );
-    expect(result).toBe(VALID);
-  });
-
-  test('discovers remote endpoints, skipping tried, non-string and cleartext ones', async () => {
-    const { result, requests } = await run(
-      {
-        endpoints: ['https://a'],
-        queryUrls: ['', 'https://list'],
-      },
-      {
-        'https://list': JSON.stringify([
-          'https://a/',
-          42,
-          'http://plain',
-          'https://c',
-        ]),
-        'https://c/q/key': VALID,
-      },
-      true
+describe('harmony query endpoint walk', () => {
+  test('issues each step, passes its text back and returns the found one', async () => {
+    const { result, requests, calls } = await run(
+      [
+        { url: 'https://a/q', post: true },
+        { url: 'https://l', post: false },
+        { url: 'https://c/q', post: true },
+        { found: true },
+      ],
+      { 'https://l': '["https://c"]', 'https://c/q': VALID }
     );
     expect(result).toBe(VALID);
     expect(requests).toEqual([
-      'https://a/q/key',
-      'https://list',
-      'https://c/q/key',
+      ['https://a/q', 'BODY'],
+      ['https://l', undefined],
+      ['https://c/q', 'BODY'],
+    ]);
+    // Each call carries the previous state and the last request's text.
+    expect(calls.map(([state]) => JSON.parse(state).n)).toEqual([0, 1, 2, 3]);
+    expect(calls.map(([, text]) => text)).toEqual([
+      undefined,
+      undefined,
+      '["https://c"]',
+      VALID,
     ]);
   });
 
-  test('cleartext remote endpoints are allowed without an https-only config', async () => {
-    const { result } = await run(
-      { endpoints: ['http://a'], queryUrls: ['https://list'] },
-      {
-        'https://list': JSON.stringify(['http://plain']),
-        'http://plain/q/key': VALID,
-      }
-    );
-    expect(result).toBe(VALID);
-  });
-
-  test('only the first parsable remote list is used', async () => {
-    const { requests } = await run(
-      { endpoints: [], queryUrls: ['https://bad', 'https://l1', 'https://l2'] },
-      {
-        'https://bad': '{"not":"array"}',
-        'https://l1': JSON.stringify(['https://x']),
-        'https://l2': JSON.stringify(['https://y']),
-      }
-    );
-    expect(requests).toEqual(['https://bad', 'https://l1', 'https://x/q/key']);
-  });
-
-  test('stops after 8 HTTP requests, list fetches included', async () => {
-    const endpoints = Array.from({ length: 6 }, (_, i) => `https://e${i}`);
+  test('a step without a url ends the walk with no response', async () => {
     const { result, requests } = await run(
-      { endpoints, queryUrls: ['https://list'] },
-      {
-        'https://list': JSON.stringify([
-          'https://r0',
-          'https://r1',
-          'https://r2',
-        ]),
-        'https://r2/q/key': VALID,
-      }
+      [{ url: 'https://a/q', post: true }, {}],
+      { 'https://a/q': '{"error":"x"}' }
     );
     expect(result).toBeUndefined();
-    expect(requests).toEqual([
-      ...endpoints.map((e) => `${e}/q/key`),
-      'https://list',
-      'https://r0/q/key',
-    ]);
+    expect(requests).toEqual([['https://a/q', 'BODY']]);
+  });
+
+  test('a state the core rejects ends the walk', async () => {
+    const { result, requests } = await run([undefined], {});
+    expect(result).toBeUndefined();
+    expect(requests).toEqual([]);
   });
 });

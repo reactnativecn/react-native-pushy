@@ -55,13 +55,12 @@ function harness(failures: Map<string, unknown>) {
     ctx: typeof context,
     attempts: Attempt[],
     hash: string,
-    originHash: string,
-    httpsOnly: boolean
+    originHash: string
   ) => Promise<boolean>;
   return {
     calls,
     run: (attempts: Attempt[], originHash = 'origin') =>
-      performAttempts(context, attempts, 'next', originHash, false),
+      performAttempts(context, attempts, 'next', originHash),
   };
 }
 

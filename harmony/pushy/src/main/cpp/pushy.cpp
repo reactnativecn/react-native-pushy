@@ -2,7 +2,7 @@
 
 #include "flow_json.h"
 #include "native_config.h"
-#include "update_flow_core.h"
+#include "native_round.h"
 #include <js_native_api.h>
 #include <js_native_api_types.h>
 
@@ -1114,111 +1114,98 @@ static napi_value GetSupportedDiffVersion(napi_env env, napi_callback_info) {
   return result;
 }
 
-// ---- update-flow decision layer (NATIVE_CHECKUPDATE_DESIGN §10) ----
-// String-in/string-out JSON, matching the decision layer's own boundary.
-// Returning undefined (nullptr without a pending exception) means "input did
-// not parse"; the ArkTS orchestrator skips the check round.
+// ---- native round (update_flow_core/native_round.h) ----
+// JSON text in and out. Returning undefined (nullptr without a pending
+// exception) means the core rejected the input; the ArkTS orchestrator fails
+// the round.
 
-static napi_value FlowBuildRequestBody(napi_env env,
-                                            napi_callback_info info) {
-  size_t argc = 1;
-  napi_value args[1] = {nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
-    ThrowError(env, "buildRequestBody: missing input argument");
-    return nullptr;
+// Reads the first `count` arguments (at most 5) into `args`, and those of
+// them flagged in `strings` (bit i = argument i) as strings into `out[i]`
+// (null/undefined read as ""). False with an exception pending otherwise.
+bool GetFlowArgs(napi_env env, napi_callback_info info, const char* name,
+                 size_t count, unsigned strings, napi_value* args,
+                 std::string* out) {
+  size_t argc = count;
+  if (!GetArgCount(env, info, &argc, args) || argc < count) {
+    ThrowError(env, std::string(name) + ": missing arguments");
+    return false;
   }
-  bool ok = false;
-  std::string input_json = GetString(env, args[0], &ok);
-  if (!ok) {
-    return nullptr;
+  for (size_t i = 0; i < count; i++) {
+    bool ok = true;
+    if ((strings >> i) & 1u) {
+      out[i] = GetString(env, args[i], &ok);
+    }
+    if (!ok) {
+      return false;
+    }
   }
-  bool parsed = false;
-  flowjson::Value input = flowjson::Parse(input_json, &parsed);
-  if (!parsed || !input.IsObject()) {
-    return nullptr;
-  }
-  return NewString(
-      env, flowjson::Stringify(flowcore::BuildRequestBody(input)));
+  return true;
 }
 
-static napi_value FlowOrderEndpointCandidates(napi_env env,
-                                              napi_callback_info info) {
-  size_t argc = 2;
-  napi_value args[2] = {nullptr, nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 2) {
-    ThrowError(env, "orderEndpointCandidates: missing arguments");
-    return nullptr;
+bool GetFlowNumber(napi_env env, napi_value value, const char* name,
+                   double* out) {
+  if (napi_get_value_double(env, value, out) != napi_ok) {
+    ThrowError(env, std::string(name) + ": expected number");
+    return false;
   }
-  bool ok = false;
-  std::string endpoints_json = GetString(env, args[0], &ok);
-  if (!ok) {
-    return nullptr;
-  }
-  double sample = 0;
-  if (napi_get_value_double(env, args[1], &sample) != napi_ok) {
-    ThrowError(env, "orderEndpointCandidates: expected number sample");
-    return nullptr;
-  }
-  bool parsed = false;
-  flowjson::Value endpoints = flowjson::Parse(endpoints_json, &parsed);
-  if (!parsed || !endpoints.IsArray()) {
-    return nullptr;
-  }
-  return NewString(env,
-                        flowjson::Stringify(flowcore::OrderEndpointCandidates(
-                            endpoints, sample)));
+  return true;
 }
 
-static napi_value FlowIsValidResponse(napi_env env,
-                                           napi_callback_info info) {
-  size_t argc = 1;
-  napi_value args[1] = {nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
-    ThrowError(env, "isValidResponse: missing arguments");
-    return nullptr;
-  }
+// The parsed object, or Undefined (which the core rejects).
+flowjson::Value ParseFlowObject(const std::string& json) {
   bool ok = false;
-  std::string response_text = GetString(env, args[0], &ok);
-  if (!ok) {
-    // Exception pending (non-string argument): propagate it as a throw
-    // instead of a boolean that the caller would treat as a verdict.
-    return nullptr;
-  }
-  napi_value result = nullptr;
-  napi_get_boolean(env, flowcore::IsValidResponse(response_text),
-                   &result);
-  return result;
+  flowjson::Value value = flowjson::Parse(json, &ok);
+  return ok && value.IsObject() ? value : flowjson::Value::Undefined();
 }
 
-static napi_value FlowHandleResponse(napi_env env,
-                                          napi_callback_info info) {
-  size_t argc = 3;
+napi_value FlowJsonOrUndefined(napi_env env, const flowjson::Value& value) {
+  return value.IsUndefined() ? nullptr
+                             : NewString(env, flowjson::Stringify(value));
+}
+
+// prepareRound(configJson, envJson, randomSample)
+static napi_value FlowPrepareRound(napi_env env, napi_callback_info info) {
   napi_value args[3] = {nullptr, nullptr, nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 3) {
-    ThrowError(env, "handleResponse: missing arguments");
+  std::string text[3];
+  double sample = 0;
+  if (!GetFlowArgs(env, info, "prepareRound", 3, 0b011, args, text) ||
+      !GetFlowNumber(env, args[2], "prepareRound", &sample)) {
     return nullptr;
   }
-  bool ok = false;
-  std::string response_text = GetString(env, args[0], &ok);
-  if (!ok) {
+  return FlowJsonOrUndefined(
+      env, flowcore::PrepareRound(text[0], ParseFlowObject(text[1]), sample));
+}
+
+// nextQueryStep(stateJson, responseText?) — responseText undefined/null for
+// a failed (or no) request.
+static napi_value FlowNextQueryStep(napi_env env, napi_callback_info info) {
+  napi_value args[2] = {nullptr, nullptr};
+  std::string text[2];
+  if (!GetFlowArgs(env, info, "nextQueryStep", 2, 0b11, args, text)) {
     return nullptr;
   }
-  std::string identity_json = GetString(env, args[1], &ok);
-  if (!ok) {
+  return FlowJsonOrUndefined(
+      env, flowcore::NextQueryStep(
+               ParseFlowObject(text[0]),
+               IsNullOrUndefined(env, args[1])
+                   ? flowjson::Value::Undefined()
+                   : flowjson::Value::String(std::move(text[1]))));
+}
+
+// handleResponse(responseText, configJson, envJson, requestBody,
+// responseAtSeconds)
+static napi_value FlowHandleResponse(napi_env env, napi_callback_info info) {
+  napi_value args[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
+  std::string text[5];
+  double responseAt = 0;
+  if (!GetFlowArgs(env, info, "handleResponse", 5, 0b01111, args, text) ||
+      !GetFlowNumber(env, args[4], "handleResponse", &responseAt)) {
     return nullptr;
   }
-  std::string after_download = GetString(env, args[2], &ok);
-  if (!ok) {
-    return nullptr;
-  }
-  bool parsed = false;
-  flowjson::Value identity = flowjson::Parse(identity_json, &parsed);
-  if (!parsed || !identity.IsObject()) {
-    return nullptr;
-  }
-  return NewString(env,
-                        flowjson::Stringify(flowcore::HandleResponse(
-                            response_text, identity, false, after_download)));
+  return FlowJsonOrUndefined(
+      env, flowcore::HandleRoundResponse(text[0], text[1],
+                                         ParseFlowObject(text[2]), text[3],
+                                         responseAt));
 }
 
 // ---- persisted native config (update_flow_core/native_config.h) ----
@@ -1299,9 +1286,8 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "checkActivation", CheckActivation) ||
       !ExportFunction(env, exports, "crc32", Crc32) ||
       !ExportFunction(env, exports, "getSupportedDiffVersion", GetSupportedDiffVersion) ||
-      !ExportFunction(env, exports, "buildRequestBody", FlowBuildRequestBody) ||
-      !ExportFunction(env, exports, "orderEndpointCandidates", FlowOrderEndpointCandidates) ||
-      !ExportFunction(env, exports, "isValidResponse", FlowIsValidResponse) ||
+      !ExportFunction(env, exports, "prepareRound", FlowPrepareRound) ||
+      !ExportFunction(env, exports, "nextQueryStep", FlowNextQueryStep) ||
       !ExportFunction(env, exports, "handleResponse", FlowHandleResponse) ||
       !ExportFunction(env, exports, "configsEquivalent", FlowConfigsEquivalent) ||
       !ExportFunction(env, exports, "runnableConfig", FlowRunnableConfig) ||

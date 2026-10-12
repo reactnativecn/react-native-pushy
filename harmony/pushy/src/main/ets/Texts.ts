@@ -13,9 +13,6 @@ export function revealText(hex: string): string {
   return text;
 }
 
-// Request path appended to an endpoint base.
-export const QUERY_PATH: string = revealText('7514fcd4ad805d55263e08fc99');
-
 // Protocol values, version-info flags and storage names, stored encoded.
 export const STATUS_NONE: string = revealText('3418c1c1aa8a7c40');
 export const STORAGE_DIR_NAME: string = revealText('0502e4d5af9f6d');
