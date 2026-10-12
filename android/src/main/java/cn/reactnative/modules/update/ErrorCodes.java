@@ -25,4 +25,31 @@ final class ErrorCodes {
 
     private ErrorCodes() {
     }
+
+    /**
+     * Rejection code of a failed download task, from DownloadTask's
+     * classification: post-download failures (unzip / hdiff / resource copy,
+     * incl. copiesCrc verification) are PATCH_FAILED so telemetry can
+     * separate patch health from network health; a local refusal
+     * (reinstalling the running version in place) is FILE_OPERATION_FAILED.
+     */
+    static String forDownloadFailure(Throwable error) {
+        if (error instanceof PatchFailedException) {
+            return DELTA_FAILED;
+        }
+        if (error instanceof FileOperationException) {
+            return FILE_OPERATION_FAILED;
+        }
+        return DOWNLOAD_FAILED;
+    }
+
+    /**
+     * Whether another mirror of the same artifact can change the outcome
+     * (mirrors update_flow_core::IsMirrorRetryableCode and the JS
+     * isMirrorRetryableCode). A patch failure cannot: the bytes arrived and
+     * every mirror serves the same artifact.
+     */
+    static boolean isMirrorRetryable(String code) {
+        return !DELTA_FAILED.equals(code);
+    }
 }

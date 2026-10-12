@@ -129,24 +129,9 @@ public class UpdateModuleImpl {
 
             @Override
             public void onDownloadFailed(Throwable error) {
-                promise.reject(downloadErrorCode(error), error);
+                promise.reject(ErrorCodes.forDownloadFailure(error), error);
             }
         };
-    }
-
-    // Post-download failures (unzip / hdiff / resource copy, incl. copiesCrc
-    // verification) reject as PATCH_FAILED so JS-side telemetry can separate
-    // patch health from network health; a local refusal (reinstalling the
-    // running version in place) as FILE_OPERATION_FAILED. DownloadTask
-    // classifies them.
-    private static String downloadErrorCode(Throwable error) {
-        if (error instanceof PatchFailedException) {
-            return ErrorCodes.DELTA_FAILED;
-        }
-        if (error instanceof FileOperationException) {
-            return ErrorCodes.FILE_OPERATION_FAILED;
-        }
-        return ErrorCodes.DOWNLOAD_FAILED;
     }
 
     public void downloadFullUpdate(final ReadableMap options, final Promise promise) {

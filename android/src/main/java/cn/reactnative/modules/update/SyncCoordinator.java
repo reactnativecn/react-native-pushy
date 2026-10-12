@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -469,8 +470,8 @@ final class SyncCoordinator {
         boolean downloaded = context.hasCompletedVersion(hash);
         if (!downloaded) {
             downloaded = performAttempts(
-                context, decision.optJSONArray("attempts"), hash, currentVersion,
-                deadlineNanos);
+                decision.optJSONArray("attempts"), currentVersion, deadlineNanos,
+                downloadStarter(context, hash, currentVersion));
         }
         if (!downloaded) {
             // The native attempt has finished, so JS may safely reuse the
@@ -724,9 +725,29 @@ final class SyncCoordinator {
         return Math.min(phaseDeadlineNanos, holdDeadlineNanos);
     }
 
-    private static boolean performAttempts(
-        UpdateContext context, JSONArray attempts, String hash, String originHash,
-        long holdDeadlineNanos
+    /** Queues one download attempt; null when it was rejected up front (the listener was told). */
+    interface DownloadStarter {
+        @Nullable
+        DownloadTaskParams start(
+            String type, String url, UpdateContext.DownloadFileListener listener, long deadlineNanos);
+    }
+
+    private static DownloadStarter downloadStarter(
+        final UpdateContext context, final String hash, final String originHash
+    ) {
+        return (type, url, listener, deadlineNanos) -> {
+            if ("diff".equals(type)) {
+                return context.downloadPatchFromPpk(url, hash, originHash, listener, deadlineNanos);
+            }
+            if ("pdiff".equals(type)) {
+                return context.downloadPatchFromApk(url, hash, listener, deadlineNanos);
+            }
+            return context.downloadFullUpdate(url, hash, listener, deadlineNanos);
+        };
+    }
+
+    static boolean performAttempts(
+        @Nullable JSONArray attempts, @Nullable String originHash, long holdDeadlineNanos, DownloadStarter starter
     ) {
         if (attempts == null) {
             return false;
@@ -776,6 +797,7 @@ final class SyncCoordinator {
                 }
                 final CountDownLatch latch = new CountDownLatch(1);
                 final AtomicBoolean succeeded = new AtomicBoolean(false);
+                final AtomicReference<Throwable> failure = new AtomicReference<>();
                 final String attemptType = type;
                 UpdateContext.DownloadFileListener listener =
                     new UpdateContext.DownloadFileListener() {
@@ -789,20 +811,11 @@ final class SyncCoordinator {
                         public void onDownloadFailed(Throwable error) {
                             Log.i(Texts.LOG_TAG, "native sync: " + attemptType
                                 + " attempt failed: " + error);
+                            failure.set(error);
                             latch.countDown();
                         }
                     };
-                DownloadTaskParams task;
-                if ("diff".equals(type)) {
-                    task = context.downloadPatchFromPpk(
-                        url, hash, originHash, listener, deadlineNanos);
-                } else if ("pdiff".equals(type)) {
-                    task = context.downloadPatchFromApk(
-                        url, hash, listener, deadlineNanos);
-                } else {
-                    task = context.downloadFullUpdate(
-                        url, hash, listener, deadlineNanos);
-                }
+                DownloadTaskParams task = starter.start(type, url, listener, deadlineNanos);
                 try {
                     if (!latch.await(remainingNanos, TimeUnit.NANOSECONDS)) {
                         Log.w(Texts.LOG_TAG,
@@ -828,6 +841,14 @@ final class SyncCoordinator {
                 }
                 if (succeeded.get()) {
                     return true;
+                }
+                Throwable error = failure.get();
+                if (error != null
+                    && !ErrorCodes.isMirrorRetryable(ErrorCodes.forDownloadFailure(error))) {
+                    // The bytes arrived but could not be applied: every
+                    // mirror serves the same artifact, so move on to the
+                    // next strategy instead of downloading it again.
+                    break;
                 }
             }
         }
