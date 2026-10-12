@@ -1,0 +1,451 @@
+{
+  "description": "Native config gate and normalizer (cpp/update_flow_core/native_config.h), shared by the Android, iOS and Harmony orchestrators and replayed by scripts/test-update-flow-core.sh. `runnable`: the persisted config text -> RunnableConfigJson ({appKey} when a round may run, else {status, reason}); disabled follows JS truthiness and appKey is trimmed like String.prototype.trim. `normalize`: the options JSON a host passes to configure() -> the persisted config (`expected`, compared as text) or the error message (`error`). Hand-maintained.",
+  "runnable": [
+    {
+      "name": "absent config is not configured",
+      "config": "",
+      "expected": {
+        "status": "skipped",
+        "reason": "not_configured"
+      }
+    },
+    {
+      "name": "whitespace-only text is invalid JSON",
+      "config": "  ",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "unterminated object",
+      "config": "{",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "trailing content after the object is invalid",
+      "config": "{\"appKey\":\"k\"} x",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "JSON array is not a config",
+      "config": "[]",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "JSON null is not a config",
+      "config": "null",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "JSON string is not a config",
+      "config": "\"{}\"",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "appKey alone is runnable",
+      "config": "{\"appKey\":\"k\"}",
+      "expected": {
+        "appKey": "k"
+      }
+    },
+    {
+      "name": "full persisted config is runnable",
+      "config": "{\"appKey\":\"k\",\"endpoints\":[\"https://update.react-native.cn/api\",\"https://update.reactnative.cn/api\"],\"queryUrls\":[\"https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json\",\"https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json\"],\"afterDownload\":\"none\",\"disabled\":false,\"rnu\":\"\",\"rn\":\"\"}",
+      "expected": {
+        "appKey": "k"
+      }
+    },
+    {
+      "name": "appKey is trimmed",
+      "config": "{\"appKey\":\" \\t k \\n\"}",
+      "expected": {
+        "appKey": "k"
+      }
+    },
+    {
+      "name": "appKey trim follows String.prototype.trim (NBSP, ideographic space, BOM)",
+      "config": "{\"appKey\":\"\u00a0\ufeffk\u3000\u2028\"}",
+      "expected": {
+        "appKey": "k"
+      }
+    },
+    {
+      "name": "control characters other than TAB/LF/VT/FF/CR are not trimmed",
+      "config": "{\"appKey\":\"\\u0001k\"}",
+      "expected": {
+        "appKey": "\u0001k"
+      }
+    },
+    {
+      "name": "inner whitespace is kept",
+      "config": "{\"appKey\":\" a b \"}",
+      "expected": {
+        "appKey": "a b"
+      }
+    },
+    {
+      "name": "blank appKey is invalid",
+      "config": "{\"appKey\":\" \\n\u3000\"}",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "empty appKey is invalid",
+      "config": "{\"appKey\":\"\"}",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "missing appKey is invalid",
+      "config": "{}",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "null appKey is invalid",
+      "config": "{\"appKey\":null}",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "numeric appKey is invalid",
+      "config": "{\"appKey\":1}",
+      "expected": {
+        "status": "failed",
+        "reason": "invalid_config"
+      }
+    },
+    {
+      "name": "duplicate keys: the last one wins",
+      "config": "{\"appKey\":\"\",\"appKey\":\"k\"}",
+      "expected": {
+        "appKey": "k"
+      }
+    },
+    {
+      "name": "disabled true",
+      "config": "{\"appKey\":\"k\",\"disabled\":true}",
+      "expected": {
+        "status": "skipped",
+        "reason": "disabled"
+      }
+    },
+    {
+      "name": "disabled wins over a missing appKey",
+      "config": "{\"disabled\":true}",
+      "expected": {
+        "status": "skipped",
+        "reason": "disabled"
+      }
+    },
+    {
+      "name": "disabled 1 is truthy",
+      "config": "{\"appKey\":\"k\",\"disabled\":1}",
+      "expected": {
+        "status": "skipped",
+        "reason": "disabled"
+      }
+    },
+    {
+      "name": "disabled \"true\" is truthy",
+      "config": "{\"appKey\":\"k\",\"disabled\":\"true\"}",
+      "expected": {
+        "status": "skipped",
+        "reason": "disabled"
+      }
+    },
+    {
+      "name": "disabled \"false\" is a non-empty string, so truthy",
+      "config": "{\"appKey\":\"k\",\"disabled\":\"false\"}",
+      "expected": {
+        "status": "skipped",
+        "reason": "disabled"
+      }
+    },
+    {
+      "name": "disabled [] is truthy",
+      "config": "{\"appKey\":\"k\",\"disabled\":[]}",
+      "expected": {
+        "status": "skipped",
+        "reason": "disabled"
+      }
+    },
+    {
+      "name": "disabled {} is truthy",
+      "config": "{\"appKey\":\"k\",\"disabled\":{}}",
+      "expected": {
+        "status": "skipped",
+        "reason": "disabled"
+      }
+    },
+    {
+      "name": "disabled false runs",
+      "config": "{\"appKey\":\"k\",\"disabled\":false}",
+      "expected": {
+        "appKey": "k"
+      }
+    },
+    {
+      "name": "disabled 0 runs",
+      "config": "{\"appKey\":\"k\",\"disabled\":0}",
+      "expected": {
+        "appKey": "k"
+      }
+    },
+    {
+      "name": "disabled \"\" runs",
+      "config": "{\"appKey\":\"k\",\"disabled\":\"\"}",
+      "expected": {
+        "appKey": "k"
+      }
+    },
+    {
+      "name": "disabled null runs",
+      "config": "{\"appKey\":\"k\",\"disabled\":null}",
+      "expected": {
+        "appKey": "k"
+      }
+    }
+  ],
+  "normalize": [
+    {
+      "name": "appKey alone takes Pushy's endpoints and discovery",
+      "options": "{\"appKey\":\"test-app\"}",
+      "expected": "{\"appKey\":\"test-app\",\"endpoints\":[\"https://update.react-native.cn/api\",\"https://update.reactnative.cn/api\"],\"queryUrls\":[\"https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json\",\"https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json\"],\"afterDownload\":\"none\",\"disabled\":false,\"rnu\":\"\",\"rn\":\"\"}"
+    },
+    {
+      "name": "appKey is persisted as given",
+      "options": "{\"appKey\":\" k \"}",
+      "expected": "{\"appKey\":\" k \",\"endpoints\":[\"https://update.react-native.cn/api\",\"https://update.reactnative.cn/api\"],\"queryUrls\":[\"https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json\",\"https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json\"],\"afterDownload\":\"none\",\"disabled\":false,\"rnu\":\"\",\"rn\":\"\"}"
+    },
+    {
+      "name": "custom endpoints get no default discovery and are deduplicated",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://updates.example/api/\",\" https://updates.example/api \",\"https://updates.example/api//\"],\"afterDownload\":\"setNeedUpdate\"}",
+      "expected": "{\"appKey\":\"a\",\"endpoints\":[\"https://updates.example/api\"],\"queryUrls\":[],\"afterDownload\":\"setNeedUpdate\",\"disabled\":false,\"rnu\":\"\",\"rn\":\"\"}"
+    },
+    {
+      "name": "explicit discovery, identity overrides and disabled",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"http://localhost:8080/api\"],\"queryUrls\":[\"https://updates.example/endpoints.json?v=1\",\"https://updates.example/endpoints.json?v=1\"],\"packageVersion\":\"2.0\",\"rn\":\"0.77.3\",\"rnu\":\"test-sdk\",\"disabled\":true}",
+      "expected": "{\"appKey\":\"a\",\"endpoints\":[\"http://localhost:8080/api\"],\"queryUrls\":[\"https://updates.example/endpoints.json?v=1\"],\"afterDownload\":\"none\",\"disabled\":true,\"rnu\":\"test-sdk\",\"rn\":\"0.77.3\",\"packageVersion\":\"2.0\"}"
+    },
+    {
+      "name": "discovery URLs keep their trailing slash",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://e.example\"],\"queryUrls\":[\"https://q.example/list/\"]}",
+      "expected": "{\"appKey\":\"a\",\"endpoints\":[\"https://e.example\"],\"queryUrls\":[\"https://q.example/list/\"],\"afterDownload\":\"none\",\"disabled\":false,\"rnu\":\"\",\"rn\":\"\"}"
+    },
+    {
+      "name": "IPv6 host with port",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"http://[::1]:8080\"]}",
+      "expected": "{\"appKey\":\"a\",\"endpoints\":[\"http://[::1]:8080\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"disabled\":false,\"rnu\":\"\",\"rn\":\"\"}"
+    },
+    {
+      "name": "empty rnu and rn are allowed",
+      "options": "{\"appKey\":\"a\",\"rnu\":\"\",\"rn\":\"\"}",
+      "expected": "{\"appKey\":\"a\",\"endpoints\":[\"https://update.react-native.cn/api\",\"https://update.reactnative.cn/api\"],\"queryUrls\":[\"https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json\",\"https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json\"],\"afterDownload\":\"none\",\"disabled\":false,\"rnu\":\"\",\"rn\":\"\"}"
+    },
+    {
+      "name": "explicit defaults equal the omitted ones",
+      "options": "{\"appKey\":\"a\",\"afterDownload\":\"none\",\"disabled\":false}",
+      "expected": "{\"appKey\":\"a\",\"endpoints\":[\"https://update.react-native.cn/api\",\"https://update.reactnative.cn/api\"],\"queryUrls\":[\"https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json\",\"https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json\"],\"afterDownload\":\"none\",\"disabled\":false,\"rnu\":\"\",\"rn\":\"\"}"
+    },
+    {
+      "name": "not JSON",
+      "options": "{",
+      "error": "Invalid native configuration: expected an object"
+    },
+    {
+      "name": "JSON array",
+      "options": "[]",
+      "error": "Invalid native configuration: expected an object"
+    },
+    {
+      "name": "JSON null",
+      "options": "null",
+      "error": "Invalid native configuration: expected an object"
+    },
+    {
+      "name": "unknown option",
+      "options": "{\"appKey\":\"a\",\"endponts\":[\"https://example.com\"]}",
+      "error": "Invalid native configuration: unknown option endponts"
+    },
+    {
+      "name": "missing appKey",
+      "options": "{}",
+      "error": "Invalid native configuration: appKey must be a string and must not be blank"
+    },
+    {
+      "name": "blank appKey",
+      "options": "{\"appKey\":\"  \u3000\"}",
+      "error": "Invalid native configuration: appKey must be a string and must not be blank"
+    },
+    {
+      "name": "numeric appKey",
+      "options": "{\"appKey\":12}",
+      "error": "Invalid native configuration: appKey must be a string and must not be blank"
+    },
+    {
+      "name": "null appKey",
+      "options": "{\"appKey\":null}",
+      "error": "Invalid native configuration: appKey must be a string and must not be blank"
+    },
+    {
+      "name": "empty endpoints",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[]}",
+      "error": "Invalid native configuration: endpoints must be a non-empty array"
+    },
+    {
+      "name": "null endpoints",
+      "options": "{\"appKey\":\"a\",\"endpoints\":null}",
+      "error": "Invalid native configuration: endpoints must be a non-empty array"
+    },
+    {
+      "name": "string endpoints",
+      "options": "{\"appKey\":\"a\",\"endpoints\":\"https://example.com\"}",
+      "error": "Invalid native configuration: endpoints must be a non-empty array"
+    },
+    {
+      "name": "unsafe scheme",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"file:///tmp/update\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "upper-case scheme",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"HTTPS://example.com\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "credentials",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://user:pass@example.com\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "relative URL",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"/api\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "missing host",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https:///api\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "empty port",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://example.com:/api\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "inner whitespace",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://example.com/a b\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "inner ideographic space",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://example.com/a\u3000b\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "backslash",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://example.com\\\\@evil.example\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "base query",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://example.com/api?x=1\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "base fragment",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\"https://example.com#x\"]}",
+      "error": "Invalid native configuration: endpoints requires absolute HTTP(S) URLs without credentials, queries or fragments"
+    },
+    {
+      "name": "blank endpoint",
+      "options": "{\"appKey\":\"a\",\"endpoints\":[\" \"]}",
+      "error": "Invalid native configuration: endpoints must be a string and must not be blank"
+    },
+    {
+      "name": "wrong discovery entry type",
+      "options": "{\"appKey\":\"a\",\"queryUrls\":[42]}",
+      "error": "Invalid native configuration: queryUrls must be a string and must not be blank"
+    },
+    {
+      "name": "null discovery",
+      "options": "{\"appKey\":\"a\",\"queryUrls\":null}",
+      "error": "Invalid native configuration: queryUrls must be an array"
+    },
+    {
+      "name": "discovery with credentials",
+      "options": "{\"appKey\":\"a\",\"queryUrls\":[\"https://u@example.com/x.json\"]}",
+      "error": "Invalid native configuration: queryUrls requires absolute HTTP(S) URLs without credentials"
+    },
+    {
+      "name": "wrong activation",
+      "options": "{\"appKey\":\"a\",\"afterDownload\":\"immediate\"}",
+      "error": "Invalid native configuration: afterDownload must be none or setNeedUpdate"
+    },
+    {
+      "name": "null activation",
+      "options": "{\"appKey\":\"a\",\"afterDownload\":null}",
+      "error": "Invalid native configuration: afterDownload must be none or setNeedUpdate"
+    },
+    {
+      "name": "string disabled",
+      "options": "{\"appKey\":\"a\",\"disabled\":\"false\"}",
+      "error": "Invalid native configuration: disabled must be a boolean"
+    },
+    {
+      "name": "numeric disabled",
+      "options": "{\"appKey\":\"a\",\"disabled\":1}",
+      "error": "Invalid native configuration: disabled must be a boolean"
+    },
+    {
+      "name": "null disabled",
+      "options": "{\"appKey\":\"a\",\"disabled\":null}",
+      "error": "Invalid native configuration: disabled must be a boolean"
+    },
+    {
+      "name": "numeric rn",
+      "options": "{\"appKey\":\"a\",\"rn\":77}",
+      "error": "Invalid native configuration: rn must be a string"
+    },
+    {
+      "name": "null rnu",
+      "options": "{\"appKey\":\"a\",\"rnu\":null}",
+      "error": "Invalid native configuration: rnu must be a string"
+    },
+    {
+      "name": "blank package version",
+      "options": "{\"appKey\":\"a\",\"packageVersion\":\"\"}",
+      "error": "Invalid native configuration: packageVersion must be a string and must not be blank"
+    },
+    {
+      "name": "null package version",
+      "options": "{\"appKey\":\"a\",\"packageVersion\":null}",
+      "error": "Invalid native configuration: packageVersion must be a string and must not be blank"
+    }
+  ]
+}

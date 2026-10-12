@@ -81,6 +81,12 @@ class Value {
 
   static bool StrictEquals(const Value& a, const Value& b);
 
+  // Structural equality of JSON values (src/updateFlowCore.ts
+  // jsonDeepEqual): object key order is ignored and undefined members count
+  // as absent; arrays compare element-wise in order; primitives use ===
+  // (so 1 equals 1.0, false is not 0, null equals only null).
+  static bool DeepEquals(const Value& a, const Value& b);
+
  private:
   explicit Value(Kind kind) : kind_(kind) {}
 

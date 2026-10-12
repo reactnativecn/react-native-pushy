@@ -9,6 +9,7 @@
 #include <string>
 
 #include "../flow_json.h"
+#include "../native_config.h"
 #include "../update_flow_core.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
@@ -41,5 +42,26 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   flowjson::Stringify(
       flowcore::HandleResponse(text, identity, false, "none"));
   flowcore::IsValidResponse(text);
+
+  // The persisted-config layer reads host/JS-written text: equivalence must
+  // be reflexive for every object, and a normalized config must be runnable
+  // (or disabled) and stable under its own normalization.
+  flowcore::RunnableConfigJson(text);
+  if (flowcore::CanonicalNativeConfig(text).IsObject() &&
+      !flowcore::ConfigsEquivalent(text, text)) {
+    std::abort();
+  }
+  std::string normalized;
+  std::string error;
+  if (flowcore::NormalizeConfiguration(text, &normalized, &error)) {
+    const flowcore::RunnableConfig gate =
+        flowcore::ParseRunnableConfig(normalized);
+    std::string again;
+    if (!(gate.runnable() || gate.reason == "disabled") ||
+        !flowcore::NormalizeConfiguration(normalized, &again, &error) ||
+        again != normalized) {
+      std::abort();
+    }
+  }
   return 0;
 }

@@ -12,6 +12,7 @@
 #include <string>
 
 #include "../flow_json.h"
+#include "../native_config.h"
 #include "../update_flow_core.h"
 
 using flowjson::Parse;
@@ -418,25 +419,178 @@ int RunHandleCheckResponse() {
   return failures;
 }
 
-}  // namespace
-
-int main(int argc, char* argv[]) {
-  if (argc < 2) {
-    std::fprintf(stderr, "usage: %s <flow_vectors.json>\n", argv[0]);
-    return 2;
+// Contract C1: every case must hold in both argument orders (shared with
+// the JS implementation, src/__tests__/configEquivalenceVectors.test.ts).
+int RunConfigEquivalence(const Value& doc) {
+  int failures = 0;
+  const Value& cases = doc.Get("cases");
+  if (!cases.IsArray() || cases.Size() < 30) {
+    std::fprintf(stderr, "config equivalence vectors: too few cases\n");
+    return 1;
   }
-  std::ifstream file(argv[1]);
+  for (const Value& c : cases.elements()) {
+    const std::string& a = c.Get("a").AsString();
+    const std::string& b = c.Get("b").AsString();
+    const bool expected = c.Get("equivalent").AsBool();
+    if (flowcore::ConfigsEquivalent(a, b) != expected ||
+        flowcore::ConfigsEquivalent(b, a) != expected) {
+      std::fprintf(stderr, "config equivalence \"%s\" MISMATCH (expected %s)\n",
+                   c.Get("name").AsString().c_str(),
+                   expected ? "equivalent" : "different");
+      failures++;
+    }
+  }
+  return failures;
+}
+
+int RunNativeConfig(const Value& doc) {
+  int failures = 0;
+  const Value& runnable = doc.Get("runnable");
+  const Value& normalize = doc.Get("normalize");
+  if (!runnable.IsArray() || runnable.Size() == 0 || !normalize.IsArray() ||
+      normalize.Size() == 0) {
+    std::fprintf(stderr, "native config vectors: missing cases\n");
+    return 1;
+  }
+  for (const Value& c : runnable.elements()) {
+    const std::string actual =
+        flowcore::RunnableConfigJson(c.Get("config").AsString());
+    const std::string expected = Stringify(c.Get("expected"));
+    if (actual != expected) {
+      std::fprintf(stderr,
+                   "runnable \"%s\" MISMATCH\n  expected: %s\n  actual:   %s\n",
+                   c.Get("name").AsString().c_str(), expected.c_str(),
+                   actual.c_str());
+      failures++;
+    }
+  }
+  for (const Value& c : normalize.elements()) {
+    std::string out;
+    std::string error;
+    const bool ok = flowcore::NormalizeConfiguration(
+        c.Get("options").AsString(), &out, &error);
+    const std::string actual = ok ? out : "error: " + error;
+    const Value& expectedValue = c.Get("expected");
+    const std::string expected = expectedValue.IsString()
+                                     ? expectedValue.AsString()
+                                     : "error: " + c.Get("error").AsString();
+    if (actual != expected) {
+      std::fprintf(stderr,
+                   "normalize \"%s\" MISMATCH\n  expected: %s\n  actual:   %s\n",
+                   c.Get("name").AsString().c_str(), expected.c_str(),
+                   actual.c_str());
+      failures++;
+      continue;
+    }
+    // A normalized config is what the gate later reads: it must be
+    // runnable (or disabled) and equivalent to itself.
+    if (ok) {
+      const flowcore::RunnableConfig gate = flowcore::ParseRunnableConfig(out);
+      if (!(gate.runnable() || gate.reason == "disabled") ||
+          !flowcore::ConfigsEquivalent(out, out)) {
+        std::fprintf(stderr, "normalize \"%s\": output not runnable/stable\n",
+                     c.Get("name").AsString().c_str());
+        failures++;
+      }
+    }
+  }
+  return failures;
+}
+
+int RunTrimAndDeepEquals() {
+  int failures = 0;
+  const struct {
+    const char* input;
+    const char* expected;
+  } trims[] = {
+      {"", ""},
+      {"   ", ""},
+      {"\t\n\v\f\r k \r\n", "k"},
+      {"\xc2\xa0k\xe3\x80\x80", "k"},             // NBSP, U+3000
+      {"\xef\xbb\xbfk\xe2\x80\xa8", "k"},         // BOM, U+2028
+      {"\xe2\x80\x8ak\xe2\x80\xaf\xe2\x81\x9f", "k"},  // U+200A U+202F U+205F
+      {"\xe1\x9a\x80k", "k"},                     // U+1680
+      {"\xe2\x80\x8bk", "\xe2\x80\x8bk"},          // U+200B is not whitespace
+      {"\x01k\x1f", "\x01k\x1f"},                  // C0 controls are kept
+      {"\xc2\x85k", "\xc2\x85k"},                  // U+0085 (NEL) is kept
+      {"a b", "a b"},
+      {"\xc2", "\xc2"},                            // truncated sequence
+  };
+  for (const auto& t : trims) {
+    if (flowcore::TrimJsWhitespace(t.input) != t.expected) {
+      std::fprintf(stderr, "TrimJsWhitespace(\"%s\") MISMATCH\n", t.input);
+      failures++;
+    }
+  }
+  const auto parse = [](const char* text) {
+    bool ok = false;
+    return Parse(text, &ok);
+  };
+  const struct {
+    const char* a;
+    const char* b;
+    bool equal;
+  } pairs[] = {
+      {"{\"a\":1,\"b\":[1,{\"c\":null}]}", "{\"b\":[1,{\"c\":null}],\"a\":1}", true},
+      {"{\"a\":1}", "{\"a\":1,\"b\":2}", false},
+      {"{\"a\":1,\"b\":2}", "{\"a\":1}", false},
+      {"[1,2]", "[2,1]", false},
+      {"1", "1.0", true},
+      {"0", "false", false},
+      {"null", "null", true},
+      {"\"1\"", "1", false},
+      {"[]", "{}", false},
+  };
+  for (const auto& p : pairs) {
+    if (Value::DeepEquals(parse(p.a), parse(p.b)) != p.equal) {
+      std::fprintf(stderr, "DeepEquals(%s, %s) MISMATCH\n", p.a, p.b);
+      failures++;
+    }
+  }
+  // Undefined members count as absent.
+  Value withUndefined = Value::Object();
+  withUndefined.Set("a", Value::Number(1));
+  withUndefined.Set("b", Value::Undefined());
+  if (!Value::DeepEquals(withUndefined, parse("{\"a\":1}")) ||
+      !Value::DeepEquals(parse("{\"a\":1}"), withUndefined)) {
+    std::fprintf(stderr, "DeepEquals: undefined member is not absent\n");
+    failures++;
+  }
+  return failures;
+}
+
+bool LoadJson(const char* path, Value* doc) {
+  std::ifstream file(path);
   if (!file) {
-    std::fprintf(stderr, "cannot open %s\n", argv[1]);
-    return 2;
+    std::fprintf(stderr, "cannot open %s\n", path);
+    return false;
   }
   std::stringstream buffer;
   buffer << file.rdbuf();
-
   bool ok = false;
-  Value doc = Parse(buffer.str(), &ok);
+  *doc = Parse(buffer.str(), &ok);
   if (!ok) {
-    std::fprintf(stderr, "failed to parse %s\n", argv[1]);
+    std::fprintf(stderr, "failed to parse %s\n", path);
+  }
+  return ok;
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+  if (argc < 4) {
+    std::fprintf(stderr,
+                 "usage: %s <flow_vectors.json> "
+                 "<config-equivalence-vectors.json> "
+                 "<native-config-vectors.json>\n",
+                 argv[0]);
+    return 2;
+  }
+  Value doc;
+  Value equivalenceDoc;
+  Value nativeConfigDoc;
+  if (!LoadJson(argv[1], &doc) || !LoadJson(argv[2], &equivalenceDoc) ||
+      !LoadJson(argv[3], &nativeConfigDoc)) {
     return 2;
   }
 
@@ -446,7 +600,9 @@ int main(int argc, char* argv[]) {
     return 2;
   }
   int failures = RunParserRobustness() + RunNumberConversion() +
-                 RunInputCaps() + RunHandleCheckResponse();
+                 RunInputCaps() + RunHandleCheckResponse() +
+                 RunConfigEquivalence(equivalenceDoc) +
+                 RunNativeConfig(nativeConfigDoc) + RunTrimAndDeepEquals();
   for (size_t i = 0; i < cases.Size(); i++) {
     const Value& testCase = cases.At(i);
     const std::string& fn = testCase.Get("fn").AsString();
@@ -470,11 +626,17 @@ int main(int argc, char* argv[]) {
   }
 
   if (failures) {
-    std::fprintf(stderr, "%d failures (%zu vectors + parser robustness)\n",
+    std::fprintf(stderr,
+                 "%d failures (%zu flow vectors, config vectors + parser "
+                 "robustness)\n",
                  failures, cases.Size());
     return 1;
   }
-  std::printf("all %zu flow vectors + parser robustness passed\n",
-              cases.Size());
+  std::printf(
+      "all %zu flow vectors, %zu config equivalence vectors, %zu+%zu native "
+      "config vectors + parser robustness passed\n",
+      cases.Size(), equivalenceDoc.Get("cases").Size(),
+      nativeConfigDoc.Get("runnable").Size(),
+      nativeConfigDoc.Get("normalize").Size());
   return 0;
 }

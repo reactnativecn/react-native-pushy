@@ -86,6 +86,40 @@ bool Value::StrictEquals(const Value& a, const Value& b) {
   return false;
 }
 
+bool Value::DeepEquals(const Value& a, const Value& b) {
+  if (a.kind_ == Kind::Array && b.kind_ == Kind::Array) {
+    if (a.elements_.size() != b.elements_.size()) {
+      return false;
+    }
+    for (size_t i = 0; i < a.elements_.size(); i++) {
+      if (!DeepEquals(a.elements_[i], b.elements_[i])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  if (a.kind_ == Kind::Object && b.kind_ == Kind::Object) {
+    size_t defined = 0;
+    for (const auto& member : a.members_) {
+      if (member.second.IsUndefined()) {
+        continue;
+      }
+      defined++;
+      const Value& other = b.Get(member.first);
+      if (other.IsUndefined() || !DeepEquals(member.second, other)) {
+        return false;
+      }
+    }
+    for (const auto& member : b.members_) {
+      if (!member.second.IsUndefined()) {
+        defined--;
+      }
+    }
+    return defined == 0;
+  }
+  return StrictEquals(a, b);
+}
+
 namespace {
 
 void AppendEscaped(const std::string& s, std::string* out) {

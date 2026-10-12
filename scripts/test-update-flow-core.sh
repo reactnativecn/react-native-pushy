@@ -25,7 +25,9 @@ c++ \
   -o "$BUILD_DIR/update_flow_core_test"
 
 "$BUILD_DIR/update_flow_core_test" \
-  "$ROOT_DIR/cpp/update_flow_core/tests/flow_vectors.json"
+  "$ROOT_DIR/cpp/update_flow_core/tests/flow_vectors.json" \
+  "$ROOT_DIR/cpp/update_flow_core/tests/config-equivalence-vectors.json" \
+  "$ROOT_DIR/cpp/update_flow_core/tests/native-config-vectors.json"
 
 # Opt-in libFuzzer run of the JSON parser + decision pipeline (raw server
 # bytes): FUZZ=1 bun run test:flow-core.
@@ -44,6 +46,7 @@ if cpp_test_fuzz_compiler; then
   printf '{"update":true,"hash":"h2","full":"h2.ppk","diff":"d.hdiff","paths":["cdn.x.com","https://m.x.com/"],"name":"v2","config":{"forceBoot":true}}' > "$CORPUS_DIR/seed-download.json"
   printf '{"update":true,"hash":"root","expVersion":{"hash":"gray","full":"g.ppk","config":{"rollout":{"2.3.4":63}}},"paths":["cdn"]}' > "$CORPUS_DIR/seed-rollout.json"
   printf '{"upToDate":true,"s":"\\ud83d\\ude00 \\u00e9 \\n","n":[1,-0.5,1e2,null,false]}' > "$CORPUS_DIR/seed-scalars.json"
+  printf '{"appKey":" k ","endpoints":["https://a.example/","https://a.example"],"disabled":false,"rn":""}' > "$CORPUS_DIR/seed-config.json"
   "$BUILD_DIR/fuzz_flow_json" \
     -max_total_time="${FUZZ_SECONDS:-20}" \
     -max_len=4096 \
