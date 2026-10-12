@@ -1,5 +1,5 @@
 name: Bounded content-addressed E2E cache
-description: Restore shared content caches; only mainline core saves a daily snapshot.
+description: Restore shared content caches; only the mainline iOS build job saves a daily snapshot.
 inputs:
   path:
     description: Content-addressed cache directory, never a built app.
@@ -8,7 +8,7 @@ inputs:
     description: Cache schema/toolchain identity.
     required: true
   write:
-    description: The core matrix leg may write on a trusted master push.
+    description: The e2e-ios-build job may write on a trusted master push.
     default: 'false'
 runs:
   using: composite
@@ -17,7 +17,7 @@ runs:
       shell: bash
       run: echo "day=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
     - name: Restore read-only snapshot
-      if: "!(inputs.write == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master' && github.job == 'e2e-ios')"
+      if: "!(inputs.write == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master' && github.job == 'e2e-ios-build')"
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.path }}
@@ -25,7 +25,7 @@ runs:
         restore-keys: |
           e2e-content-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.scope }}-
     - name: Restore and save trusted daily snapshot
-      if: inputs.write == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master' && github.job == 'e2e-ios'
+      if: inputs.write == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/master' && github.job == 'e2e-ios-build'
       uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: ${{ inputs.path }}

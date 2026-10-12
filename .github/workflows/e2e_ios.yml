@@ -4,17 +4,16 @@ on:
   pull_request:
     branches:
       - '**'
-    paths:
+    paths: &e2e-ios-paths
       - '.github/workflows/e2e_ios.yml'
       - '.github/actions/e2e-cache/**'
       - '.gitmodules'
+      # codegenConfig is copied into the linked package and drives codegen
       - 'package.json'
-      - 'bun.lock'
       - 'react-native-update.podspec'
       - 'react-native.config.js'
       - 'expo-module.config.json'
       - 'src/**'
-      - 'scripts/**'
       - 'ios/**'
       - 'cpp/**'
       - 'android/jni/**'
@@ -22,47 +21,20 @@ on:
   push:
     branches:
       - master
-    paths:
-      - '.github/workflows/e2e_ios.yml'
-      - '.github/actions/e2e-cache/**'
-      - '.gitmodules'
-      - 'package.json'
-      - 'bun.lock'
-      - 'react-native-update.podspec'
-      - 'react-native.config.js'
-      - 'expo-module.config.json'
-      - 'src/**'
-      - 'scripts/**'
-      - 'ios/**'
-      - 'cpp/**'
-      - 'android/jni/**'
-      - 'Example/e2etest/**'
+    paths: *e2e-ios-paths
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  e2e-ios:
-    # 不带 matrix 值全量拼名,否则 check 叫 "e2e-ios (native, --config e2e/…)"
-    name: e2e-ios (${{ matrix.suite }})
+  # Builds the release .app once (pod install + xcodebuild, or the cached app
+  # with a refreshed JS bundle) and prepares the local update artifacts; both
+  # test legs below install that same build instead of compiling it twice.
+  e2e-ios-build:
+    name: e2e-ios (build)
     runs-on: macos-26
-    # 绿色基线 ~16 分钟。60 分钟覆盖最坏情况:一个用例等满 300s testTimeout,
-    # 再叠一次 --retries 1 全量重试。40 分钟不够——实测重试跑到一半被腰斩,
-    # 把"慢但能恢复"的运行变成 cancelled,等于白开了 retries。
-    timeout-minutes: 60
-    strategy:
-      # 两条 leg 各自独立成败:一条超时不该掩盖另一条的结论
-      fail-fast: false
-      matrix:
-        include:
-          # 既有 suite(local-merge / bundle-hash),沿用默认 runner 配置
-          - suite: core
-            jest-config: ''
-          # 原生冷启动检测:每条断言都要真实重启 app,单独跑才不会把 core
-          # 顶过 40 分钟(拆分前实测 core 已占 36 分)
-          - suite: native
-            jest-config: '--config e2e/native/jest.config.js'
+    timeout-minutes: 45
     steps:
       - name: Checkout react-native-update
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -98,45 +70,36 @@ jobs:
         with:
           xcode-version: '26.4'
 
-      - name: Boot iOS simulator in background
-        # 模拟器冷启动要 2-5 分钟,提前异步 boot,让它和依赖安装/xcodebuild
-        # 并行。型号必须用与 .detoxrc.ts 完全同一份探测代码——此前 shell 里
-        # 另写一份选中了 detox 不用的设备,预热全部白费。
-        # 失败无害:detox 测试阶段会自己 boot。
-        run: |
-          udid=$(node Example/e2etest/scripts/detect-ios-simulator-type.js --udid)
-          if [ -n "$udid" ]; then
-            echo "pre-booting $(node Example/e2etest/scripts/detect-ios-simulator-type.js) ($udid)"
-            xcrun simctl boot "$udid" || true
-          else
-            echo "no matching simulator found, skipping pre-boot"
-          fi
-
       - name: Cache Homebrew downloads
-        # Bottle content addressing still controls reuse; only snapshot writes
-        # are reduced to the successful master/core run's daily identity.
+        # Bottle content addressing still controls reuse; only this job's
+        # master runs write the daily snapshot. applesimutils is installed
+        # here too (unused by the build) so the snapshot the test legs
+        # restore holds every bottle they need.
         uses: ./.github/actions/e2e-cache
         with:
           path: ~/Library/Caches/Homebrew
           scope: brew-xcode-26.4
-          write: ${{ matrix.suite == 'core' }}
+          write: 'true'
 
       - name: Install applesimutils and ccache
         run: brew trust wix/brew && HOMEBREW_NO_AUTO_UPDATE=1 brew install wix/brew/applesimutils ccache
 
       - name: Cache ccache
         # Old content-addressed entries affect hit rate, not build correctness.
-        # PRs and the native matrix leg only restore; no per-commit duplicates.
+        # PRs only restore; no per-commit duplicates.
         uses: ./.github/actions/e2e-cache
         with:
           path: ~/Library/Caches/ccache
           scope: ccache-xcode-26.4
-          write: ${{ matrix.suite == 'core' }}
+          write: 'true'
 
       - name: Install e2etest dependencies
         run: cd Example/e2etest && bun install --frozen-lockfile
 
       - name: Link local react-native-update
+        # Mirrors what an npm install ships (package.json `files`), plus cpp/
+        # for the native build; scripts/ is dev-only and unused by any build
+        # step.
         run: |
           set -euo pipefail
           export LOCAL_RNU_VERSION="$(node -p "require('./Example/e2etest/node_modules/react-native-update/package.json').version")"
@@ -144,7 +107,7 @@ jobs:
           rm -rf "$LOCAL_RNU_DIR" Example/e2etest/node_modules/react-native-update
           mkdir -p "$LOCAL_RNU_DIR"
           cp package.json react-native-update.podspec react-native.config.js expo-module.config.json "$LOCAL_RNU_DIR"/
-          rsync -a --exclude='.git' src ios android cpp scripts "$LOCAL_RNU_DIR"/
+          rsync -a --exclude='.git' src ios android cpp "$LOCAL_RNU_DIR"/
           node -e "const fs = require('fs'); const file = 'Example/e2etest/.e2e-artifacts/local-react-native-update/package.json'; const pkg = JSON.parse(fs.readFileSync(file, 'utf8')); pkg.version = process.env.LOCAL_RNU_VERSION; fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');"
           ln -s ../.e2e-artifacts/local-react-native-update Example/e2etest/node_modules/react-native-update
 
@@ -157,7 +120,7 @@ jobs:
         with:
           path: Example/e2etest/.metro-cache
           scope: metro-xcode-26.4
-          write: ${{ matrix.suite == 'core' }}
+          write: 'true'
 
       - name: Prepare local update artifacts
         env:
@@ -194,19 +157,6 @@ jobs:
         # RN 自带的 ccache 编译器包装脚本
         run: cd Example/e2etest/ios && USE_CCACHE=1 pod install
 
-      - name: Cache Detox iOS framework
-        id: cache-detox-ios-framework
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/Library/Detox
-          key: ${{ runner.os }}-detox-ios-framework-xcode-26.4-${{ hashFiles('Example/e2etest/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-detox-ios-framework-xcode-26.4-
-
-      - name: Build Detox iOS framework cache
-        if: steps.cache-detox-ios-framework.outputs.cache-hit != 'true'
-        run: cd Example/e2etest && bunx detox build-framework-cache
-
       - name: Detox build (ios.sim.release)
         if: steps.cache-ios-app.outputs.cache-hit != 'true'
         env:
@@ -220,9 +170,120 @@ jobs:
         if: steps.cache-ios-app.outputs.cache-hit == 'true'
         run: cd Example/e2etest && ./scripts/refresh-ios-app-bundle.sh
 
+      - name: Pack app and update artifacts
+        # tar keeps the executable bits and symlinks that upload-artifact
+        # would drop. hermesc stays behind: only the bundle refresh above
+        # needs it.
+        run: |
+          tar -cf e2e-ios-build.tar \
+            Example/e2etest/ios/build/Build/Products/Release-iphonesimulator/AwesomeProject.app \
+            Example/e2etest/.e2e-artifacts/ios
+
+      - name: Upload app and update artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-ios-build
+          path: e2e-ios-build.tar
+          if-no-files-found: error
+          retention-days: 1
+
+  e2e-ios:
+    # 不带 matrix 值全量拼名,否则 check 叫 "e2e-ios (native, --config e2e/…)"
+    name: e2e-ios (${{ matrix.suite }})
+    needs: e2e-ios-build
+    runs-on: macos-26
+    # 绿色基线(不含构建)约 10 分钟。60 分钟覆盖最坏情况:一个用例等满 300s
+    # testTimeout,再叠一次 --retries 1 全量重试。40 分钟不够——实测重试跑到
+    # 一半被腰斩,把"慢但能恢复"的运行变成 cancelled,等于白开了 retries。
+    timeout-minutes: 60
+    strategy:
+      # 两条 leg 各自独立成败:一条超时不该掩盖另一条的结论
+      fail-fast: false
+      matrix:
+        include:
+          # 既有 suite(local-merge / bundle-hash),沿用默认 runner 配置
+          - suite: core
+            jest-config: ''
+          # 原生冷启动检测:每条断言都要真实重启 app,单独跑才不会把 core
+          # 顶过 40 分钟(拆分前实测 core 已占 36 分)
+          - suite: native
+            jest-config: '--config e2e/native/jest.config.js'
+    steps:
+      - name: Checkout react-native-update
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.0
+
+      - name: Cache Bun dependencies
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-e2e-${{ hashFiles('Example/e2etest/bun.lock', 'react-native-update-cli/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-e2e-
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: '26.4'
+
+      - name: Boot iOS simulator in background
+        # 模拟器冷启动要 2-5 分钟,提前异步 boot,让它和依赖安装/下载并行。
+        # 型号必须用与 .detoxrc.js 完全同一份探测代码——此前 shell 里
+        # 另写一份选中了 detox 不用的设备,预热全部白费。
+        # 失败无害:detox 测试阶段会自己 boot。
+        run: |
+          udid=$(node Example/e2etest/scripts/detect-ios-simulator-type.js --udid)
+          if [ -n "$udid" ]; then
+            echo "pre-booting $(node Example/e2etest/scripts/detect-ios-simulator-type.js) ($udid)"
+            xcrun simctl boot "$udid" || true
+          else
+            echo "no matching simulator found, skipping pre-boot"
+          fi
+
+      - name: Cache Homebrew downloads
+        uses: ./.github/actions/e2e-cache
+        with:
+          path: ~/Library/Caches/Homebrew
+          scope: brew-xcode-26.4
+
+      - name: Install applesimutils
+        run: brew trust wix/brew && HOMEBREW_NO_AUTO_UPDATE=1 brew install wix/brew/applesimutils
+
+      - name: Install e2etest dependencies
+        run: cd Example/e2etest && bun install --frozen-lockfile
+
+      - name: Download app and update artifacts
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: e2e-ios-build
+
+      - name: Unpack app and update artifacts
+        run: tar -xf e2e-ios-build.tar && rm e2e-ios-build.tar
+
+      - name: Cache Detox iOS framework
+        id: cache-detox-ios-framework
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Detox
+          key: ${{ runner.os }}-detox-ios-framework-xcode-26.4-${{ hashFiles('Example/e2etest/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-detox-ios-framework-xcode-26.4-
+
+      - name: Build Detox iOS framework cache
+        if: steps.cache-detox-ios-framework.outputs.cache-hit != 'true'
+        run: cd Example/e2etest && bunx detox build-framework-cache
+
       - name: Detox test (ios.sim.release)
         env:
-          RNU_CLI_ROOT: ${{ github.workspace }}/react-native-update-cli
           RNU_E2E_SKIP_PREPARE: 'true'
         run: cd Example/e2etest && E2E_PLATFORM=ios bunx detox test --configuration ios.sim.release --retries 1 ${{ matrix.jest-config }}
 

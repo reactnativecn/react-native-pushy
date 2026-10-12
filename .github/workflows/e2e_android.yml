@@ -4,36 +4,23 @@ on:
   pull_request:
     branches:
       - '**'
-    paths:
+    paths: &e2e-android-paths
       - '.github/workflows/e2e_android.yml'
+      - '.github/actions/e2e-android-setup/**'
       - '.gitmodules'
+      # codegenConfig is copied into the linked package and drives codegen
       - 'package.json'
-      - 'bun.lock'
       - 'react-native-update.podspec'
       - 'react-native.config.js'
       - 'expo-module.config.json'
       - 'src/**'
-      - 'scripts/**'
       - 'android/**'
       - 'cpp/**'
       - 'Example/e2etest/**'
   push:
     branches:
       - master
-      - main
-    paths:
-      - '.github/workflows/e2e_android.yml'
-      - '.gitmodules'
-      - 'package.json'
-      - 'bun.lock'
-      - 'react-native-update.podspec'
-      - 'react-native.config.js'
-      - 'expo-module.config.json'
-      - 'src/**'
-      - 'scripts/**'
-      - 'android/**'
-      - 'cpp/**'
-      - 'Example/e2etest/**'
+    paths: *e2e-android-paths
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -49,65 +36,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Checkout react-native-update-cli
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          repository: reactnativecn/react-native-update-cli
-          path: react-native-update-cli
-
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.0
-
-      - name: Cache Bun dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-e2e-${{ hashFiles('Example/e2etest/bun.lock', 'react-native-update-cli/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-e2e-
-
-      - name: Setup Java
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            Example/e2etest/bun.lock
-            Example/e2etest/android/*.gradle
-            Example/e2etest/android/**/*.gradle
-            Example/e2etest/android/gradle/wrapper/gradle-wrapper.properties
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Install e2etest dependencies
-        run: cd Example/e2etest && bun install --frozen-lockfile
-
-      - name: Link local react-native-update
-        run: |
-          set -euo pipefail
-          export LOCAL_RNU_VERSION="$(node -p "require('./Example/e2etest/node_modules/react-native-update/package.json').version")"
-          LOCAL_RNU_DIR="$PWD/Example/e2etest/.e2e-artifacts/local-react-native-update"
-          rm -rf "$LOCAL_RNU_DIR" Example/e2etest/node_modules/react-native-update
-          mkdir -p "$LOCAL_RNU_DIR"
-          cp package.json react-native-update.podspec react-native.config.js expo-module.config.json "$LOCAL_RNU_DIR"/
-          rsync -a --exclude='.git' src ios android cpp scripts "$LOCAL_RNU_DIR"/
-          node -e "const fs = require('fs'); const file = 'Example/e2etest/.e2e-artifacts/local-react-native-update/package.json'; const pkg = JSON.parse(fs.readFileSync(file, 'utf8')); pkg.version = process.env.LOCAL_RNU_VERSION; fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');"
-          ln -s ../.e2e-artifacts/local-react-native-update Example/e2etest/node_modules/react-native-update
-
-      - name: Install react-native-update-cli dependencies
-        run: cd react-native-update-cli && bun install --frozen-lockfile && bun run build
+      - name: Set up e2e environment
+        uses: ./.github/actions/e2e-android-setup
 
       - name: Detox build (android.emu.release)
         env:
@@ -135,19 +65,19 @@ jobs:
           avd-name: api34
           # Pinned while stabilizing e2e. The 2026-07-30 breakage was NOT the
           # emulator version (red herring): bundle-hash.test.ts landed 07-29 as
-          # a second suite, and .detoxrc.js forces maxWorkers 2 on CI — the
-          # second Detox worker tries to boot the same AVD twice, which Android
-          # cannot do, and retries until the job times out (fixed with
-          # --maxWorkers 1 below). Unpin once a run proves 37.x stable.
+          # a second suite, and a second Detox worker tried to boot the same
+          # AVD twice, which Android cannot do, retrying until the job timed
+          # out. .detoxrc.js now pins the Android configurations to one
+          # worker. Unpin once a run proves 37.x stable.
           emulator-build: 15507667
           emulator-boot-timeout: 900
           # 每条命令自带 cd:android-emulator-runner 逐行起独立 shell,
           # 单独一行的 cd 不会保持到下一条(实测 detox 会在仓库根找不到 jest)
           script: |
-            cd Example/e2etest && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --maxWorkers 1
+            cd Example/e2etest && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1
             # 原生冷启动检测有自己的 runner 配置(见 e2e/native/jest.config.js);
             # Android 这个 job 有预算,不必像 iOS 那样拆成独立 job
-            cd Example/e2etest && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --maxWorkers 1 --config e2e/native/jest.config.js
+            cd Example/e2etest && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --config e2e/native/jest.config.js
 
       - name: Upload Detox artifacts
         # cancelled() 覆盖 job 超时被杀的场景,否则超时时拿不到现场
@@ -172,56 +102,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - name: Set up e2e environment
+        uses: ./.github/actions/e2e-android-setup
         with:
-          node-version: 24
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.0
-
-      - name: Cache Bun dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-e2e-${{ hashFiles('Example/e2etest/bun.lock', 'react-native-update-cli/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-e2e-
-
-      - name: Setup Java
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-          cache-dependency-path: |
-            Example/e2etest/bun.lock
-            Example/e2etest/android/*.gradle
-            Example/e2etest/android/**/*.gradle
-            Example/e2etest/android/gradle/wrapper/gradle-wrapper.properties
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Install e2etest dependencies
-        run: cd Example/e2etest && bun install --frozen-lockfile
-
-      - name: Link local react-native-update
-        run: |
-          set -euo pipefail
-          export LOCAL_RNU_VERSION="$(node -p "require('./Example/e2etest/node_modules/react-native-update/package.json').version")"
-          LOCAL_RNU_DIR="$PWD/Example/e2etest/.e2e-artifacts/local-react-native-update"
-          rm -rf "$LOCAL_RNU_DIR" Example/e2etest/node_modules/react-native-update
-          mkdir -p "$LOCAL_RNU_DIR"
-          cp package.json react-native-update.podspec react-native.config.js expo-module.config.json "$LOCAL_RNU_DIR"/
-          rsync -a --exclude='.git' src ios android cpp scripts "$LOCAL_RNU_DIR"/
-          node -e "const fs = require('fs'); const file = 'Example/e2etest/.e2e-artifacts/local-react-native-update/package.json'; const pkg = JSON.parse(fs.readFileSync(file, 'utf8')); pkg.version = process.env.LOCAL_RNU_VERSION; fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');"
-          ln -s ../.e2e-artifacts/local-react-native-update Example/e2etest/node_modules/react-native-update
+          checkout-cli: 'false'
 
       - name: Detox build (android.emu.debug)
         env:
@@ -248,12 +132,7 @@ jobs:
           target: google_apis
           arch: x86_64
           avd-name: api34
-          # Pinned while stabilizing e2e. The 2026-07-30 breakage was NOT the
-          # emulator version (red herring): bundle-hash.test.ts landed 07-29 as
-          # a second suite, and .detoxrc.js forces maxWorkers 2 on CI — the
-          # second Detox worker tries to boot the same AVD twice, which Android
-          # cannot do, and retries until the job times out (fixed with
-          # --maxWorkers 1 below). Unpin once a run proves 37.x stable.
+          # Pinned while stabilizing e2e; see the e2e-android job.
           emulator-build: 15507667
           emulator-boot-timeout: 900
           # 注意:emulator-runner 把 script 的每一行单独用 sh -c 执行,
@@ -285,67 +164,23 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Checkout react-native-update-cli
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up e2e environment
+        uses: ./.github/actions/e2e-android-setup
         with:
-          repository: reactnativecn/react-native-update-cli
-          path: react-native-update-cli
-
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.0
-
-      - name: Cache Bun dependencies
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-e2e-rn077-oldarch-${{ hashFiles('Example/e2etest/bun.lock', 'Example/e2etest/scripts/create-rn077-oldarch-project.js', 'react-native-update-cli/bun.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-e2e-rn077-oldarch-
-            ${{ runner.os }}-bun-e2e-
-
-      - name: Setup Java
-        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: gradle
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Create RN 0.77.3 old architecture e2e project
-        run: node Example/e2etest/scripts/create-rn077-oldarch-project.js
-
-      - name: Install RN 0.77.3 old architecture dependencies
-        run: cd .e2e-rn077-oldarch/AwesomeProject && bun install
-
-      - name: Link local react-native-update
-        run: |
-          set -euo pipefail
-          E2E_DIR=".e2e-rn077-oldarch/AwesomeProject"
-          export LOCAL_RNU_VERSION="$(node -p "require('./${E2E_DIR}/node_modules/react-native-update/package.json').version")"
-          LOCAL_RNU_DIR="$PWD/$E2E_DIR/.e2e-artifacts/local-react-native-update"
-          rm -rf "$LOCAL_RNU_DIR" "$E2E_DIR/node_modules/react-native-update"
-          mkdir -p "$LOCAL_RNU_DIR"
-          cp package.json react-native-update.podspec react-native.config.js expo-module.config.json "$LOCAL_RNU_DIR"/
-          rsync -a --exclude='.git' src ios android cpp scripts "$LOCAL_RNU_DIR"/
-          node -e "const fs = require('fs'); const file = process.env.LOCAL_RNU_DIR + '/package.json'; const pkg = JSON.parse(fs.readFileSync(file, 'utf8')); pkg.version = process.env.LOCAL_RNU_VERSION; fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');"
-          ln -s ../.e2e-artifacts/local-react-native-update "$E2E_DIR/node_modules/react-native-update"
-        env:
-          LOCAL_RNU_DIR: ${{ github.workspace }}/.e2e-rn077-oldarch/AwesomeProject/.e2e-artifacts/local-react-native-update
-
-      - name: Install react-native-update-cli dependencies
-        run: cd react-native-update-cli && bun install --frozen-lockfile && bun run build
+          project-dir: .e2e-rn077-oldarch/AwesomeProject
+          bun-cache-scope: -rn077-oldarch
+          bun-cache-key-suffix: -${{ hashFiles('Example/e2etest/scripts/create-rn077-oldarch-project.js') }}
+          # The project is generated by the script below (RN/template/Detox
+          # versions live there) after the cache is restored, so key the
+          # Gradle cache on its inputs rather than on files that do not exist
+          # yet; the library module's own build.gradle participates too.
+          gradle-cache-dependency-path: |
+            Example/e2etest/scripts/create-rn077-oldarch-project.js
+            android/build.gradle
+          create-project: node Example/e2etest/scripts/create-rn077-oldarch-project.js
+          # `react-native init --skip-install` writes no lockfile, so there is
+          # nothing to freeze against.
+          frozen-lockfile: 'false'
 
       - name: Detox build (RN 0.77.3 old arch android.emu.release)
         env:
@@ -371,18 +206,13 @@ jobs:
           target: google_apis
           arch: x86_64
           avd-name: api34
-          # Pinned while stabilizing e2e. The 2026-07-30 breakage was NOT the
-          # emulator version (red herring): bundle-hash.test.ts landed 07-29 as
-          # a second suite, and .detoxrc.js forces maxWorkers 2 on CI — the
-          # second Detox worker tries to boot the same AVD twice, which Android
-          # cannot do, and retries until the job times out (fixed with
-          # --maxWorkers 1 below). Unpin once a run proves 37.x stable.
+          # Pinned while stabilizing e2e; see the e2e-android job.
           emulator-build: 15507667
           emulator-boot-timeout: 900
           # 每条命令自带 cd,理由同上
           script: |
-            cd .e2e-rn077-oldarch/AwesomeProject && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --maxWorkers 1
-            cd .e2e-rn077-oldarch/AwesomeProject && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --maxWorkers 1 --config e2e/native/jest.config.js
+            cd .e2e-rn077-oldarch/AwesomeProject && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1
+            cd .e2e-rn077-oldarch/AwesomeProject && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --config e2e/native/jest.config.js
 
       - name: Upload Detox artifacts
         # cancelled() 覆盖 job 超时被杀的场景,否则超时时拿不到现场
