@@ -75,7 +75,7 @@ jobs:
           fi
           echo "Previous tag is $PREV_TAG"
           # The HAR embeds librnpushy.so compiled from cpp/patch_core,
-          # cpp/update_flow_core, android/jni/hpatch.c and the HDiffPatch/lzma
+          # cpp/update_flow_core, cpp/hpatch and the HDiffPatch/lzma
           # submodules (harmony/pushy/src/main/cpp/CMakeLists.txt), so any of
           # those changing must rebuild it too — reusing the previous HAR
           # would ship Harmony with an older native core than Android/iOS.

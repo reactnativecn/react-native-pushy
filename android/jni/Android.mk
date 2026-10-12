@@ -13,7 +13,7 @@ LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH)/../../cpp/update_flow_core
 
 Hdp_Files := \
-	hpatch.c \
+	../../cpp/hpatch/hpatch.c \
     HDiffPatch/libHDiffPatch/HPatch/patch.c \
 	HDiffPatch/file_for_patch.c \
 	lzma/C/LzmaDec.c \

@@ -189,7 +189,7 @@ Pod::Spec.new do |s|
                        'cpp/patch_core/hbc_transform_wire.{h,cpp}',
                        'cpp/patch_core/patch_core.{h,cpp}',
                        'cpp/patch_core/state_core.{h,cpp}',
-                       'android/jni/hpatch.{h,c}',
+                       'cpp/hpatch/hpatch.{h,c}',
                        'android/jni/HDiffPatch/libHDiffPatch/HPatch/*.{h,c}',
                        'android/jni/HDiffPatch/file_for_patch.{h,c}',
                        'android/jni/lzma/C/LzmaDec.{h,c}',

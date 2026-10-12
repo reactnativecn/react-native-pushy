@@ -5,7 +5,10 @@
 #ifndef HDIFFPATCH_PATCH_H
 #define HDIFFPATCH_PATCH_H
 # include <stdint.h> //for uint8_t
-#include "HDiffPatch/libHDiffPatch/HPatch/patch_types.h" //for hpatch_singleCompressedDiffInfo
+// The HDiffPatch and lzma submodules stay under android/jni; every build
+// (iOS without header search paths into the pod) resolves them relative to
+// this file.
+#include "../../android/jni/HDiffPatch/libHDiffPatch/HPatch/patch_types.h" //for hpatch_singleCompressedDiffInfo
 #ifdef __cplusplus
 extern "C" {
 #endif

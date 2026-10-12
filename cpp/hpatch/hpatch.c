@@ -1,17 +1,17 @@
 // hpatch.c
 // Copyright 2021 housisong, All rights reserved
 #include "hpatch.h"
-#include "HDiffPatch/libHDiffPatch/HPatch/patch.h"
-#include "HDiffPatch/file_for_patch.h"
+#include "../../android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.h"
+#include "../../android/jni/HDiffPatch/file_for_patch.h"
 
 //#define _CompressPlugin_zlib
 //#define _CompressPlugin_bz2
 #define _CompressPlugin_lzma
 #define _CompressPlugin_lzma2
 #define _IsNeedIncludeDefaultCompressHead 0
-#include "lzma/C/LzmaDec.h"
-#include "lzma/C/Lzma2Dec.h"
-#include "HDiffPatch/decompress_plugin_demo.h"
+#include "../../android/jni/lzma/C/LzmaDec.h"
+#include "../../android/jni/lzma/C/Lzma2Dec.h"
+#include "../../android/jni/HDiffPatch/decompress_plugin_demo.h"
 
 #define kMaxLoadMemOldSize ((1<<20)*8)
 

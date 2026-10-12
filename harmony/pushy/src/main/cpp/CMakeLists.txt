@@ -30,7 +30,7 @@ set(HDP_SOURCES
      ${PATCH_CORE_DIR}/state_core.cpp
      ${UPDATE_FLOW_CORE_DIR}/flow_json.cpp
      ${UPDATE_FLOW_CORE_DIR}/update_flow_core.cpp
-     ${ANDROID_JNI_DIR}/hpatch.c
+     ${REPO_ROOT}/cpp/hpatch/hpatch.c
      ${HDIFFPATCH_DIR}/libHDiffPatch/HPatch/patch.c
      ${HDIFFPATCH_DIR}/file_for_patch.c
      ${LZMA_DIR}/C/LzmaDec.c

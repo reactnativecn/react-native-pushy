@@ -55,7 +55,7 @@ const required = [
   'src/NativePushy.ts',
   'android/build.gradle',
   'android/src/main/java/cn/reactnative/modules/update/UpdateContext.java',
-  'android/jni/hpatch.c',
+  'cpp/hpatch/hpatch.c',
   'ios/RCTPushy/RCTPushy.mm',
   'ios/RCTPushy/RCTPushyOrchestrator.mm',
   'react-native-update.podspec',

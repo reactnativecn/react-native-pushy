@@ -26,7 +26,7 @@ COMMON_INCLUDES="
 
 # The vendored HDiffPatch / lzma C sources are compiled with -Wall -Wextra
 # only (no -Werror).
-cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/hpatch.c" -o "$BUILD_DIR/hpatch.o"
+cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/cpp/hpatch/hpatch.c" -o "$BUILD_DIR/hpatch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c" -o "$BUILD_DIR/patch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/HDiffPatch/file_for_patch.c" -o "$BUILD_DIR/file_for_patch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/lzma/C/LzmaDec.c" -o "$BUILD_DIR/LzmaDec.o"

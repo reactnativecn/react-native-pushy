@@ -6,6 +6,7 @@ const { spawnSync } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
 const androidJniDir = path.join(projectRoot, 'android', 'jni');
+const hpatchDir = path.join(projectRoot, 'cpp', 'hpatch');
 const patchCoreDir = path.join(projectRoot, 'cpp', 'patch_core');
 const updateFlowCoreDir = path.join(projectRoot, 'cpp', 'update_flow_core');
 const harmonyModuleDir = path.join(projectRoot, 'harmony', 'pushy');
@@ -22,10 +23,10 @@ const wrapperProjectFiles = [
 // The shared native sources harmony/pushy/src/main/cpp/CMakeLists.txt
 // compiles in place from the repository root (submodules included).
 const requiredNativeSources = [
-  [path.join(androidJniDir, 'hpatch.c'), 'Android native source'],
-  [path.join(androidJniDir, 'hpatch.h'), 'Android native source'],
-  [path.join(androidJniDir, 'HDiffPatch'), 'Android native source directory'],
-  [path.join(androidJniDir, 'lzma', 'C'), 'Android native source directory'],
+  [path.join(hpatchDir, 'hpatch.c'), 'shared hpatch source'],
+  [path.join(hpatchDir, 'hpatch.h'), 'shared hpatch source'],
+  [path.join(androidJniDir, 'HDiffPatch'), 'HDiffPatch submodule'],
+  [path.join(androidJniDir, 'lzma', 'C'), 'lzma submodule'],
   [path.join(patchCoreDir, 'patch_core.cpp'), 'shared patch core source'],
   [
     path.join(updateFlowCoreDir, 'update_flow_core.cpp'),

@@ -25,7 +25,7 @@ extern "C" {
 // Relative to this file: under use_frameworks! a bare "hpatch.h" resolves
 // to the flattened framework PrivateHeaders copy, whose own HDiffPatch/
 // includes then fail.
-#include "../../android/jni/hpatch.h"
+#include "../hpatch/hpatch.h"
 }
 
 namespace pushy {
