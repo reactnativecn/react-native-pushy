@@ -1,21 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
+import { evalHarmonyModule } from './nativeSources';
 
 // The endpoint fallback of the Harmony cold-start orchestrator
 // (SyncCoordinator.runQueryRequest), evaluated from source with its platform
 // imports stripped and HTTP replaced by a scripted fake.
-const source = readFileSync(
-  new URL(
-    '../../harmony/pushy/src/main/ets/SyncCoordinator.ts',
-    import.meta.url
-  ),
-  'utf8'
-)
-  .replace(/^import[\s\S]*?;\r?\n/gm, '')
-  .replace(/^export /gm, '');
-const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(source);
 
 const VALID = '{"ok":true}';
 
@@ -30,8 +18,9 @@ function run(
   httpsOnly = false
 ) {
   const requests: string[] = [];
-  const runQueryRequest = runInNewContext(
-    `${javascript}\nhttpRequest = fakeHttp;\nrunQueryRequest;`,
+  const runQueryRequest = evalHarmonyModule(
+    'SyncCoordinator.ts',
+    'httpRequest = fakeHttp;\nrunQueryRequest;',
     {
       QUERY_PATH: '/q/',
       logger: { info() {}, warn() {}, error() {} },

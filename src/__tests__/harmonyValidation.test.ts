@@ -1,7 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import {
   createPushyError,
   ERROR_INVALID_HASH_INFO,
@@ -12,24 +9,16 @@ import {
   assertSafePathComponent,
   isSafePathComponent,
 } from '../../harmony/pushy/src/main/ets/PathUtils';
+import { evalHarmonyModule } from './nativeSources';
 
 // Harmony input validation (path components, hash info JSON) and the
 // download-progress event hub.
 
 // validateHashInfo lives in PushyTurboModule.ts, which extends RNOH's
 // UITurboModule: evaluate it with its imports stripped and a stub base class.
-const turboModuleSource = readFileSync(
-  new URL(
-    '../../harmony/pushy/src/main/ets/PushyTurboModule.ts',
-    import.meta.url
-  ),
-  'utf8'
-)
-  .replace(/^import[\s\S]*?;\r?\n/gm, '')
-  .replace(/^export\s*\{[^}]*\}(?:\s*from\s*[^;]*)?;\r?\n/gm, '')
-  .replace(/^export /gm, '');
-const validateHashInfo = runInNewContext(
-  `${new Bun.Transpiler({ loader: 'ts' }).transformSync(turboModuleSource)}\nvalidateHashInfo;`,
+const validateHashInfo = evalHarmonyModule(
+  'PushyTurboModule.ts',
+  'validateHashInfo;',
   {
     UITurboModule: class {},
     ERROR_INVALID_HASH_INFO,

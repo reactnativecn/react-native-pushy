@@ -1,28 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import {
   createPushyError,
   ERROR_DELTA_FAILED,
   ERROR_DOWNLOAD_FAILED,
   PushyError,
 } from '../../harmony/pushy/src/main/ets/ErrorCodes';
+import { evalHarmonyModule } from './nativeSources';
 
 // The download strategy loop of the Harmony cold-start orchestrator
 // (SyncCoordinator.performAttempts), evaluated from source with its platform
 // imports stripped. A patch that downloaded but failed to apply is not
 // retried on the other mirrors (update_flow_core IsMirrorRetryableCode).
-const source = readFileSync(
-  new URL(
-    '../../harmony/pushy/src/main/ets/SyncCoordinator.ts',
-    import.meta.url
-  ),
-  'utf8'
-)
-  .replace(/^import[\s\S]*?;\r?\n/gm, '')
-  .replace(/^export /gm, '');
-const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(source);
 
 interface Attempt {
   type: string;
@@ -47,19 +35,23 @@ function harness(failures: Map<string, unknown>) {
     downloadPatchFromPackage: (url: string) => fail(url),
     downloadFullUpdate: (url: string) => fail(url),
   };
-  const performAttempts = runInNewContext(`${javascript}\nperformAttempts;`, {
-    PushyError,
-    ERROR_DELTA_FAILED,
-    ERROR_DOWNLOAD_FAILED,
-    createPushyError,
-    getErrorMessage: (error: unknown) => String(error),
-    logger: { info() {}, warn() {}, error() {} },
-    monotonicNowMs: () => performance.now(),
-    setTimeout,
-    clearTimeout,
-    BundlePreparationRound: class {},
-    bundlePreparationResult: () => ({}),
-  }) as (
+  const performAttempts = evalHarmonyModule(
+    'SyncCoordinator.ts',
+    'performAttempts;',
+    {
+      PushyError,
+      ERROR_DELTA_FAILED,
+      ERROR_DOWNLOAD_FAILED,
+      createPushyError,
+      getErrorMessage: (error: unknown) => String(error),
+      logger: { info() {}, warn() {}, error() {} },
+      monotonicNowMs: () => performance.now(),
+      setTimeout,
+      clearTimeout,
+      BundlePreparationRound: class {},
+      bundlePreparationResult: () => ({}),
+    }
+  ) as (
     ctx: typeof context,
     attempts: Attempt[],
     hash: string,

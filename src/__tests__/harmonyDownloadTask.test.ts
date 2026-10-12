@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import { DownloadTaskParams } from '../../harmony/pushy/src/main/ets/DownloadTaskParams';
 import { BUNDLE_DELTA_ENTRY } from '../../harmony/pushy/src/main/ets/Texts';
+import { evalHarmonyModule } from './nativeSources';
 
 // The pure parsers of Harmony DownloadTask.ts, evaluated from source with its
 // platform imports stripped (the download/patch class itself needs a device).
@@ -17,14 +15,9 @@ interface PatchManifestArrays {
   hbcTransformMeta: string;
 }
 
-const source = readFileSync(
-  new URL('../../harmony/pushy/src/main/ets/DownloadTask.ts', import.meta.url),
-  'utf8'
-)
-  .replace(/^import[\s\S]*?;\r?\n/gm, '')
-  .replace(/^export /gm, '');
-const { parseContentRangeTotal, parseManifestToArrays } = runInNewContext(
-  `${new Bun.Transpiler({ loader: 'ts' }).transformSync(source)}\n({ parseContentRangeTotal, parseManifestToArrays });`,
+const { parseContentRangeTotal, parseManifestToArrays } = evalHarmonyModule(
+  'DownloadTask.ts',
+  '({ parseContentRangeTotal, parseManifestToArrays });',
   { HARMONY_BUNDLE_FILE_NAME, BUNDLE_DELTA_ENTRY }
 ) as {
   parseContentRangeTotal(header: string, expectedStart: number): number;

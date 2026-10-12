@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import {
   createPushyError,
   ERROR_DELTA_FAILED,
   ERROR_FILE_OPERATION_FAILED,
   type PushyError,
 } from '../../harmony/pushy/src/main/ets/ErrorCodes';
+import { evalHarmonyModule } from './nativeSources';
 
 // The pure limit logic of Harmony ArchiveLimits.ts (ArkTS mirror of
 // cpp/patch_core/archive_limits.h), evaluated from source with its file
@@ -34,15 +32,9 @@ interface ArchiveLimits {
   ): FreeSpaceProbePlan;
 }
 
-const source = readFileSync(
-  new URL('../../harmony/pushy/src/main/ets/ArchiveLimits.ts', import.meta.url),
-  'utf8'
-)
-  .replace(/^import[\s\S]*?;\r?\n/gm, '')
-  .replace(/^export /gm, '');
-const limits = runInNewContext(
-  `${new Bun.Transpiler({ loader: 'ts' }).transformSync(source)}
-({ UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES, MAX_TOTAL_UNCOMPRESSED_BYTES,
+const limits = evalHarmonyModule(
+  'ArchiveLimits.ts',
+  `({ UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES, MAX_TOTAL_UNCOMPRESSED_BYTES,
    MAX_COMPRESSION_RATIO, RATIO_CHECK_MIN_BYTES, ORIGINAL_SIZE_UNAVAILABLE,
    checkOriginalSize, checkUncompressedSize, planUnknownLengthFreeSpaceProbe });`,
   {

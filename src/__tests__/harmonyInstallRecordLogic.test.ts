@@ -1,13 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import {
   createPushyError,
   ERROR_DELTA_FAILED,
   ERROR_SWITCH_VERSION_FAILED,
   type PushyError,
 } from '../../harmony/pushy/src/main/ets/ErrorCodes';
+import { evalHarmonyModule } from './nativeSources';
 
 // The pure record logic of Harmony InstallRecord.ts (ArkTS mirror of
 // cpp/patch_core/install_record.h): parsing, version matching and the
@@ -35,15 +33,9 @@ interface InstallRecordLogic {
   isReservedEntryName(name: string): boolean;
 }
 
-const source = readFileSync(
-  new URL('../../harmony/pushy/src/main/ets/InstallRecord.ts', import.meta.url),
-  'utf8'
-)
-  .replace(/^import[\s\S]*?;\r?\n/gm, '')
-  .replace(/^export /gm, '');
-const record = runInNewContext(
-  `${new Bun.Transpiler({ loader: 'ts' }).transformSync(source)}
-({ INSTALL_RECORD_SCHEMA, INSTALL_RECORD_FILE_NAME, STAGING_SUFFIX,
+const record = evalHarmonyModule(
+  'InstallRecord.ts',
+  `({ INSTALL_RECORD_SCHEMA, INSTALL_RECORD_FILE_NAME, STAGING_SUFFIX,
    buildInstallRecord, parseInstallRecord, isRecordForVersion,
    expectedBundleSha256ForActivation, stagingDirectoryFor,
    isReservedEntryName });`,
