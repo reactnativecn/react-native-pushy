@@ -22,7 +22,7 @@ import {
   ERROR_RESTART_FAILED,
   ERROR_SWITCH_VERSION_FAILED,
   ERROR_UNSUPPORTED_PLATFORM,
-  NATIVE_CONFIG_CONFLICT_CODE,
+  ERROR_NATIVE_CONFIG_CONFLICT,
   createPushyError,
   getErrorMessage,
   toPushyError,
@@ -270,7 +270,7 @@ export class PushyTurboModule extends UITurboModule {
     logger.debug(TAG, ',call syncNativeConfig');
     if (this.context.isHostConfigured()) {
       throw createPushyError(
-        NATIVE_CONFIG_CONFLICT_CODE,
+        ERROR_NATIVE_CONFIG_CONFLICT,
         "host configured natively; set nativeConfigSource: 'native' in JS",
       );
     }

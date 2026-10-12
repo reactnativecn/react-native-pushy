@@ -22,11 +22,8 @@ export const ERROR_UNSUPPORTED_PLATFORM = 'UNSUPPORTED_PLATFORM';
 export const ERROR_APK_INSTALL_PERMISSION_REQUIRED =
   'APK_INSTALL_PERMISSION_REQUIRED';
 export const ERROR_APK_INSTALL_FAILED = 'APK_INSTALL_FAILED';
-// C2:JS syncNativeConfig 撞上宿主原生 configure()。暂作本地常量(不带
-// ERROR_ 前缀,check-constant-parity 只核对 ERROR_* 与 error_codes.h):
-// kNativeConfigConflict 由另一侧加入 cpp/patch_core/error_codes.h,合并时
-// 改名为 ERROR_NATIVE_CONFIG_CONFLICT 纳入镜像核对。
-export const NATIVE_CONFIG_CONFLICT_CODE = 'NATIVE_CONFIG_CONFLICT';
+// JS syncNativeConfig 撞上宿主原生 configure()。
+export const ERROR_NATIVE_CONFIG_CONFLICT = 'NATIVE_CONFIG_CONFLICT';
 
 /**
  * 带稳定错误码的 Error:`code` 是属性,消息同时带 `[CODE] ` 前缀(桥丢属性时
