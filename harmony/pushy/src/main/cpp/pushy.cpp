@@ -1,6 +1,7 @@
 #include <napi/native_api.h>
 
 #include "flow_json.h"
+#include "native_config.h"
 #include "update_flow_core.h"
 #include <js_native_api.h>
 #include <js_native_api_types.h>
@@ -1201,6 +1202,70 @@ static napi_value FlowHandleResponse(napi_env env,
                             response_text, identity, false, after_download)));
 }
 
+// ---- persisted native config (update_flow_core/native_config.h) ----
+// null/undefined arguments read as "" (an absent config): never equivalent,
+// not_configured at the gate, not an object for the normalizer.
+
+static napi_value FlowConfigsEquivalent(napi_env env, napi_callback_info info) {
+  size_t argc = 2;
+  napi_value args[2] = {nullptr, nullptr};
+  if (!GetArgCount(env, info, &argc, args) || argc < 2) {
+    ThrowError(env, "configsEquivalent: missing arguments");
+    return nullptr;
+  }
+  bool ok = false;
+  std::string a = GetString(env, args[0], &ok);
+  if (!ok) {
+    return nullptr;
+  }
+  std::string b = GetString(env, args[1], &ok);
+  if (!ok) {
+    return nullptr;
+  }
+  napi_value result = nullptr;
+  napi_get_boolean(env, flowcore::ConfigsEquivalent(a, b), &result);
+  return result;
+}
+
+static napi_value FlowRunnableConfig(napi_env env, napi_callback_info info) {
+  size_t argc = 1;
+  napi_value args[1] = {nullptr};
+  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
+    ThrowError(env, "runnableConfig: missing argument");
+    return nullptr;
+  }
+  bool ok = false;
+  std::string config_json = GetString(env, args[0], &ok);
+  if (!ok) {
+    return nullptr;
+  }
+  return NewString(env, flowcore::RunnableConfigJson(config_json));
+}
+
+// Throws Error("Invalid native configuration: ...") for options the host
+// must fix.
+static napi_value FlowNormalizeConfiguration(napi_env env,
+                                             napi_callback_info info) {
+  size_t argc = 1;
+  napi_value args[1] = {nullptr};
+  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
+    ThrowError(env, "normalizeConfiguration: missing argument");
+    return nullptr;
+  }
+  bool ok = false;
+  std::string options_json = GetString(env, args[0], &ok);
+  if (!ok) {
+    return nullptr;
+  }
+  std::string config;
+  std::string error;
+  if (!flowcore::NormalizeConfiguration(options_json, &config, &error)) {
+    ThrowError(env, error);
+    return nullptr;
+  }
+  return NewString(env, config);
+}
+
 napi_value Init(napi_env env, napi_value exports) {
   if (!ExportFunction(env, exports, "syncStateWithBinaryVersion", SyncStateWithBinaryVersion) ||
       !ExportFunction(env, exports, "runStateCore", RunStateCore) ||
@@ -1215,7 +1280,10 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "buildRequestBody", FlowBuildRequestBody) ||
       !ExportFunction(env, exports, "orderEndpointCandidates", FlowOrderEndpointCandidates) ||
       !ExportFunction(env, exports, "isValidResponse", FlowIsValidResponse) ||
-      !ExportFunction(env, exports, "handleResponse", FlowHandleResponse)) {
+      !ExportFunction(env, exports, "handleResponse", FlowHandleResponse) ||
+      !ExportFunction(env, exports, "configsEquivalent", FlowConfigsEquivalent) ||
+      !ExportFunction(env, exports, "runnableConfig", FlowRunnableConfig) ||
+      !ExportFunction(env, exports, "normalizeConfiguration", FlowNormalizeConfiguration)) {
     return nullptr;
   }
   return exports;

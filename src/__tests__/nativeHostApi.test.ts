@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
+import vectorsFile from '../../cpp/update_flow_core/tests/native-config-vectors.json';
 import type { BundlePreparationResult } from '../../harmony/pushy/src/main/ets/BundlePreparationResult';
 import {
   BundlePreparationRound,
   bundlePreparationResult,
 } from '../../harmony/pushy/src/main/ets/BundlePreparationResult';
 import { STATUS_NONE } from '../../harmony/pushy/src/main/ets/Texts';
-import { evalHarmonyModule } from './nativeSources';
+import { evalHarmonyModule, harmonyConfigBindings } from './nativeSources';
 
 // Evaluate the actual Harmony orchestrator in an isolated VM per test. Only
 // platform imports, HTTP and download IO are substituted; entry points,
@@ -70,6 +71,7 @@ function harness() {
       getErrorMessage: (error: unknown) => String(error),
       STATUS_NONE,
       NativePatchCore: {
+        ...harmonyConfigBindings,
         getSupportedDiffVersion: () => 2,
         buildRequestBody: (input: string) => input,
         handleResponse: (response: string) => response,
@@ -98,6 +100,17 @@ function harness() {
 }
 
 describe('native host API orchestration', () => {
+  test('the config gate stand-in matches the shared core vectors', () => {
+    for (const vector of vectorsFile.runnable) {
+      expect({
+        name: vector.name,
+        verdict: JSON.parse(
+          harmonyConfigBindings.runnableConfig(vector.config)
+        ),
+      }).toEqual({ name: vector.name, verdict: vector.expected });
+    }
+  });
+
   test('requires real launch initialization, without resolving the bundle', async () => {
     const h = harness();
     expect((await h.check()).reason).toBe('not_initialized');

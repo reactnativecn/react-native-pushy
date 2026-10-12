@@ -109,6 +109,21 @@ interface NativePatchCoreBindings {
   // 响应 schema 门槛(update_flow_core::IsValidResponse):200 但只带
   // `{"error":...}` 的节点算失败,不得阻止继续 fallback。
   isValidResponse(responseText: string): boolean;
+
+  // 持久化的原生配置(cpp/update_flow_core/native_config.h,与 Android/iOS
+  // 共用)。undefined 视同空串:缺省配置。
+  /** C1 配置等价:同一配置的不同序列化。任一缺省即不等价。 */
+  configsEquivalent(a: string | undefined, b: string | undefined): boolean;
+  /**
+   * 轮次门槛:可运行时为 {"appKey": 去空白后的值},否则
+   * {"status": "skipped" | "failed", "reason": ...}。
+   */
+  runnableConfig(configJson: string | undefined): string;
+  /**
+   * 校验宿主 configure() 的选项(JSON 对象文本),返回要持久化的配置;
+   * 不合法时抛出 Error("Invalid native configuration: ...")。
+   */
+  normalizeConfiguration(optionsJson: string | undefined): string;
 }
 
 export default NativeCore as unknown as NativePatchCoreBindings;

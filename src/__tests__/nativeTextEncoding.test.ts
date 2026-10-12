@@ -1,5 +1,4 @@
 import { describe, expect, test } from 'bun:test';
-import { normalizePushyConfiguration } from '../../harmony/pushy/src/main/ets/PushyConfiguration';
 import { QUERY_PATH, revealText } from '../../harmony/pushy/src/main/ets/Texts';
 import {
   decodeNativeText,
@@ -76,11 +75,8 @@ describe('native text encoding', () => {
     expect(offenders).toEqual([]);
   });
 
-  test('Harmony resolves the path and default addresses at runtime', () => {
+  test('Harmony resolves the path at runtime', () => {
     expect(QUERY_PATH).toBe('/checkUpdate/');
-    const config = JSON.parse(normalizePushyConfiguration({ appKey: 'k' }));
-    expect(config.endpoints).toEqual(plainTexts.slice(1, 3));
-    expect(config.queryUrls).toEqual(plainTexts.slice(3));
   });
 
   // Every string literal in shipped native code, comments excluded: none may

@@ -150,45 +150,26 @@ interface ConfigRead {
 
 // The single configuration gate shared by the preflight, the host API and
 // the round itself, so the three can never disagree about what is runnable.
+// The verdict is the shared core's (cpp/update_flow_core ParseRunnableConfig,
+// also used by Android and iOS).
+interface RunnableVerdict {
+  appKey?: string;
+  status?: string;
+  reason?: string;
+}
+
 function readNativeConfig(context: UpdateContext): ConfigRead {
   const json = context.getKv(KEY_CONFIG);
-  const empty: NativeConfig = {};
-  if (!json) {
-    return {
-      json: '',
-      config: empty,
-      appKey: '',
-      rejection: bundlePreparationResult('skipped', 'not_configured'),
-    };
-  }
-  const invalid: ConfigRead = {
-    json,
-    config: empty,
-    appKey: '',
-    rejection: bundlePreparationResult('failed', 'invalid_config'),
-  };
-  let config: NativeConfig;
-  try {
-    config = JSON.parse(json) as NativeConfig;
-  } catch (e) {
-    return invalid;
-  }
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
-    return invalid;
-  }
-  if (config.disabled) {
+  const verdict = JSON.parse(NativePatchCore.runnableConfig(json)) as RunnableVerdict;
+  if (verdict.status !== undefined) {
     return {
       json,
-      config,
+      config: {},
       appKey: '',
-      rejection: bundlePreparationResult('skipped', 'disabled'),
+      rejection: bundlePreparationResult(verdict.status, verdict.reason ?? ''),
     };
   }
-  const appKey = typeof config.appKey === 'string' ? config.appKey.trim() : '';
-  if (!appKey) {
-    return invalid;
-  }
-  return { json, config, appKey };
+  return { json, config: JSON.parse(json) as NativeConfig, appKey: verdict.appKey ?? '' };
 }
 
 // A preflight skip must not consume the process's only round: configuration

@@ -49,87 +49,12 @@ interface OptionalPreferencesApi {
   flushSync?: () => void;
 }
 
-// C1 跨平台配置等价(JS/Android/iOS 同一规则):缺省键补默认值、端点/
-// 发现地址去尾斜杠并保序去重、忽略键序。等价的配置不算"变更"——宿主重复
-// configure、或 JS 同步一份只差格式的同一配置,都不应取消在飞轮次或丢弃
-// 响应缓存。放在本文件(而非独立模块):本文件被测试原样求值,只能依赖
-// 自身源码。
-const NATIVE_CONFIG_DEFAULTS: Record<string, unknown> = {
-  disabled: false,
-  queryUrls: [],
-  rnu: '',
-  rn: '',
-  afterDownload: 'none',
-};
-const NATIVE_CONFIG_URL_LISTS: string[] = ['endpoints', 'queryUrls'];
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(item => canonicalJson(item)).join(',')}]`;
-  }
-  if (value !== null && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    const keys = Object.keys(record)
-      .filter(key => record[key] !== undefined)
-      .sort();
-    return `{${keys
-      .map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
-}
-
-/** 配置 JSON 的规范形式;不是可解析的 JSON 对象时返回 undefined。 */
-export function canonicalNativeConfig(json: string): string | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch (e) {
-    return undefined;
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return undefined;
-  }
-  const config: Record<string, unknown> = {};
-  const source = parsed as Record<string, unknown>;
-  for (const key of Object.keys(source)) {
-    config[key] = source[key];
-  }
-  for (const key of Object.keys(NATIVE_CONFIG_DEFAULTS)) {
-    if (config[key] === undefined) {
-      config[key] = NATIVE_CONFIG_DEFAULTS[key];
-    }
-  }
-  for (const key of NATIVE_CONFIG_URL_LISTS) {
-    const list = config[key];
-    if (!Array.isArray(list)) {
-      continue;
-    }
-    const seen = new Set<string>();
-    const normalized: unknown[] = [];
-    for (const item of list as unknown[]) {
-      const value = typeof item === 'string' ? item.replace(/\/+$/, '') : item;
-      const identity = canonicalJson(value);
-      if (!seen.has(identity)) {
-        seen.add(identity);
-        normalized.push(value);
-      }
-    }
-    config[key] = normalized;
-  }
-  return canonicalJson(config);
-}
-
-/** 两份配置 JSON 是否等价(C1)。任一不是可解析的 JSON 对象即不等价。 */
-export function nativeConfigsEquivalent(
-  a: string | undefined,
-  b: string | undefined,
-): boolean {
-  if (a === undefined || b === undefined) {
-    return false;
-  }
-  const left = canonicalNativeConfig(a);
-  return left !== undefined && left === canonicalNativeConfig(b);
+// C1 配置等价(cpp/update_flow_core ConfigsEquivalent,与 Android/iOS 共用):
+// 缺省键补默认值、端点/发现地址去尾斜杠并保序去重、忽略键序。等价的配置不算
+// "变更"——宿主重复 configure、或 JS 同步一份只差格式的同一配置,都不应取消
+// 在飞轮次或丢弃响应缓存。任一缺省即不等价。
+function nativeConfigsEquivalent(a: string | undefined, b: string | undefined): boolean {
+  return NativePatchCore.configsEquivalent(a, b);
 }
 
 interface PersistOptions {
