@@ -22,7 +22,6 @@ final class ErrorCodes {
     static final String UNSUPPORTED_PLATFORM = "UNSUPPORTED_PLATFORM";
     static final String APK_INSTALL_PERMISSION_REQUIRED = "APK_INSTALL_PERMISSION_REQUIRED";
     static final String APK_INSTALL_FAILED = "APK_INSTALL_FAILED";
-    static final String NATIVE_CONFIG_CONFLICT = "NATIVE_CONFIG_CONFLICT";
 
     private ErrorCodes() {
     }

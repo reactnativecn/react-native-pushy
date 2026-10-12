@@ -64,7 +64,6 @@ import {
   fetchWithTimeout,
   info,
   log,
-  error as logError,
   noop,
   promiseAny,
   setDebugLogging,
@@ -255,9 +254,6 @@ export class Pushy {
   private syncedNativeConfigJson?: string;
   private pendingNativeConfigJson?: string;
   private nativeConfigSyncInFlight = false;
-  // Set once native rejected a write with NATIVE_CONFIG_CONFLICT: the host
-  // owns the config, so further writes would only repeat the same error.
-  private nativeConfigConflict = false;
   // Config last acknowledged by markJsCheckCompleted.
   private jsCheckCompletedConfigJson?: string;
   private reportedInvalidUpdates = new Set<string>();
@@ -443,7 +439,7 @@ export class Pushy {
       this.syncedNativeConfigJson = undefined;
       return;
     }
-    if (this.nativeConfigSyncInFlight || this.nativeConfigConflict) {
+    if (this.nativeConfigSyncInFlight) {
       return;
     }
     const configJson = this.pendingNativeConfigJson;
@@ -470,34 +466,12 @@ export class Pushy {
         }
       })
       .catch((e: any) => {
-        if (readErrorCode(e).code === 'NATIVE_CONFIG_CONFLICT') {
-          this.handleNativeConfigConflict(e);
-          return;
-        }
         log('syncNativeConfig failed:', e?.message || e);
       })
       .finally(() => {
         this.nativeConfigSyncInFlight = false;
         this.flushNativeConfig();
       });
-  };
-
-  /**
-   * The host app called the native configure() API in this process, so it
-   * owns the persisted config, yet JS is in the default 'javascript' mode and
-   * tried to overwrite it. That is an integration error: say so loudly and
-   * route it through the error pipeline instead of silently dropping writes.
-   */
-  private handleNativeConfigConflict = (e: unknown) => {
-    this.nativeConfigConflict = true;
-    this.pendingNativeConfigJson = undefined;
-    const err = new UpdateError(
-      this.t('error_native_config_conflict'),
-      'NATIVE_CONFIG_CONFLICT',
-      { cause: e }
-    );
-    logError(err.message);
-    this.emitError(err, 'errorNativeConfig');
   };
 
   /**

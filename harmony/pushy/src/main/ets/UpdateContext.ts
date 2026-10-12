@@ -545,23 +545,9 @@ export class UpdateContext {
   }
 
   private static nativeConfigGeneration: number = 0;
-  // 宿主本进程调用过 PushyFileJSBundleProvider.configure():配置归宿主所有,
-  // JS 的 syncNativeConfig 必须拒绝(C2 NATIVE_CONFIG_CONFLICT),而不是
-  // 悄悄覆盖或忽略——接入方式不一致要大声失败。
-  private static hostConfigured: boolean = false;
 
   public getNativeConfigGeneration(): number {
     return UpdateContext.nativeConfigGeneration;
-  }
-
-  public isHostConfigured(): boolean {
-    return UpdateContext.hostConfigured;
-  }
-
-  /** 宿主原生 configure() 的写入口:先标记归属,再走共用的写入。 */
-  public setHostNativeConfig(config: string): Promise<void> {
-    UpdateContext.hostConfigured = true;
-    return this.setNativeConfig(config);
   }
 
   /** 与持久化的配置是否等价(C1)。 */

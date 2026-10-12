@@ -335,16 +335,6 @@ public class UpdateModuleImpl {
         if (requireNonEmpty(config, "config", promise) == null) {
             return;
         }
-        if (PushyRuntime.isHostConfigured()) {
-            // The host owns the configuration in this process: a JS write
-            // would silently replace it. Bad integration fails loudly.
-            promise.reject(ErrorCodes.NATIVE_CONFIG_CONFLICT,
-                "[" + ErrorCodes.NATIVE_CONFIG_CONFLICT + "] the host app configured "
-                    + "native sync with PushyRuntime.configure(); set "
-                    + "nativeConfigSource: 'native' in the JS client instead of "
-                    + "syncing a JS config");
-            return;
-        }
         try {
             new JSONObject(config);
         } catch (JSONException e) {

@@ -2274,50 +2274,6 @@ describe('syncNativeConfig', () => {
     );
   });
 
-  test('a host-owned native config (NATIVE_CONFIG_CONFLICT) fails loudly and stops further writes', async () => {
-    const syncNativeConfig = mock(() =>
-      Promise.reject(
-        Object.assign(new Error('configure() was called'), {
-          code: 'NATIVE_CONFIG_CONFLICT',
-        })
-      )
-    );
-    setupClientMocks({ syncNativeConfig });
-    const consoleError = spyOn(console, 'error').mockImplementation(() => {});
-    const logger = mock(() => {});
-    const { Pushy } = await importFreshClient('sync-config-conflict');
-    const client = new Pushy({ appKey: 'demo-app', logger });
-    const errors: Array<{ e: any; eventType: string }> = [];
-    client.onError((e: any, eventType: string) => {
-      errors.push({ e, eventType });
-    });
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(errors).toHaveLength(1);
-    expect(errors[0].e.code).toBe('NATIVE_CONFIG_CONFLICT');
-    expect(errors[0].eventType).toBe('errorNativeConfig');
-    expect(consoleError).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.stringContaining('error_native_config_conflict')
-    );
-    await Promise.resolve();
-    expect(logger).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'errorNativeConfig',
-        data: expect.objectContaining({ code: 'NATIVE_CONFIG_CONFLICT' }),
-      })
-    );
-
-    // Retrying would only repeat the same rejection.
-    client.setOptions({ updateStrategy: 'silentAndNow' });
-    await Promise.resolve();
-    expect(syncNativeConfig).toHaveBeenCalledTimes(1);
-    expect(errors).toHaveLength(1);
-    consoleError.mockRestore();
-  });
-
   test('an older native module without the method is skipped silently', async () => {
     setupClientMocks();
     const { Pushy } = await importFreshClient('sync-config-4');
