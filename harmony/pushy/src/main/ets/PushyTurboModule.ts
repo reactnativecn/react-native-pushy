@@ -22,6 +22,7 @@ import {
   ERROR_RESTART_FAILED,
   ERROR_SWITCH_VERSION_FAILED,
   ERROR_UNSUPPORTED_PLATFORM,
+  NATIVE_CONFIG_CONFLICT_CODE,
   createPushyError,
   getErrorMessage,
   toPushyError,
@@ -263,8 +264,16 @@ export class PushyTurboModule extends UITurboModule {
   // read by the orchestrator; absent config = check disabled. Validated at
   // write time — a corrupt config would otherwise silently disable the
   // native check forever with no signal.
+  // A host that configured natively in this process owns the configuration:
+  // reject loudly (C2) instead of overwriting or silently ignoring it.
   async syncNativeConfig(config: string): Promise<void> {
     logger.debug(TAG, ',call syncNativeConfig');
+    if (this.context.isHostConfigured()) {
+      throw createPushyError(
+        NATIVE_CONFIG_CONFLICT_CODE,
+        "host configured natively; set nativeConfigSource: 'native' in JS",
+      );
+    }
     try {
       JSON.parse(config);
     } catch (e) {

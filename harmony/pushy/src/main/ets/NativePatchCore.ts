@@ -84,13 +84,12 @@ interface NativePatchCoreBindings {
     keepNames: string[],
     maxAgeDays: number,
   ): Promise<void>;
-  /** sha256(小写 hex)。同步:输入是已在内存的 rawfile bundle,哈希毫秒级 */
-  sha256Hex(data: Uint8Array): string;
-  // 文件流式 SHA-256(小写 hex;不可读时空串)。同步,仅限小文件——整包/
-  // 整 bundle 用下面的异步版本,避免冻结 UI 线程。
-  sha256HexFile(path: string): string;
-  // 同上,在 libuv 工作线程计算;文件不可读时 reject。
+  // 文件流式 SHA-256(小写 hex),在 libuv 工作线程计算;文件不可读时 reject。
   sha256HexFileAsync(path: string): Promise<string>;
+  // fd 上 [offset, offset + length) 区间的 SHA-256(小写 hex),工作线程
+  // pread 流式计算(内嵌 bundle 走 resourceManager.getRawFd)。fd 由调用方
+  // 持有,promise 落定前不得关闭;读失败/提前 EOF 时 reject。
+  sha256HexRawFdAsync(fd: number, offset: number, length: number): Promise<string>;
   /** CRC32(zip/zlib 多项式)。pdiff 拷贝前与 copiesCrc 比对用 */
   crc32(data: Uint8Array | ArrayBuffer): number;
   /** 原生 patch 内核可消费的 diff 轨道版本(2 = hdiffv2 轨道) */
