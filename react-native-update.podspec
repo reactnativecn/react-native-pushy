@@ -181,15 +181,12 @@ Pod::Spec.new do |s|
   # Objective-C classes in the RCTPushy subspec keep default visibility, which
   # the host app and the Expo module need to link against RCTPushy.
   s.subspec 'Core' do |ss|
-    ss.source_files = ['cpp/update_flow_core/flow_json.{h,cpp}',
-                       'cpp/update_flow_core/update_flow_core.{h,cpp}',
-                       'cpp/patch_core/archive_patch_core.{h,cpp}',
-                       'cpp/patch_core/digest.{h,cpp}',
-                       'cpp/patch_core/hbc_transform.{h,cpp}',
-                       'cpp/patch_core/hbc_transform_wire.{h,cpp}',
-                       'cpp/patch_core/patch_core.{h,cpp}',
-                       'cpp/patch_core/state_core.{h,cpp}',
-                       'cpp/hpatch/hpatch.{h,c}',
+    # The cores are picked up by directory (non-recursive: tests/ stays out,
+    # and the Android JNI glue lives in cpp/android_jni), so a new
+    # platform-neutral source needs no edit here.
+    ss.source_files = ['cpp/patch_core/*.{h,cpp}',
+                       'cpp/update_flow_core/*.{h,cpp}',
+                       'cpp/hpatch/*.{h,c}',
                        'android/jni/HDiffPatch/libHDiffPatch/HPatch/*.{h,c}',
                        'android/jni/HDiffPatch/file_for_patch.{h,c}',
                        'android/jni/lzma/C/LzmaDec.{h,c}',

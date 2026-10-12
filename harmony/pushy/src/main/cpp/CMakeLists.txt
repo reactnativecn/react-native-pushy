@@ -8,29 +8,30 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_VERBOSE_MAKEFILE on)
 
 # The shared native sources are compiled in place from the repository root
-# (or the npm package root, which ships android/jni and cpp/).
+# (or the npm package root, which ships cpp/ and the android/jni submodules).
 set(REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../)
-set(ANDROID_JNI_DIR ${REPO_ROOT}/android/jni)
 set(PATCH_CORE_DIR ${REPO_ROOT}/cpp/patch_core)
 set(UPDATE_FLOW_CORE_DIR ${REPO_ROOT}/cpp/update_flow_core)
+set(HPATCH_DIR ${REPO_ROOT}/cpp/hpatch)
+set(HDIFFPATCH_DIR ${REPO_ROOT}/android/jni/HDiffPatch)
+set(LZMA_DIR ${REPO_ROOT}/android/jni/lzma)
 
 # Always compile from source. A prebuilt-import branch used to live here, but
 # it had no symbol verification: a stale libs/<abi>/librnpushy.so missing a
 # newly added export (e.g. getSupportedDiffVersion) would silently ship and
 # crash getConstants at runtime.
-set(HDIFFPATCH_DIR ${ANDROID_JNI_DIR}/HDiffPatch)
-set(LZMA_DIR ${ANDROID_JNI_DIR}/lzma)
+#
+# The platform-neutral cores are picked up by directory (non-recursive, so
+# tests/ stays out; the Android JNI glue lives in cpp/android_jni), so a new
+# core source needs no edit here. CONFIGURE_DEPENDS re-globs on every build.
+file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
+     ${PATCH_CORE_DIR}/*.cpp
+     ${UPDATE_FLOW_CORE_DIR}/*.cpp
+     ${HPATCH_DIR}/*.c
+)
 set(HDP_SOURCES
      ${CMAKE_CURRENT_SOURCE_DIR}/pushy.cpp
-     ${PATCH_CORE_DIR}/archive_patch_core.cpp
-     ${PATCH_CORE_DIR}/digest.cpp
-     ${PATCH_CORE_DIR}/hbc_transform.cpp
-     ${PATCH_CORE_DIR}/hbc_transform_wire.cpp
-     ${PATCH_CORE_DIR}/patch_core.cpp
-     ${PATCH_CORE_DIR}/state_core.cpp
-     ${UPDATE_FLOW_CORE_DIR}/flow_json.cpp
-     ${UPDATE_FLOW_CORE_DIR}/update_flow_core.cpp
-     ${REPO_ROOT}/cpp/hpatch/hpatch.c
+     ${CORE_SOURCES}
      ${HDIFFPATCH_DIR}/libHDiffPatch/HPatch/patch.c
      ${HDIFFPATCH_DIR}/file_for_patch.c
      ${LZMA_DIR}/C/LzmaDec.c
@@ -41,14 +42,12 @@ add_library(rnpushy SHARED
     ${HDP_SOURCES}
 )
 
+# pushy.cpp includes the cores by name; the cores themselves (and hpatch's
+# HDiffPatch/lzma includes) resolve file-relative.
 target_include_directories(rnpushy PRIVATE
      ${CMAKE_CURRENT_SOURCE_DIR}
      ${PATCH_CORE_DIR}
      ${UPDATE_FLOW_CORE_DIR}
-     ${ANDROID_JNI_DIR}
-     ${HDIFFPATCH_DIR}
-     ${HDIFFPATCH_DIR}/libHDiffPatch/HPatch
-     ${LZMA_DIR}/C
 )
 
 target_link_libraries(rnpushy PUBLIC

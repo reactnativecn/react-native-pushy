@@ -16,34 +16,29 @@ mkdir -p "$BUILD_DIR"
 . "$ROOT_DIR/scripts/lib/cpp-test-common.sh"
 cpp_test_sanitize_flags "patch core tests"
 
+# The cores and hpatch include everything file-relative; only the test itself
+# includes HDiffPatch's patch.h by name.
 COMMON_INCLUDES="
-  -I$ROOT_DIR/cpp/patch_core
-  -I$ROOT_DIR/android/jni
-  -I$ROOT_DIR/android/jni/HDiffPatch
   -I$ROOT_DIR/android/jni/HDiffPatch/libHDiffPatch/HPatch
-  -I$ROOT_DIR/android/jni/lzma/C
 "
 
-# The vendored HDiffPatch / lzma C sources are compiled with -Wall -Wextra
-# only (no -Werror).
+# hpatch.c and the vendored HDiffPatch / lzma C sources are compiled with
+# -Wall -Wextra only (no -Werror).
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/cpp/hpatch/hpatch.c" -o "$BUILD_DIR/hpatch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c" -o "$BUILD_DIR/patch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/HDiffPatch/file_for_patch.c" -o "$BUILD_DIR/file_for_patch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/lzma/C/LzmaDec.c" -o "$BUILD_DIR/LzmaDec.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/lzma/C/Lzma2Dec.c" -o "$BUILD_DIR/Lzma2Dec.o"
 
+# Every patch core source, picked up by directory like the platform builds
+# (tests/ is a subdirectory and stays out).
 c++ \
   -std=c++17 \
   $CORE_WARNINGS \
   $SANITIZE_FLAGS \
   $COMMON_INCLUDES \
   "$ROOT_DIR/cpp/patch_core/tests/patch_core_test.cpp" \
-  "$ROOT_DIR/cpp/patch_core/archive_patch_core.cpp" \
-  "$ROOT_DIR/cpp/patch_core/digest.cpp" \
-  "$ROOT_DIR/cpp/patch_core/patch_core.cpp" \
-  "$ROOT_DIR/cpp/patch_core/state_core.cpp" \
-  "$ROOT_DIR/cpp/patch_core/hbc_transform.cpp" \
-  "$ROOT_DIR/cpp/patch_core/hbc_transform_wire.cpp" \
+  "$ROOT_DIR"/cpp/patch_core/*.cpp \
   "$BUILD_DIR/hpatch.o" \
   "$BUILD_DIR/patch.o" \
   "$BUILD_DIR/file_for_patch.o" \

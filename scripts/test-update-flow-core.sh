@@ -20,8 +20,7 @@ c++ \
   -std=c++17 \
   $CORE_WARNINGS \
   $SANITIZE_FLAGS \
-  "$ROOT_DIR/cpp/update_flow_core/flow_json.cpp" \
-  "$ROOT_DIR/cpp/update_flow_core/update_flow_core.cpp" \
+  "$ROOT_DIR"/cpp/update_flow_core/*.cpp \
   "$ROOT_DIR/cpp/update_flow_core/tests/update_flow_core_test.cpp" \
   -o "$BUILD_DIR/update_flow_core_test"
 
@@ -37,8 +36,7 @@ if cpp_test_fuzz_compiler; then
     $CORE_WARNINGS \
     -g -O1 -fno-omit-frame-pointer \
     -fsanitize=fuzzer,address,undefined \
-    "$ROOT_DIR/cpp/update_flow_core/flow_json.cpp" \
-    "$ROOT_DIR/cpp/update_flow_core/update_flow_core.cpp" \
+    "$ROOT_DIR"/cpp/update_flow_core/*.cpp \
     "$ROOT_DIR/cpp/update_flow_core/tests/fuzz_flow_json.cpp" \
     -o "$BUILD_DIR/fuzz_flow_json"
   CORPUS_DIR="$BUILD_DIR/fuzz-corpus-flow-json"
