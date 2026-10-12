@@ -109,8 +109,6 @@ const ping = async (url: string) => {
   }
 };
 
-export { joinUrls } from './updateFlowCore';
-
 export const testUrls = async (urls?: string[]): Promise<string | null> => {
   if (!urls?.length) {
     return null;

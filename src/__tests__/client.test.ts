@@ -1093,8 +1093,6 @@ describe('downloadUpdate fallback chain', () => {
       DEFAULT_FETCH_TIMEOUT_MS: 5000,
       fetchWithTimeout,
       info: mock(() => {}),
-      joinUrls: (paths: string[], fileName?: string) =>
-        fileName ? paths.map((p) => `${p}/${fileName}`) : undefined,
       log: mock(() => {}),
       noop: () => {},
       promiseAny: mock(() => Promise.resolve()),

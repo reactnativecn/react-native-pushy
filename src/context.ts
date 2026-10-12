@@ -46,7 +46,7 @@ export interface UpdateContextValue {
   lastError?: Error;
 }
 
-export const defaultContext: UpdateContextValue = {
+const defaultContext: UpdateContextValue = {
   checkUpdate: asyncNoop,
   switchVersion: asyncNoop,
   switchVersionLater: asyncNoop,

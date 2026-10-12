@@ -16,6 +16,7 @@ mock.module('../i18n', () => {
   };
 });
 
+import { joinUrls } from '../updateFlowCore';
 import {
   computeProgress,
   createNonSecureId,
@@ -23,7 +24,6 @@ import {
   fetchWithTimeout,
   info,
   isProtocolDowngrade,
-  joinUrls,
   log,
   parseQueryParams,
   promiseAny,

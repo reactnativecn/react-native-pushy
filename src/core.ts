@@ -127,7 +127,6 @@ export const currentBundleSha256: string =
     : '';
 
 export const isFirstTime: boolean = PushyConstants.isFirstTime;
-export const isFirstTimeDebug: boolean = isFirstTime && isDebugChannel;
 export const rolledBackVersion: string = PushyConstants.rolledBackVersion;
 export const isRolledBack: boolean = !!rolledBackVersion;
 
@@ -204,7 +203,6 @@ log('bootup status', {
   currentVersion,
   currentVersionInfo,
   isFirstTime,
-  isFirstTimeDebug,
   isDebugChannel,
   cInfo,
 });
