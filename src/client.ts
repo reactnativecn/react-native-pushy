@@ -825,6 +825,32 @@ export class Pushy {
       }
     }
   };
+  /**
+   * toUpdateError + emitError: how a caught failure leaves the client.
+   * Returns the error for the caller to throw or pass to throwIfEnabled.
+   * `fallbackMessage` is reported when the error has no message of its own.
+   */
+  private fail = (
+    e: unknown,
+    code: UpdateErrorCode,
+    type: EventType,
+    {
+      message,
+      fallbackMessage,
+      data,
+    }: {
+      message?: string;
+      fallbackMessage?: string;
+      data?: Record<string, string | number>;
+    } = {}
+  ): UpdateError => {
+    const err = toUpdateError(e, code);
+    this.emitError(err, type, {
+      message: message ?? (err.message || fallbackMessage),
+      data,
+    });
+    return err;
+  };
   notifyAfterCheckUpdate = (state: UpdateCheckState) => {
     const { afterCheckUpdate } = this.options;
     if (!afterCheckUpdate) {
@@ -840,7 +866,22 @@ export class Pushy {
     if (!beforeReload) {
       return true;
     }
-    const shouldReload = await beforeReload(context);
+    let shouldReload: boolean | undefined;
+    try {
+      shouldReload = await beforeReload(context);
+    } catch (e) {
+      // A throw from the user's beforeReload hook is business-code failure,
+      // not an update-pipeline one: give it a distinct code so telemetry
+      // excludes it from the server-side patch-health stats.
+      throw this.fail(
+        e,
+        'USER_HOOK_ERROR',
+        context.type === 'switchVersion'
+          ? 'errorSwitchVersion'
+          : 'errorRestart',
+        context.hash ? { data: { newVersion: context.hash } } : {}
+      );
+    }
     if (shouldReload === false) {
       log('beforeReload returned false, skipping reload');
       return false;
@@ -1029,9 +1070,7 @@ export class Pushy {
     try {
       await Promise.resolve(PushyModule.markSuccess());
     } catch (e) {
-      const err = toUpdateError(e, 'MARK_SUCCESS_FAILED');
-      this.emitError(err, 'errorMarkSuccess');
-      throw err;
+      throw this.fail(e, 'MARK_SUCCESS_FAILED', 'errorMarkSuccess');
     }
     sharedState.marked = true;
     this.report({ type: 'markSuccess' });
@@ -1062,21 +1101,19 @@ export class Pushy {
     }
     log(`switchVersion: ${hash}`);
     const applyingGeneration = beginApplyingUpdate();
+    let shouldReload = false;
     try {
-      if (!(await this.runBeforeReload({ type: 'switchVersion', hash }))) {
-        finishApplyingUpdate(applyingGeneration);
-        return false;
-      }
-    } catch (e) {
-      finishApplyingUpdate(applyingGeneration);
-      // A throw from the user's beforeReload hook is business-code failure,
-      // not an update-pipeline one: give it a distinct code so telemetry
-      // excludes it from the server-side patch-health stats.
-      const err = toUpdateError(e, 'USER_HOOK_ERROR');
-      this.emitError(err, 'errorSwitchVersion', {
-        data: { newVersion: hash },
+      shouldReload = await this.runBeforeReload({
+        type: 'switchVersion',
+        hash,
       });
-      throw err;
+    } finally {
+      if (!shouldReload) {
+        finishApplyingUpdate(applyingGeneration);
+      }
+    }
+    if (!shouldReload) {
+      return false;
     }
     // resetToPackagedBundle may have completed while beforeReload awaited.
     if (!ownsApplyingUpdate(applyingGeneration)) {
@@ -1087,11 +1124,9 @@ export class Pushy {
     } catch (e) {
       // Do not let a superseded rejection clear a newer switch.
       finishApplyingUpdate(applyingGeneration);
-      const err = toUpdateError(e, 'SWITCH_VERSION_FAILED');
-      this.emitError(err, 'errorSwitchVersion', {
+      throw this.fail(e, 'SWITCH_VERSION_FAILED', 'errorSwitchVersion', {
         data: { newVersion: hash },
       });
-      throw err;
     }
     // A resolved reloadUpdate normally tears this JS context down right away.
     // iOS has been seen resolving without restarting (89c638e); a stuck
@@ -1118,11 +1153,9 @@ export class Pushy {
       try {
         return await PushyModule.setNeedUpdate({ hash });
       } catch (e) {
-        const err = toUpdateError(e, 'SWITCH_VERSION_FAILED');
-        this.emitError(err, 'errorSwitchVersion', {
+        throw this.fail(e, 'SWITCH_VERSION_FAILED', 'errorSwitchVersion', {
           data: { newVersion: hash },
         });
-        throw err;
       }
     }
   };
@@ -1251,9 +1284,8 @@ export class Pushy {
         this.lastRespJson = undefined;
         this.lastCheckFingerprint = undefined;
       }
-      const err = toUpdateError(e, 'CHECK_FAILED');
-      this.emitError(err, 'errorChecking', {
-        message: err.message || this.t('error_cannot_connect_server'),
+      const err = this.fail(e, 'CHECK_FAILED', 'errorChecking', {
+        fallbackMessage: this.t('error_cannot_connect_server'),
       });
       this.notifyAfterCheckUpdate({ status: 'error', error: err });
       this.throwIfEnabled(err);
@@ -1575,12 +1607,10 @@ export class Pushy {
     if (!succeeded) {
       const message = errorMessages.join(';');
       if (lastError) {
-        const err = toUpdateError(lastError, 'DOWNLOAD_FAILED');
-        this.emitError(err, 'errorUpdate', {
+        throw this.fail(lastError, 'DOWNLOAD_FAILED', 'errorUpdate', {
           message,
           data: { newVersion: hash },
         });
-        throw err;
       }
       // No download URL was even attempted (e.g. dev without a full URL):
       // report for diagnostics but there is no error object to surface.
@@ -1620,12 +1650,9 @@ export class Pushy {
     try {
       await setLocalHashInfo(hash, hashInfo);
     } catch (e: any) {
-      const err = toUpdateError(e, 'FILE_OPERATION_FAILED');
-      this.emitError(err, 'errorUpdate', {
-        message: err.message,
+      throw this.fail(e, 'FILE_OPERATION_FAILED', 'errorUpdate', {
         data: { newVersion: hash },
       });
-      throw err;
     }
     sharedState.downloadedHash = hash;
     return hash;
@@ -1677,11 +1704,11 @@ export class Pushy {
     } catch (e) {
       sharedState.apkStatus = null;
       // Keep the native error (message/stack) instead of discarding it.
-      const err = toUpdateError(e, 'APK_DOWNLOAD_FAILED');
-      this.emitError(err, 'errorDownloadAndInstallApk', {
-        message: err.message || this.t('error_apk_download_failed'),
-      });
-      this.throwIfEnabled(err);
+      this.throwIfEnabled(
+        this.fail(e, 'APK_DOWNLOAD_FAILED', 'errorDownloadAndInstallApk', {
+          fallbackMessage: this.t('error_apk_download_failed'),
+        })
+      );
     } finally {
       if (sharedState.progressHandlers[progressKey]) {
         sharedState.progressHandlers[progressKey].remove();
@@ -1690,21 +1717,13 @@ export class Pushy {
     }
   };
   restartApp = async () => {
-    try {
-      if (!(await this.runBeforeReload({ type: 'restartApp' }))) {
-        return;
-      }
-    } catch (e) {
-      const err = toUpdateError(e, 'USER_HOOK_ERROR');
-      this.emitError(err, 'errorRestart');
-      throw err;
+    if (!(await this.runBeforeReload({ type: 'restartApp' }))) {
+      return;
     }
     try {
       return await PushyModule.restartApp();
     } catch (e) {
-      const err = toUpdateError(e, 'RESTART_FAILED');
-      this.emitError(err, 'errorRestart');
-      throw err;
+      throw this.fail(e, 'RESTART_FAILED', 'errorRestart');
     }
   };
   /**
@@ -1737,9 +1756,7 @@ export class Pushy {
     try {
       await reset();
     } catch (e) {
-      const err = toUpdateError(e, 'RESET_FAILED');
-      this.emitError(err, 'errorReset');
-      this.throwIfEnabled(err);
+      this.throwIfEnabled(this.fail(e, 'RESET_FAILED', 'errorReset'));
       return false;
     }
     // The downloaded versions are gone; drop JS bookkeeping referring to them
