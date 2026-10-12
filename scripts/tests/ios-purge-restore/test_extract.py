@@ -1,6 +1,6 @@
 import unittest
 
-from extract import declaration, exported_method, function, mask_literals, method, mutate
+from extract import declaration, exported_method, function, mask_literals, method, mutate, struct
 
 
 class ExtractionTests(unittest.TestCase):
@@ -30,6 +30,11 @@ class ExtractionTests(unittest.TestCase):
         source = 'RCT_EXPORT_METHOD(reset:(id)resolve\n rejecter:(id)reject)\n{ ^{ @"}"; }; }'
         self.assertEqual(exported_method(source, 'reset')[1], source)
 
+    def test_struct_definition_keeps_its_terminator(self):
+        source = 'struct Stamp;\nstruct Stamp {\n  bool ok() const { return true; }\n};'
+        self.assertEqual(struct(source, 'Stamp'),
+                         (2, 'struct Stamp {\n  bool ok() const { return true; }\n};'))
+
     def test_static_initializers_and_string_contents(self):
         self.assertEqual(declaration('static std::atomic<bool> active{false};', 'active')[1],
                          'static std::atomic<bool> active{false};')
@@ -47,6 +52,10 @@ class ExtractionTests(unittest.TestCase):
     def test_mutations_fail_on_source_drift(self):
         self.assertEqual(mutate('activation = nil;', 'late-activation'), '(void)activation;')
         self.assertEqual(mutate('return YES;', 'skip-reresolve'), 'return !timedOut;')
+        self.assertEqual(
+            mutate('expected.length == 0) {\n  return [NSString stringWithFormat:@"%@ record mismatch.", h];',
+                   'trust-digestless'),
+            'expected.length == 0) {\n  return nil;')
         for source in ('', 'activation = nil; activation = nil;'):
             with self.assertRaises(ValueError):
                 mutate(source, 'late-activation')

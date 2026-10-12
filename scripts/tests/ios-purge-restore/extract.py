@@ -63,6 +63,11 @@ def exported_method(source: str, name: str) -> tuple[int, str]:
     return definition(source, rf'^RCT_EXPORT_METHOD\(\s*{re.escape(name)}\s*:', name)
 
 
+def struct(source: str, name: str) -> tuple[int, str]:
+    line, text = definition(source, rf'^struct\s+{re.escape(name)}\b', name)
+    return line, text + ';'
+
+
 def declaration(source: str, name: str) -> tuple[int, str]:
     matches = list(re.finditer(rf'^{LINKAGE}\b[^\n;]*\b{re.escape(name)}\b[^\n;]*;',
                                mask_literals(source), re.MULTILINE))
@@ -78,7 +83,7 @@ GLOBALS = [
     'legacyParamPackageVersion', 'legacyParamBuildTime', 'paramLastVersion',
     'paramCurrentVersion', 'paramIsFirstTime', 'paramIsFirstLoadOk', 'keyUuid',
     'keyHashInfo', 'keyFirstLoadMarked', 'keyRolledBackMarked',
-    'keyNativeCheckCache', 'BUNDLE_FILE_NAME',
+    'keyNativeCheckCache', 'BUNDLE_FILE_NAME', 'VERSION_COMPLETE_FILE_NAME',
     'pushyStateLock', 'ignoreRollback', 'pushyIsUsingBundleUrl',
     'pushyResetGeneration', 'pushyNativeConfigGeneration', 'pushyLaunchVersion',
     'pushyCrashHoldActive', 'pushyPurgeRestoreActive', 'pushyPurgeRestoreWindowOpen',
@@ -91,8 +96,13 @@ HELPERS = [
     # Canonical config equality (cross-platform contract), tested directly.
     'PushyNormalizeEndpointBase', 'PushyJsonIsBool', 'PushyJsonEqual',
     'PushyCanonicalUrlList', 'PushyCanonicalConfig', 'PushyConfigsEquivalent',
+    # Install record activation check (cpp/patch_core/install_record.h).
+    'PushyReadInstallRecord', 'PushyInstallRecordMatches', 'PushyStampFile',
+    'PushyVerifyInstallForActivation',
 ]
-MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset')
+# Emitted ahead of HELPERS, which use them.
+STRUCTS = ['PushyFileStamp']
+MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset', 'trust-digestless')
 
 
 def mutate(text: str, mutation: str) -> str:
@@ -103,6 +113,9 @@ def mutate(text: str, mutation: str) -> str:
         'ignore-reset': (
             r'if \(pushyResetGeneration\.load\(\) != generation\)\s*\{\s*return;\s*\}',
             '(void)generation;'),
+        'trust-digestless': (
+            r'(expected\.length == 0\) \{\s*)return \[NSString[^;]*record mismatch[^;]*;',
+            r'\1return nil;'),
     }
     pattern, replacement = patterns[mutation]
     mutated, count = re.subn(pattern, replacement, text)
@@ -137,13 +150,18 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
                for name in SOURCES]
     restore = locate(sources, method, 'restorePurgedLaunch')
     commit = locate(sources, method, 'commitRoundWithGeneration')
+    helpers = [locate(sources, function, name) for name in HELPERS]
     if mutation == 'skip-reresolve':
         restore = (restore[0], restore[1], mutate(restore[2], mutation))
+    elif mutation == 'trust-digestless':
+        index = HELPERS.index('PushyVerifyInstallForActivation')
+        path, line, text = helpers[index]
+        helpers[index] = (path, line, mutate(text, mutation))
     elif mutation:
         commit = (commit[0], commit[1], mutate(commit[2], mutation))
     sections = {
         'globals.inc': [locate(sources, declaration, name) for name in GLOBALS],
-        'helpers.inc': [locate(sources, function, name) for name in HELPERS],
+        'helpers.inc': [locate(sources, struct, name) for name in STRUCTS] + helpers,
         'pushy.inc': [locate(sources, method, 'bundleURL'),
                       locate(sources, method, 'resolveLaunchBundleURL'),
                       locate(sources, exported_method, 'resetToPackagedBundle')],

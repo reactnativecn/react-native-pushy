@@ -2,6 +2,7 @@ import { describe, it, expect } from '@ohos/hypium';
 import {
   INSTALL_RECORD_FILE_NAME,
   INSTALL_RECORD_SCHEMA,
+  InstallRecordData,
   STAGING_SUFFIX,
   buildInstallRecord,
   expectedBundleSha256ForActivation,
@@ -10,7 +11,11 @@ import {
   parseInstallRecord,
   stagingDirectoryFor,
 } from '../main/ets/InstallRecord';
-import { ERROR_SWITCH_VERSION_FAILED, PushyError } from '../main/ets/ErrorCodes';
+import {
+  ERROR_DELTA_FAILED,
+  ERROR_SWITCH_VERSION_FAILED,
+  PushyError,
+} from '../main/ets/ErrorCodes';
 
 // 两阶段安装的完成记录(cpp/patch_core/install_record.h 的 ArkTS 镜像):
 // 纯逻辑部分,不碰磁盘。
@@ -27,11 +32,22 @@ export default function installRecordTest() {
       expect(record!.artifactSha256).assertEqual('ARTIFACT');
     });
 
-    it('omits empty digests', 0, () => {
-      const record = parseInstallRecord(buildInstallRecord('abc', '', ''));
+    it('omits an empty artifact digest', 0, () => {
+      const record = parseInstallRecord(buildInstallRecord('abc', 'BUNDLE', ''));
       expect(record !== null).assertTrue();
-      expect(record!.bundleSha256 === undefined).assertTrue();
+      expect(record!.bundleSha256).assertEqual('BUNDLE');
       expect(record!.artifactSha256 === undefined).assertTrue();
+    });
+
+    it('refuses to build a record without a bundle digest', 0, () => {
+      let caught: PushyError | null = null;
+      try {
+        buildInstallRecord('abc', '', 'ARTIFACT');
+      } catch (e) {
+        caught = e as PushyError;
+      }
+      expect(caught !== null).assertTrue();
+      expect(caught!.code).assertEqual(ERROR_DELTA_FAILED);
     });
 
     it('derives the staging directory from the version directory', 0, () => {
@@ -73,7 +89,7 @@ export default function installRecordTest() {
     });
 
     it('requires the schema and version to match', 0, () => {
-      const record = parseInstallRecord(buildInstallRecord('abc', '', ''));
+      const record = parseInstallRecord(buildInstallRecord('abc', 'DIGEST', ''));
       expect(isRecordForVersion(record, 'abc')).assertTrue();
       expect(isRecordForVersion(record, 'def')).assertFalse();
       expect(
@@ -95,14 +111,27 @@ export default function installRecordTest() {
       expect(caught!.message.startsWith(`[${ERROR_SWITCH_VERSION_FAILED}] `)).assertTrue();
     });
 
-    it('has nothing to verify for legacy or digest-less records', 0, () => {
+    it('has nothing to verify for a legacy empty record', 0, () => {
       expect(expectedBundleSha256ForActivation({}, 'abc')).assertEqual('');
-      expect(
-        expectedBundleSha256ForActivation(
-          parseInstallRecord(buildInstallRecord('abc', '', '')),
-          'abc',
-        ),
-      ).assertEqual('');
+    });
+
+    it('rejects a schema 1 record without a bundle digest', 0, () => {
+      const records: InstallRecordData[] = [
+        { schema: INSTALL_RECORD_SCHEMA, versionHash: 'abc' },
+        { schema: INSTALL_RECORD_SCHEMA, versionHash: 'abc', bundleSha256: '' },
+        { schema: INSTALL_RECORD_SCHEMA, versionHash: 'abc', artifactSha256: 'A' },
+      ];
+      for (const record of records) {
+        let caught: PushyError | null = null;
+        try {
+          expectedBundleSha256ForActivation(record, 'abc');
+        } catch (e) {
+          caught = e as PushyError;
+        }
+        expect(caught !== null).assertTrue();
+        expect(caught!.code).assertEqual(ERROR_SWITCH_VERSION_FAILED);
+        expect(caught!.message.includes('record mismatch')).assertTrue();
+      }
     });
 
     it('returns the recorded digest for a matching record', 0, () => {

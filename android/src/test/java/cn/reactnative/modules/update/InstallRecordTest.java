@@ -13,7 +13,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Arrays;
-import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Rule;
 import org.junit.Test;
@@ -41,17 +40,29 @@ public class InstallRecordTest {
     }
 
     @Test
-    public void buildWritesSchemaAndOnlyPresentDigests() throws JSONException {
+    public void buildWritesSchemaAndDigests() throws Exception {
         JSONObject full = new JSONObject(InstallRecord.build(HASH, "bb", "aa"));
         assertEquals(InstallRecord.SCHEMA, full.getInt("schema"));
         assertEquals(HASH, full.getString("versionHash"));
         assertEquals("bb", full.getString("bundleSha256"));
         assertEquals("aa", full.getString("artifactSha256"));
 
-        JSONObject bare = new JSONObject(InstallRecord.build(HASH, "", null));
-        assertEquals(HASH, bare.getString("versionHash"));
-        assertFalse(bare.has("bundleSha256"));
-        assertFalse(bare.has("artifactSha256"));
+        // artifactSha256 is optional diagnostics.
+        JSONObject noArtifact = new JSONObject(InstallRecord.build(HASH, "bb", null));
+        assertEquals("bb", noArtifact.getString("bundleSha256"));
+        assertFalse(noArtifact.has("artifactSha256"));
+    }
+
+    @Test
+    public void buildRefusesARecordWithoutBundleDigest() throws Exception {
+        for (String missing : new String[] {"", null}) {
+            try {
+                InstallRecord.build(HASH, missing, "aa");
+                fail("a record without bundleSha256 must not be built");
+            } catch (IOException expected) {
+                assertTrue(expected.getMessage().contains("no bundle digest"));
+            }
+        }
     }
 
     @Test
@@ -128,16 +139,40 @@ public class InstallRecordTest {
     }
 
     @Test
-    public void verifyForActivationAcceptsRecordsWithoutDigestAndLegacyMarkers() throws Exception {
+    public void verifyForActivationTrustsLegacyEmptyMarkers() throws Exception {
         File dir = temp.newFolder();
         File bundle = new File(dir, "index.bundlejs");
         writeFile(bundle, "x".getBytes(StandardCharsets.UTF_8));
 
-        InstallRecord.write(dir, InstallRecord.build(HASH, "", ""));
-        InstallRecord.verifyForActivation(dir, HASH, bundle);
-
         writeFile(new File(dir, InstallRecord.FILE_NAME), new byte[0]);
         InstallRecord.verifyForActivation(dir, HASH, bundle);
+    }
+
+    @Test
+    public void verifyForActivationRejectsSchemaOneRecordsWithoutDigest() throws Exception {
+        File dir = temp.newFolder();
+        File bundle = new File(dir, "index.bundlejs");
+        writeFile(bundle, "x".getBytes(StandardCharsets.UTF_8));
+        File marker = new File(dir, InstallRecord.FILE_NAME);
+        String prefix = "{\"schema\":" + InstallRecord.SCHEMA + ",\"versionHash\":\"" + HASH + "\"";
+        String[] records = {
+            prefix + "}",
+            prefix + ",\"bundleSha256\":\"\"}",
+            prefix + ",\"bundleSha256\":null}",
+            prefix + ",\"bundleSha256\":123}",
+            prefix + ",\"artifactSha256\":\"aa\"}",
+        };
+        for (String json : records) {
+            writeFile(marker, json.getBytes(StandardCharsets.UTF_8));
+            // Still present for launch / dedup: only activation is refused.
+            assertTrue(InstallRecord.isComplete(dir, HASH));
+            try {
+                InstallRecord.verifyForActivation(dir, HASH, bundle);
+                fail("digest-less record must not activate: " + json);
+            } catch (IOException expected) {
+                assertTrue(expected.getMessage().contains("record mismatch"));
+            }
+        }
     }
 
     @Test
@@ -152,7 +187,7 @@ public class InstallRecordTest {
             assertTrue(expected.getMessage().contains("no valid completion record"));
         }
 
-        InstallRecord.write(dir, InstallRecord.build("anotherhash", "", ""));
+        InstallRecord.write(dir, InstallRecord.build("anotherhash", "bb", ""));
         try {
             InstallRecord.verifyForActivation(dir, HASH, bundle);
             fail("record for another version must not activate");

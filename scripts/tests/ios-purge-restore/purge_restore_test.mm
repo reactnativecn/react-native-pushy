@@ -4,6 +4,8 @@
 #import <Foundation/Foundation.h>
 #import <dispatch/dispatch.h>
 #import <os/lock.h>
+#include <CommonCrypto/CommonDigest.h>
+#include <sys/stat.h>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -12,6 +14,8 @@
 #include "cpp/patch_core/state_core.h"
 #include "cpp/patch_core/patch_core.h"
 #include "cpp/patch_core/error_codes.h"
+#include "cpp/patch_core/digest.h"
+#include "cpp/patch_core/install_record.h"
 #include "ios/RCTPushy/RCTPushyConfiguration.h"
 
 #undef TARGET_OS_TV
@@ -30,6 +34,9 @@ static void TestLog(NSString *, ...) {}
 // Pod-internal linkage (RCTPushyInternal.h); one translation unit here.
 #define PUSHY_HIDDEN
 
+// RCTPushy.mm's own #define, not extracted; InstallRecordActivation checks it
+// against install_record.h.
+#define VERSION_COMPLETE_FILE_NAME_LITERAL ".pushy-complete"
 #include "globals.inc"
 
 static const char *testName = "setup";
@@ -536,6 +543,74 @@ static void ConfigEquivalence(void) {
     std::printf("[PASS] config_equivalence: %lu shared vectors\n", (unsigned long)cases.count);
 }
 
+// Two-phase install record (cpp/patch_core/install_record.h): the production
+// activation check against real files. Schema 1 makes bundleSha256 mandatory;
+// only the legacy EMPTY marker (SDK < 10.53) activates without a digest.
+static NSString *Sha256Hex(NSData *data) {
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString *hex = [NSMutableString string];
+    for (unsigned char byte : digest) { [hex appendFormat:@"%02x", byte]; }
+    return hex;
+}
+
+static void InstallRecordActivation(void) {
+    Expect([VERSION_COMPLETE_FILE_NAME isEqualToString:@(pushy::install_record::kFileName)],
+           "record file name matches install_record.h");
+    NSString *hash = @"0123456789abcdef";
+    NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:
+        [NSString stringWithFormat:@"pushy-install-record-%@", NSUUID.UUID.UUIDString]];
+    Expect([NSFileManager.defaultManager createDirectoryAtPath:dir withIntermediateDirectories:YES
+                                                    attributes:nil error:nil], "temp dir");
+    NSData *bundle = [@"var a = 1;" dataUsingEncoding:NSUTF8StringEncoding];
+    Expect([bundle writeToFile:[dir stringByAppendingPathComponent:BUNDLE_FILE_NAME] atomically:YES],
+           "write bundle");
+    NSString *marker = [dir stringByAppendingPathComponent:VERSION_COMPLETE_FILE_NAME];
+    auto verify = ^NSString *(id record) {
+        NSData *data = [record isKindOfClass:NSData.class]
+            ? record : [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
+        Expect([data writeToFile:marker atomically:YES], "write record");
+        NSDictionary *verified = nil;
+        PushyFileStamp stamp;
+        return PushyVerifyInstallForActivation(dir, hash, &verified, &stamp);
+    };
+    auto rejected = ^bool(NSString *reason, NSString *what) {
+        return reason != nil && [reason containsString:what];
+    };
+    NSNumber *schema = @(pushy::install_record::kSchema);
+
+    Expect(verify([NSData data]) == nil, "legacy empty marker stays trusted");
+    Expect(verify(@{@"schema": schema, @"versionHash": hash, @"bundleSha256": Sha256Hex(bundle)}) == nil,
+           "matching digest activates");
+    Expect(verify(@{@"schema": schema, @"versionHash": hash,
+                    @"bundleSha256": [Sha256Hex(bundle) uppercaseString]}) == nil,
+           "digest compare is case-insensitive");
+    Expect(rejected(verify(@{@"schema": schema, @"versionHash": hash,
+                             @"bundleSha256": Sha256Hex([NSData data])}), @"bundle digest mismatch"),
+           "tampered bundle must not activate");
+    NSArray *digestless = @[
+        @{@"schema": schema, @"versionHash": hash},
+        @{@"schema": schema, @"versionHash": hash, @"bundleSha256": @""},
+        @{@"schema": schema, @"versionHash": hash, @"bundleSha256": NSNull.null},
+        @{@"schema": schema, @"versionHash": hash, @"bundleSha256": @123},
+        @{@"schema": schema, @"versionHash": hash, @"artifactSha256": Sha256Hex(bundle)},
+    ];
+    for (NSDictionary *record in digestless) {
+        Expect(rejected(verify(record), @"completion record mismatch"),
+               "digest-less record must not activate");
+    }
+    Expect(rejected(verify(@{@"schema": schema, @"versionHash": @"other",
+                             @"bundleSha256": Sha256Hex(bundle)}), @"completion record mismatch"),
+           "record for another version must not activate");
+    [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
+    NSDictionary *verified = nil;
+    PushyFileStamp stamp;
+    Expect(rejected(PushyVerifyInstallForActivation(dir, hash, &verified, &stamp),
+                    @"no valid completion record"),
+           "missing record must not activate");
+    [NSFileManager.defaultManager removeItemAtPath:dir error:nil];
+}
+
 int main(int argc, char **argv) {
     @autoreleasepool {
         // These intentional failures run in separate processes. Erasing the
@@ -566,6 +641,7 @@ int main(int argc, char **argv) {
             {"late_launch", LateLaunch},
             {"offline_skip", [] { Skipped(YES); }},
             {"spent_budget_skip", [] { Skipped(NO); }},
+            {"install_record_activation", InstallRecordActivation},
         };
         int ran = 0;
         for (const auto &test : cases) {

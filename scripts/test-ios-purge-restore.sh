@@ -35,6 +35,7 @@ build() {
   xcrun clang++ -std=c++17 -fobjc-arc -fblocks $WARNING_FLAGS $SANITIZE_FLAGS \
     -I"$ROOT_DIR" -I"$destination" \
     "$TEST_DIR/purge_restore_test.mm" "$ROOT_DIR/cpp/patch_core/state_core.cpp" \
+    "$ROOT_DIR/cpp/patch_core/digest.cpp" \
     "$ROOT_DIR/ios/RCTPushy/RCTPushyConfiguration.mm" \
     -framework Foundation -o "$destination/purge_restore_test"
 }
@@ -90,7 +91,8 @@ if [ "${VERIFY_REGRESSIONS:-0}" = "1" ]; then
     echo "[PASS] unsupported defaults $access rejected at compile time and runtime"
   done
 
-  for pair in late-activation:late_commit skip-reresolve:commit_before_signal ignore-reset:reset_wins; do
+  for pair in late-activation:late_commit skip-reresolve:commit_before_signal ignore-reset:reset_wins \
+      trust-digestless:install_record_activation; do
     variant="${pair%:*}"
     testcase="${pair#*:}"
     build "$variant"
@@ -103,6 +105,7 @@ if [ "${VERIFY_REGRESSIONS:-0}" = "1" ]; then
       late-activation) expected="late round may persist its response but must not activate" ;;
       skip-reresolve) expected="must re-resolve B even when done signal is late" ;;
       ignore-reset) expected="stale generation must reject ALL commit writes" ;;
+      trust-digestless) expected="digest-less record must not activate" ;;
     esac
     if ! grep -F "[FAIL] $testcase: $expected" "$logfile"; then
       cat "$logfile" >&2

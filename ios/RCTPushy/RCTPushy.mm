@@ -218,7 +218,8 @@ static PushyFileStamp PushyStampFile(NSString *path) {
     return stamp;
 }
 
-// Activation check: re-hashes the bundle when the record carries a digest.
+// Activation check: re-hashes the bundle against the record's digest, which
+// schema 1 makes mandatory (only the legacy empty marker has none).
 // Returns nil when the directory may be activated, the reason otherwise.
 // Slow (a full read of the bundle): never call it under the state lock. On
 // success *recordOut and *stampOut describe exactly what was verified, so the
@@ -242,7 +243,7 @@ static NSString *PushyVerifyInstallForActivation(NSString *versionDir, NSString 
     }
     NSString *expected = record[@"bundleSha256"];
     if (![expected isKindOfClass:[NSString class]] || expected.length == 0) {
-        return nil;
+        return [NSString stringWithFormat:@"Bundle version %@ completion record mismatch.", hash];
     }
     std::string actual = pushy::digest::Sha256File(PushyToStdString(bundlePath));
     if (PushyStampFile(bundlePath) != before) {
@@ -1569,17 +1570,20 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
                 // the staging directory, which is then renamed over the
                 // version directory in one atomic step.
                 NSString *bundlePath = [staging stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+                // The digest is mandatory: a version whose bundle could not
+                // be hashed is never recorded as installed.
+                std::string bundleSha256;
                 if (![fileManager fileExistsAtPath:bundlePath]) {
                     finalError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
                                                     @"bundle missing after install");
+                } else if ((bundleSha256 = pushy::digest::Sha256File(PushyToStdString(bundlePath))).empty()) {
+                    finalError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
+                                                    @"bundle digest failed after install");
                 } else {
-                    std::string bundleSha256 = pushy::digest::Sha256File(PushyToStdString(bundlePath));
                     NSMutableDictionary *record = [NSMutableDictionary dictionary];
                     record[@"schema"] = @(pushy::install_record::kSchema);
                     record[@"versionHash"] = hash;
-                    if (!bundleSha256.empty()) {
-                        record[@"bundleSha256"] = [NSString stringWithUTF8String:bundleSha256.c_str()];
-                    }
+                    record[@"bundleSha256"] = [NSString stringWithUTF8String:bundleSha256.c_str()];
                     if (artifactSha256.length > 0) {
                         record[@"artifactSha256"] = artifactSha256;
                     }
