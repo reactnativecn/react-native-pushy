@@ -21,7 +21,6 @@
     "harmony/pushy.har",
     "harmony/hvigor-plugin.ts",
     "harmony/pushy/src",
-    "!harmony/pushy/src/test",
     "react-native-update.podspec",
     "react-native.config.js",
     "expo-module.config.json",
