@@ -22,7 +22,8 @@
 // - Legacy: an EMPTY file is a completed install written by SDK < 10.53
 //   (no digests); it stays trusted for presence, nothing to verify.
 //
-// Mirrors that cannot include this header MUST stay in sync by hand:
+// Mirrors that cannot include this header MUST stay in sync by hand
+// (scripts/check-constant-parity.js, part of `bun lint`, asserts they do):
 //   - android/.../InstallRecord.java
 //   - harmony/pushy/src/main/ets/InstallRecord.ts
 // iOS (RCTPushy.mm) includes this header directly.

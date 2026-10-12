@@ -6,9 +6,11 @@
 // so the JS layer (src/error.ts UpdateErrorCode) and user loggers can
 // aggregate errors across platforms and locales.
 //
-// Mirrors that cannot include this header MUST stay in sync by hand:
-//   - src/error.ts                      (UpdateErrorCode union, JS layer)
+// Mirrors that cannot include this header MUST stay in sync by hand
+// (scripts/check-constant-parity.js, part of `bun lint`, asserts they do):
+//   - src/error.ts                      (UpdateErrorCode, JS layer)
 //   - android/.../ErrorCodes.java      (Java constants)
+//   - harmony/pushy/src/main/ets/ErrorCodes.ts
 // iOS (RCTPushy.mm) includes this header directly.
 //
 // Human-readable messages are NOT part of this contract: they may differ per
