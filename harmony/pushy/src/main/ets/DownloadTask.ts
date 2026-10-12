@@ -4,7 +4,7 @@ import common from '@ohos.app.ability.common';
 import { zlib } from '@kit.BasicServicesKit';
 import { EventHub } from './EventHub';
 import { DownloadTaskParams } from './DownloadTaskParams';
-import { saveFileToSandbox } from './SaveFile';
+import { saveFileToSandbox, withRawFd } from './SaveFile';
 import { util } from '@kit.ArkTS';
 import NativePatchCore, {
   ARCHIVE_PATCH_TYPE_FROM_PACKAGE,
@@ -16,10 +16,11 @@ import logger from './Logger';
 import {
   MAX_ARCHIVE_BYTES,
   MAX_MANIFEST_BYTES,
-  UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES,
+  checkOriginalSize,
   checkUncompressedSize,
   ensureFreeSpace,
   measureExtractedDirectory,
+  planUnknownLengthFreeSpaceProbe,
 } from './ArchiveLimits';
 import {
   HARMONY_BUNDLE_FILE_NAME,
@@ -127,6 +128,7 @@ function toArrayBufferSlice(
 
 const DIFF_MANIFEST_ENTRY = '__diff.json';
 const TEMP_ORIGIN_BUNDLE_ENTRY = '.origin.bundle.harmony.js';
+const EMBEDDED_BUNDLE_RAWFILE = 'bundle.harmony.js';
 const FILE_COPY_BUFFER_SIZE = 64 * 1024;
 const DOWNLOAD_CALL_TIMEOUT_MS = 10 * 60 * 1000;
 
@@ -328,27 +330,28 @@ export class DownloadTask {
 
   /**
    * 解压前读取归档解压后的总字节数(zlib.getOriginalSize,API 12——RNOH 的
-   * 最低 API 已覆盖)。读不到就拒绝归档:zlib.decompressFile 没有逐条钩子,
-   * 不知道展开量就放行等于允许一个 20MB 的归档在 measureExtractedDirectory
-   * 跑到之前先把磁盘写满。
+   * 最低 API 已覆盖)。读不到就拒绝归档(checkOriginalSize):zlib.decompressFile
+   * 没有逐条钩子,不知道展开量就放行等于允许一个 20MB 的归档在
+   * measureExtractedDirectory 跑到之前先把磁盘写满。拒绝带专属错误细节
+   * (ORIGINAL_SIZE_UNAVAILABLE)并单独记日志,与"超限"拒绝可区分。
    */
   private async readOriginalSize(archiveFile: string): Promise<number> {
     let size: number | undefined;
+    let failure: string | undefined;
     try {
       size = await zlib.getOriginalSize(archiveFile);
     } catch (e) {
-      throw createPushyError(
-        ERROR_DELTA_FAILED,
-        `cannot determine archive expansion size: ${getErrorMessage(e)}`,
-      );
+      failure = getErrorMessage(e);
     }
-    if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
-      throw createPushyError(
-        ERROR_DELTA_FAILED,
-        `cannot determine archive expansion size: ${String(size)}`,
+    try {
+      return checkOriginalSize(size, failure);
+    } catch (error) {
+      logger.error(
+        TAG,
+        `Refusing archive, expansion size unknown: ${getErrorMessage(error)}`,
       );
+      throw error;
     }
-    return size;
   }
 
   /**
@@ -480,8 +483,12 @@ export class DownloadTask {
   }
 
 
-  private async applyBundlePatchFromFileSource(
-    originContent: ArrayBuffer,
+  /**
+   * pdiff 的 bundle 补丁:hpatch 需要文件源,先把二进制内嵌的 bundle 从
+   * rawfile descriptor 异步流式拷到 staging 里的临时文件(不整包读进内存、
+   * 不在 UI 线程同步 IO),补丁完成后删除。
+   */
+  private async applyBundlePatchFromEmbeddedBundle(
     workingDirectory: string,
     bundleDeltaPath: string,
     outputFile: string,
@@ -489,7 +496,11 @@ export class DownloadTask {
   ): Promise<void> {
     const originBundlePath = `${workingDirectory}/${TEMP_ORIGIN_BUNDLE_ENTRY}`;
     try {
-      await this.writeFileContent(originBundlePath, originContent);
+      await withRawFd(
+        this.context.resourceManager,
+        EMBEDDED_BUNDLE_RAWFILE,
+        descriptor => saveFileToSandbox(descriptor, originBundlePath),
+      );
       await NativePatchCore.applyDeltaFromSource({
         copyFroms: [],
         copyTos: [],
@@ -514,50 +525,14 @@ export class DownloadTask {
     }
   }
 
+  // 沙箱内文件复制(同一 rawfile 落到多个目标时,首个之外的目标从首个复制)。
+  // fileIo.copyFile 在工作线程整文件复制并覆盖目标,无需逐块搬运。
   private async copySandboxFile(
     sourceFile: string,
     targetFile: string,
   ): Promise<void> {
-    let reader: fileIo.File | null = null;
-    let writer: fileIo.File | null = null;
-    const buffer = new ArrayBuffer(FILE_COPY_BUFFER_SIZE);
-    let offset = 0;
-
-    try {
-      reader = await fileIo.open(sourceFile, fileIo.OpenMode.READ_ONLY);
-      await this.ensureParentDirectory(targetFile);
-      if (fileIo.accessSync(targetFile)) {
-        await fileIo.unlink(targetFile);
-      }
-      writer = await fileIo.open(
-        targetFile,
-        fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,
-      );
-
-      while (true) {
-        const readLength = await fileIo.read(reader.fd, buffer, {
-          offset,
-          length: FILE_COPY_BUFFER_SIZE,
-        });
-        if (readLength <= 0) {
-          break;
-        }
-
-        await fileIo.write(writer.fd, buffer.slice(0, readLength));
-        offset += readLength;
-
-        if (readLength < FILE_COPY_BUFFER_SIZE) {
-          break;
-        }
-      }
-    } finally {
-      if (reader) {
-        await fileIo.close(reader);
-      }
-      if (writer) {
-        await fileIo.close(writer);
-      }
-    }
+    await this.ensureParentDirectory(targetFile);
+    await fileIo.copyFile(sourceFile, targetFile);
   }
 
   private async downloadFile(params: DownloadTaskParams): Promise<void> {
@@ -689,19 +664,17 @@ export class DownloadTask {
           `archive too large: exceeded ${MAX_ARCHIVE_BYTES}`,
         );
       }
-      // 未知长度:响应到达时只能预留安全余量,所以任何会写过已预留字节数的
-      // 写入之前先探测,每次至少预留接下来的 PROBE 字节(单个 chunk 更大时按
-      // chunk 算)——任何写入都吃不到余量(归档上限本身远大于余量)。失败保留
-      // partial 供下次续传。
-      const writtenBefore = received - data.byteLength;
-      const probeFreeSpace = totalAll <= 0 && received > freeSpaceReservedUntil;
-      const reserve = Math.max(
-        UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES,
+      // 未知长度:见 planUnknownLengthFreeSpaceProbe。失败保留 partial 供
+      // 下次续传。
+      const plan = planUnknownLengthFreeSpaceProbe(
+        totalAll,
+        received - data.byteLength,
         data.byteLength,
+        freeSpaceReservedUntil,
       );
-      if (probeFreeSpace) {
-        freeSpaceReservedUntil = writtenBefore + reserve;
-      }
+      freeSpaceReservedUntil = plan.reservedUntil;
+      const probeFreeSpace = plan.probe;
+      const reserve = plan.reserve;
       writeQueue = writeQueue.then(async () => {
         if (!writer || writeError) {
           return;
@@ -1109,12 +1082,7 @@ export class DownloadTask {
     if (!fileIo.accessSync(bundleDeltaPath)) {
       throw createPushyError(ERROR_DELTA_FAILED, 'bundle delta not found');
     }
-    const resourceManager = this.context.resourceManager;
-    const originContent = await resourceManager.getRawFileContent(
-      'bundle.harmony.js',
-    );
-    await this.applyBundlePatchFromFileSource(
-      originContent.buffer as ArrayBuffer,
+    await this.applyBundlePatchFromEmbeddedBundle(
       work,
       bundleDeltaPath,
       `${work}/${HARMONY_BUNDLE_FILE_NAME}`,
@@ -1218,28 +1186,15 @@ export class DownloadTask {
           continue;
         }
 
-        const fromContent = await resourceManager.getRawFd(currentFrom);
-        try {
-          const firstTarget = targets[0];
-          const restTargets = targets.slice(1);
-          await this.ensureParentDirectories(targets);
-          if (fileIo.accessSync(firstTarget)) {
-            await fileIo.unlink(firstTarget);
-          }
-          saveFileToSandbox(fromContent, firstTarget);
-          await Promise.all(
-            restTargets.map(target => this.copySandboxFile(firstTarget, target)),
-          );
-        } finally {
-          try {
-            await resourceManager.closeRawFd(currentFrom);
-          } catch (closeError) {
-            logger.error(
-              TAG,
-              `Failed to close raw fd for ${currentFrom}: ${getErrorMessage(closeError)}`,
-            );
-          }
-        }
+        const firstTarget = targets[0];
+        const restTargets = targets.slice(1);
+        await this.ensureParentDirectories(targets);
+        await withRawFd(resourceManager, currentFrom, descriptor =>
+          saveFileToSandbox(descriptor, firstTarget),
+        );
+        await Promise.all(
+          restTargets.map(target => this.copySandboxFile(firstTarget, target)),
+        );
       }
     } catch (error) {
       const coded = toPushyError(error, ERROR_DELTA_FAILED);

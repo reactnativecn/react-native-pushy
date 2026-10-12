@@ -50,7 +50,7 @@ export class PushyFileJSBundleProvider extends JSBundleProvider {
   /** Configure before normal bundle resolution; no JS or network work is required. */
   async configure(options: PushyConfiguration): Promise<void> {
     const config = normalizePushyConfiguration(options);
-    await this.updateContext.setNativeConfig(config);
+    await this.updateContext.setHostNativeConfig(config);
   }
 
   /** Call after the host's real bundle resolution; never resolves it again. */
