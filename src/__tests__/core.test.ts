@@ -147,6 +147,53 @@ describe('client os label', () => {
   });
 });
 
+describe('bundle hash prefetch', () => {
+  const mockGetBundleHash = (getBundleHash: () => unknown) => {
+    mock.module('react-native', () => ({
+      ...baseReactNative(),
+      Platform: { OS: 'ios', Version: '17.5' },
+      DeviceEventEmitter: {
+        addListener: mock(() => ({ remove: mock(() => {}) })),
+      },
+      NativeModules: {
+        Pushy: {
+          currentVersionInfo: '{}',
+          downloadRootDir: '/tmp',
+          packageVersion: '1.0.0',
+          currentVersion: '',
+          isFirstTime: false,
+          rolledBackVersion: '',
+          buildTime: '1',
+          uuid: 'existing-uuid',
+          setLocalHashInfo: mock(() => {}),
+          getLocalHashInfo: mock(() => Promise.resolve('{}')),
+          setUuid: mock(() => {}),
+          getBundleHash,
+        },
+      },
+      NativeEventEmitter: class {
+        addListener = mock(() => ({ remove: mock(() => {}) }));
+      },
+    }));
+  };
+
+  test('a synchronous native throw fails the module load (broken integration)', async () => {
+    mockGetBundleHash(() => {
+      throw new Error('bridge broken');
+    });
+    await expect(importFreshCore('bundle-hash-sync-throw')).rejects.toThrow(
+      'bridge broken'
+    );
+  });
+
+  test('an async native failure only leaves the hash unknown', async () => {
+    mockGetBundleHash(() => Promise.reject(new Error('not computed')));
+    const core = await importFreshCore('bundle-hash-async-reject');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(core.getBundleHash()).toBe('');
+  });
+});
+
 describe('web platform', () => {
   restoreDevAfterEach();
 

@@ -148,13 +148,19 @@ let uuid = PushyConstants.uuid;
 // between its dedup window and the fetch, and a hash is never worth delaying
 // a check for.
 let bundleHash = '';
-nativeMethod('getBundleHash')?.()
-  .then((hash: unknown) => {
-    bundleHash = String(hash || '');
-  })
-  .catch((e: any) => {
-    log('getBundleHash failed:', e?.message || e);
-  });
+// Feature-detected like nativeMethod (older natives lack it, web has no native
+// module), but called directly rather than through it: a synchronous throw
+// means a broken native integration and must propagate at module load, not be
+// turned into a logged rejection. Only an async failure is tolerated.
+if (!isWebPlatform && typeof PushyModule.getBundleHash === 'function') {
+  Promise.resolve(PushyModule.getBundleHash())
+    .then((hash: unknown) => {
+      bundleHash = String(hash || '');
+    })
+    .catch((e: any) => {
+      log('getBundleHash failed:', e?.message || e);
+    });
+}
 
 /** '' while unknown (not yet computed, debug build, no embedded bundle, older native). */
 export const getBundleHash = (): string => bundleHash;
