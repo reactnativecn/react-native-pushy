@@ -70,7 +70,7 @@ function safeResolve(urlPath: string) {
   return target;
 }
 
-// Most recent non-empty bundleHash each platform sent with checkUpdate, so a
+// bundleHash each platform sent with its most recent checkUpdate, so a
 // test can compare it against the sha256 of the bundle embedded in the binary.
 const lastBundleHash: Record<string, string> = {};
 
@@ -215,9 +215,10 @@ const server = Bun.serve({
         diffV?: unknown;
         bundleHash?: unknown;
       };
-      if (typeof payload.bundleHash === 'string' && payload.bundleHash) {
-        lastBundleHash[platform] = payload.bundleHash;
-      }
+      // Every request overwrites: a later check that drops the hash must
+      // fail the identity test rather than hide behind an earlier one.
+      lastBundleHash[platform] =
+        typeof payload.bundleHash === 'string' ? payload.bundleHash : '';
       const currentHash = typeof payload.hash === 'string' ? payload.hash : '';
       const diffV = typeof payload.diffV === 'number' ? payload.diffV : 0;
 
