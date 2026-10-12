@@ -70,11 +70,6 @@ import {
   warn,
 } from './utils';
 
-/**
- * Receives every error the client reports, alongside the report event type.
- * The UpdateProvider subscribes to surface errors as lastError/Alert; user
- * code can subscribe too. Listeners run before any throwError rethrow.
- */
 /** One report() event: the logger payload and the source of server telemetry. */
 interface ReportEvent {
   type: EventType;
@@ -83,6 +78,11 @@ interface ReportEvent {
   data?: Record<string, string | number>;
 }
 
+/**
+ * Receives every error the client reports, alongside the report event type.
+ * The UpdateProvider subscribes to surface errors as lastError/Alert; user
+ * code can subscribe too. Listeners run before any throwError rethrow.
+ */
 export type UpdateErrorListener = (
   error: UpdateError,
   eventType: EventType
