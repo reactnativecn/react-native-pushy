@@ -136,8 +136,7 @@ def mutate(text: str, mutation: str) -> str:
     return mutated
 
 
-# The sources the module is split across (see RCTPushyInternal.h, which
-# also holds the PushyFileStamp struct).
+# The sources the module is split across (see RCTPushyInternal.h).
 SOURCES = ('RCTPushyInternal.h', 'RCTPushy.mm', 'RCTPushy+Launch.mm', 'RCTPushyState.mm',
            'RCTPushyInstallRecord.mm', 'RCTPushyInstaller.mm', 'RCTPushyOrchestrator.mm')
 
