@@ -7,10 +7,6 @@ package cn.reactnative.modules.update;
  * A null return means the input did not parse; callers skip the check round.
  */
 final class FlowBridge {
-    static {
-        NativeCore.ensureLoaded();
-    }
-
     private FlowBridge() {
     }
 

@@ -19,22 +19,7 @@ final class ReactReloadManager {
     }
 
     /**
-     * First half of a restart, for the state serial thread: activate the
-     * requested version (bundle digest + commit) and resolve the bundle to
-     * load. Nothing here touches React, so nothing here needs the UI thread
-     * (CODE_AUDIT 2.2). Returns the bundle path, or null for the packaged
-     * bundle.
-     */
-    @Nullable
-    static String prepareRestart(UpdateContext updateContext, @Nullable String hash) {
-        if (hash != null) {
-            updateContext.switchVersion(hash);
-        }
-        return updateContext.getBundleUrl();
-    }
-
-    /**
-     * Second half, for the UI thread: point the running React instance at
+     * For the UI thread: point the running React instance at
      * {@code updateBundlePath} and reload it. Throws when no supported
      * injection worked — the caller rejects RESTART_FAILED. There is
      * deliberately no Activity.recreate() fallback: it would reload the
@@ -241,14 +226,14 @@ final class ReactReloadManager {
         reactHostDelegateField.setAccessible(true);
         Object reactHostDelegate = reactHostDelegateField.get(reactHost);
 
-        String bundleFieldName = "jsBundleLoader";
-        if ("expo.modules.ExpoReactHostFactory.ExpoReactHostDelegate".equals(
-            reactHostDelegate.getClass().getCanonicalName()
-        )) {
-            bundleFieldName = "_jsBundleLoader";
+        // DefaultReactHostDelegate stores the loader in jsBundleLoader; Expo's
+        // ExpoReactHostDelegate computes that property from _jsBundleLoader.
+        Field jsBundleLoaderField;
+        try {
+            jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("jsBundleLoader");
+        } catch (NoSuchFieldException e) {
+            jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField("_jsBundleLoader");
         }
-
-        Field jsBundleLoaderField = reactHostDelegate.getClass().getDeclaredField(bundleFieldName);
         jsBundleLoaderField.setAccessible(true);
         jsBundleLoaderField.set(reactHostDelegate, loader);
 

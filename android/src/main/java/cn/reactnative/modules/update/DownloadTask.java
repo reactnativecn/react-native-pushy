@@ -53,10 +53,6 @@ class DownloadTask implements Runnable {
             .callTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
             .build();
 
-    static {
-        NativeCore.ensureLoaded();
-    }
-
     // Two-phase install (cpp/patch_core/install_record.h): all unpack/patch
     // work happens in <hash>.staging; the final <hash> directory only ever
     // appears through an atomic rename after the completion record was
@@ -157,7 +153,7 @@ class DownloadTask implements Runnable {
 
     static void deleteResumeSidecar(File archive) {
         File sidecar = resumeSidecarFile(archive);
-        if (sidecar.exists() && !sidecar.delete() && UpdateContext.DEBUG) {
+        if (sidecar.exists() && !sidecar.delete() && BuildConfig.DEBUG) {
             Log.w(Texts.LOG_TAG, "Failed to delete resume sidecar " + sidecar);
         }
     }

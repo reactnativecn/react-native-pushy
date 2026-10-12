@@ -87,7 +87,7 @@ final class SyncCoordinator {
 
     /** Blocking only on the host API's worker; never call on the UI thread. */
     static BundlePreparationResult prepareBundle(UpdateContext context) throws InterruptedException {
-        if (UpdateContext.DEBUG) {
+        if (BuildConfig.DEBUG) {
             return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "debug");
         }
         if (!nativeReady || sContext != context || !context.getIsUsingBundleUrl()) {
@@ -186,7 +186,7 @@ final class SyncCoordinator {
     }
 
     static void schedule(final UpdateContext context, final String launchRolledBackVersion) {
-        if (UpdateContext.DEBUG) {
+        if (BuildConfig.DEBUG) {
             return;
         }
         if (!scheduled.compareAndSet(false, true)) {

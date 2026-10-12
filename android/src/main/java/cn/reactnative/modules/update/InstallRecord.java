@@ -83,7 +83,7 @@ final class InstallRecord {
                 dir.toPath(), java.nio.file.StandardOpenOption.READ)) {
             channel.force(true);
         } catch (Throwable e) {
-            Log.w("pushy", "Directory fsync skipped for " + dir + ": " + e);
+            Log.w(Texts.LOG_TAG, "Directory fsync skipped for " + dir + ": " + e);
         }
     }
 

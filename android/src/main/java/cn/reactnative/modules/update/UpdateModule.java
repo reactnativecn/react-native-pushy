@@ -70,7 +70,7 @@ public class UpdateModule extends NativePushySpec {
             // A mismatched librnpushy.so (stale manual copy / build cache)
             // must not crash startup via getConstants; 0 simply means "no v2
             // diff track" and the server degrades gracefully.
-            Log.e("pushy", "supportedDiffVersion missing from the native library", e);
+            Log.e(Texts.LOG_TAG, "supportedDiffVersion missing from the native library", e);
         }
         constants.put("supportedDiffVersion", supportedDiffVersion);
         return constants;
@@ -250,10 +250,15 @@ public class UpdateModule extends NativePushySpec {
     private void restart(@Nullable final String hash, final Promise promise) {
         // Two hops (CODE_AUDIT 2.2): the switch (bundle digest + commit) and
         // the launch resolution run on the state serial thread like every
-        // other state write; only the React reload itself is posted to the
-        // UI thread. A failure at either hop rejects with RESTART_FAILED.
+        // other state write — nothing there touches React; only the React
+        // reload itself is posted to the UI thread. A failure at either hop
+        // rejects with RESTART_FAILED.
         StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.RESTART_FAILED, "restartApp", () -> {
-            final String bundlePath = ReactReloadManager.prepareRestart(updateContext, hash);
+            if (hash != null) {
+                updateContext.switchVersion(hash);
+            }
+            // The bundle to load; null for the packaged one.
+            final String bundlePath = updateContext.getBundleUrl();
             StateSerialRunner.run(UI_THREAD, promise, ErrorCodes.RESTART_FAILED, "restartApp", () -> {
                 ReactReloadManager.reload(updateContext, reactContext, bundlePath);
                 promise.resolve(true);

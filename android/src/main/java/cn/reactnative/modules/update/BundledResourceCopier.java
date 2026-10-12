@@ -364,7 +364,7 @@ final class BundledResourceCopier {
             try {
                 zipFile.close();
             } catch (IOException e) {
-                if (UpdateContext.DEBUG) {
+                if (BuildConfig.DEBUG) {
                     Log.w(Texts.LOG_TAG, "Failed to close zip file", e);
                 }
             }

@@ -14,12 +14,12 @@ import java.io.InputStream;
 import java.util.concurrent.Executor;
 
 public class UpdateContext {
+    // The one place that loads librnpushy.so (see NativeCore).
     static {
         NativeCore.ensureLoaded();
     }
 
     static final String TAG = Texts.LOG_TAG;
-    static final boolean DEBUG = BuildConfig.DEBUG;
 
     private final Context context;
     private final File rootDir;
@@ -244,7 +244,7 @@ public class UpdateContext {
     }
 
     private void startBundleHashComputation() {
-        if (DEBUG) {
+        if (BuildConfig.DEBUG) {
             // Metro serves the bundle in debug; mirror the dev buildTime behaviour.
             publishBundleHash("");
             return;
