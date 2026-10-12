@@ -206,18 +206,12 @@ export class PushyTurboModule extends UITurboModule {
       uuid,
       supportedDiffVersion: NativePatchCore.getSupportedDiffVersion(),
     };
-    const logResult = {
-      downloadRootDir: result.downloadRootDir,
-      currentVersionInfo: result.currentVersionInfo,
-      packageVersion: result.packageVersion,
-      currentVersion: result.currentVersion,
-      buildTime: result.buildTime,
-      isUsingBundleUrl: result.isUsingBundleUrl,
-      isFirstTime: result.isFirstTime,
-      rolledBackVersion: result.rolledBackVersion,
-      uuidSet: !!result.uuid,
-    };
-    logger.info(TAG, `,getConstants result: ${JSON.stringify(logResult)}`);
+    // The install uuid stays out of the logs; only whether it is set.
+    const { uuid: _uuid, ...logResult } = result;
+    logger.info(
+      TAG,
+      `,getConstants result: ${JSON.stringify({ ...logResult, uuidSet: !!uuid })}`,
+    );
     return result;
   }
 
