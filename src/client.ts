@@ -55,6 +55,7 @@ import {
   decideDownload,
   isMirrorRetryableCode,
   isValidCheckResult,
+  jsonDeepEqual,
   nativeConfigsEquivalent,
 } from './updateFlowCore';
 import {
@@ -546,50 +547,6 @@ export class Pushy {
   /** Package version used by every server-side update decision. */
   getEffectivePackageVersion = () =>
     this.options.overridePackageVersion || packageVersion;
-
-  private jsonValuesEqual = (left: unknown, right: unknown): boolean => {
-    const compare = (a: unknown, b: unknown): boolean => {
-      if (a === b) {
-        return true;
-      }
-      if (Array.isArray(a) || Array.isArray(b)) {
-        return (
-          Array.isArray(a) &&
-          Array.isArray(b) &&
-          a.length === b.length &&
-          a.every((value, index) => compare(value, b[index]))
-        );
-      }
-      if (
-        a === null ||
-        b === null ||
-        typeof a !== 'object' ||
-        typeof b !== 'object'
-      ) {
-        return false;
-      }
-      const leftObject = a as Record<string, unknown>;
-      const rightObject = b as Record<string, unknown>;
-      // Match JSON.stringify semantics for request extras: object properties
-      // whose value is undefined are omitted from the wire fingerprint.
-      const leftKeys = Object.keys(leftObject)
-        .filter((key) => leftObject[key] !== undefined)
-        .sort();
-      const rightKeys = Object.keys(rightObject)
-        .filter((key) => rightObject[key] !== undefined)
-        .sort();
-      return (
-        leftKeys.length === rightKeys.length &&
-        leftKeys.every(
-          (key, index) =>
-            key === rightKeys[index] &&
-            compare(leftObject[key], rightObject[key])
-        )
-      );
-    };
-
-    return compare(left, right);
-  };
 
   private providerMounted = false;
   /**
@@ -1100,7 +1057,7 @@ export class Pushy {
         typeof entry.config !== 'string' ||
         !configJson ||
         !nativeConfigsEquivalent(entry.config, configJson) ||
-        !this.jsonValuesEqual(JSON.parse(entry.request), requestBody)
+        !jsonDeepEqual(JSON.parse(entry.request), requestBody)
       ) {
         return undefined;
       }

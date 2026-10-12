@@ -127,7 +127,12 @@ const NATIVE_CONFIG_DEFAULTS: Record<string, unknown> = {
   afterDownload: 'none',
 };
 
-const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
+/**
+ * Deep equality of JSON values, key order ignored. Object members whose value
+ * is undefined count as absent, matching JSON.stringify (they do not exist on
+ * the wire).
+ */
+export const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
   if (a === b) {
     return true;
   }
@@ -144,9 +149,11 @@ const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
   }
   const left = a as Record<string, unknown>;
   const right = b as Record<string, unknown>;
-  const leftKeys = Object.keys(left);
+  const definedKeys = (object: Record<string, unknown>) =>
+    Object.keys(object).filter((key) => object[key] !== undefined);
+  const leftKeys = definedKeys(left);
   return (
-    leftKeys.length === Object.keys(right).length &&
+    leftKeys.length === definedKeys(right).length &&
     leftKeys.every(
       (key) =>
         // Not Object.hasOwn: it is missing from JSC before iOS 15.4.

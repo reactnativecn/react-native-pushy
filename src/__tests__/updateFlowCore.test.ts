@@ -7,6 +7,7 @@ import {
   decideDownload,
   isMirrorRetryableCode,
   isValidCheckResult,
+  jsonDeepEqual,
   nativeConfigsEquivalent,
   orderEndpointCandidates,
 } from '../updateFlowCore';
@@ -430,5 +431,24 @@ describe('native config canonical equality (C1)', () => {
     } finally {
       Object.hasOwn = hasOwn;
     }
+  });
+});
+
+describe('jsonDeepEqual', () => {
+  test('ignores key order and undefined-valued members, like the wire', () => {
+    expect(
+      jsonDeepEqual(
+        { a: 1, b: { c: [1, { d: 'x' }] }, skip: undefined },
+        { b: { c: [1, { d: 'x', gone: undefined }] }, a: 1 }
+      )
+    ).toBe(true);
+  });
+
+  test('detects real differences', () => {
+    expect(jsonDeepEqual({ a: 1 }, { a: 2 })).toBe(false);
+    expect(jsonDeepEqual({ a: 1 }, { a: 1, b: null })).toBe(false);
+    expect(jsonDeepEqual({ a: null }, { a: undefined })).toBe(false);
+    expect(jsonDeepEqual([1, 2], [2, 1])).toBe(false);
+    expect(jsonDeepEqual([], {})).toBe(false);
   });
 });
