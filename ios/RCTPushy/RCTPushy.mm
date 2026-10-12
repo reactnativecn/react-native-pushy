@@ -372,10 +372,8 @@ static NSError *PushyDownloadDeadlineExpiredError(void) {
 
 static std::atomic<bool> ignoreRollback{false};
 // Set once the host calls +configure:completion: in this process; JS
-// syncNativeConfig then rejects with NATIVE_CONFIG_CONFLICT. Local literal
-// until cpp/patch_core/error_codes.h carries the code (reconciled at merge).
+// syncNativeConfig then rejects with NATIVE_CONFIG_CONFLICT.
 static std::atomic<bool> pushyHostConfigured{false};
-static const char *const kPushyNativeConfigConflict = "NATIVE_CONFIG_CONFLICT";
 // Whether the host asked +bundleURL for the bundle to load (the
 // isUsingBundleUrl constant, mirroring Android/Harmony). NO means the app
 // runs a bundle this SDK never resolved, so updates cannot take effect.
@@ -1159,7 +1157,7 @@ RCT_EXPORT_METHOD(syncNativeConfig:(NSString *)config
     if (pushyHostConfigured.load()) {
         // Two owners of one config would overwrite each other on every
         // launch; fail loudly instead of picking one.
-        PushyRejectError(reject, PushyErrorWithCode(kPushyNativeConfigConflict,
+        PushyRejectError(reject, PushyErrorWithCode(pushy::error_codes::kNativeConfigConflict,
             @"[NATIVE_CONFIG_CONFLICT] "
             @"The host app called RCTPushy configure natively in this process; "
             @"set nativeConfigSource: 'native' in the JS client options."));

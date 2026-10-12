@@ -50,6 +50,7 @@ const required = [
   'android/src/main/java/cn/reactnative/modules/update/UpdateContext.java',
   'android/jni/hpatch.c',
   'ios/RCTPushy/RCTPushy.mm',
+  'ios/RCTPushy/RCTPushyOrchestrator.mm',
   'react-native-update.podspec',
   'cpp/patch_core/patch_core.cpp',
   'cpp/patch_core/archive_limits.h',
