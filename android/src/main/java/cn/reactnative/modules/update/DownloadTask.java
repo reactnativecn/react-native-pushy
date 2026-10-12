@@ -4,7 +4,6 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
-import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
 import java.io.File;
@@ -16,8 +15,6 @@ import java.security.DigestOutputStream;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.Iterator;
 import java.util.zip.ZipEntry;
 import okhttp3.Call;
 import okhttp3.OkHttpClient;
@@ -72,46 +69,16 @@ class DownloadTask implements Runnable {
     // null when the bundle was produced some other way (patch tasks).
     private String stagedBundleSha256;
 
-    /** What a staged patch archive declared, as the native planner consumes it. */
+    /** What a staged patch archive declared, as the native core consumes it. */
     private static final class PatchArchiveContents {
         final String[] entryNames;
-        final String[] copyFroms;
-        final String[] copyTos;
-        final String[] deletes;
-        // Maps a copy source path ("from") to the CRC32 of the file content,
-        // when provided by the manifest ("copiesCrc"). Lets the resource
-        // copier locate the file by content if the path is not present on
-        // device (APK baseline -> AAB install path shortening).
-        final HashMap<String, Long> copyCrcs;
-        // __diff.json 的 hbcTransform 元数据(按 patch 条目名索引);
-        // 为空对象/缺失时返回 ""(native 走现状路径)
-        @Nullable
-        final JSONObject hbcTransform;
-        // Set by stagePatchArchive once the native planner accepted the archive.
-        ArchivePatchPlanResult plan;
+        // The raw __diff.json bytes (UTF-8): parsed only by the native core
+        // (cpp/patch_core/patch_manifest.h), never here.
+        final byte[] manifestJson;
 
-        PatchArchiveContents(
-            ArrayList<String> entryNames,
-            ArrayList<String> copyFroms,
-            ArrayList<String> copyTos,
-            ArrayList<String> deletes,
-            HashMap<String, Long> copyCrcs,
-            @Nullable JSONObject hbcTransform
-        ) {
+        PatchArchiveContents(ArrayList<String> entryNames, byte[] manifestJson) {
             this.entryNames = entryNames.toArray(new String[0]);
-            this.copyFroms = copyFroms.toArray(new String[0]);
-            this.copyTos = copyTos.toArray(new String[0]);
-            this.deletes = deletes.toArray(new String[0]);
-            this.copyCrcs = copyCrcs;
-            this.hbcTransform = hbcTransform;
-        }
-
-        String hbcTransformMetaFor(String patchEntryName) {
-            if (hbcTransform == null) {
-                return "";
-            }
-            JSONObject meta = hbcTransform.optJSONObject(patchEntryName);
-            return meta != null ? meta.toString() : "";
+            this.manifestJson = manifestJson;
         }
     }
 
@@ -444,88 +411,19 @@ class DownloadTask implements Runnable {
         return true;
     }
 
-    private void appendManifestEntries(
-        JSONObject manifest,
-        ArrayList<String> copyFroms,
-        ArrayList<String> copyTos,
-        ArrayList<String> deletes,
-        HashMap<String, Long> copyCrcs
-    ) throws JSONException {
-        JSONObject copiesCrc = manifest.optJSONObject("copiesCrc");
-
-        JSONObject copies = manifest.optJSONObject("copies");
-        if (copies != null) {
-            Iterator<?> keys = copies.keys();
-            while (keys.hasNext()) {
-                String to = (String) keys.next();
-                String from = copies.getString(to);
-                if (from.isEmpty()) {
-                    from = to;
-                }
-                copyFroms.add(from);
-                copyTos.add(to);
-                if (copiesCrc != null && copiesCrc.has(to)) {
-                    // Same content => same crc, so grouping multiple "to" under
-                    // one "from" stays consistent.
-                    copyCrcs.put(from, copiesCrc.getLong(to));
-                }
-            }
-        }
-
-        JSONObject deleteMap = manifest.optJSONObject("deletes");
-        if (deleteMap != null) {
-            Iterator<?> deleteKeys = deleteMap.keys();
-            while (deleteKeys.hasNext()) {
-                deletes.add((String) deleteKeys.next());
-            }
-        }
-    }
-
     private void copyBundledAssetToFile(String assetName, File destination) throws IOException {
         try (InputStream in = context.getAssets().open(assetName)) {
             UpdateFileUtils.copyInputStreamToFile(in, destination);
         }
     }
 
-    private HashMap<String, ArrayList<File>> buildCopyList(
-        File unzipDirectory,
-        CopyGroupResult[] groups
-    ) throws IOException {
-        HashMap<String, ArrayList<File>> copyList = new HashMap<String, ArrayList<File>>();
-        if (groups == null) {
-            return copyList;
-        }
-
-        String rootPath = unzipDirectory.getCanonicalPath() + File.separator;
-        for (CopyGroupResult group : groups) {
-            ArrayList<File> targets = new ArrayList<File>();
-            if (group.toPaths != null) {
-                for (String to : group.toPaths) {
-                    File toFile = new File(unzipDirectory, to);
-                    String canonicalPath = toFile.getCanonicalPath();
-                    if (!canonicalPath.startsWith(rootPath)) {
-                        throw new SecurityException("Illegal name: " + to);
-                    }
-                    targets.add(toFile);
-                }
-            }
-            copyList.put(group.from, targets);
-        }
-
-        return copyList;
-    }
-
     private PatchArchiveContents extractPatchArchive(File archiveFile, File unzipDirectory)
-        throws IOException, JSONException {
+        throws IOException {
         UpdateFileUtils.removeDirectory(unzipDirectory);
         UpdateFileUtils.ensureDirectory(unzipDirectory);
 
         ArrayList<String> entryNames = new ArrayList<String>();
-        ArrayList<String> copyFroms = new ArrayList<String>();
-        ArrayList<String> copyTos = new ArrayList<String>();
-        ArrayList<String> deletes = new ArrayList<String>();
-        HashMap<String, Long> copyCrcs = new HashMap<String, Long>();
-        JSONObject hbcTransform = null;
+        byte[] manifestJson = new byte[0];
         try (SafeZipFile zipFile = new SafeZipFile(archiveFile)) {
             ensureArchiveWithinLimits(archiveFile, zipFile, unzipDirectory);
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -538,34 +436,26 @@ class DownloadTask implements Runnable {
                     if (entry.getSize() > ArchiveLimits.MAX_MANIFEST_BYTES) {
                         throw new IOException("delta manifest too large: " + entry.getSize());
                     }
-                    byte[] bytes = UpdateFileUtils.readBytes(
+                    manifestJson = UpdateFileUtils.readBytes(
                         zipFile.getInputStream(entry), ArchiveLimits.MAX_MANIFEST_BYTES);
-                    String json = new String(bytes, StandardCharsets.UTF_8);
-                    JSONObject manifest = (JSONObject) new JSONTokener(json).nextValue();
-                    appendManifestEntries(manifest, copyFroms, copyTos, deletes, copyCrcs);
-                    hbcTransform = manifest.optJSONObject("hbcTransform");
                     continue;
                 }
 
                 zipFile.unzipToPath(entry, unzipDirectory);
             }
         }
-        return new PatchArchiveContents(
-            entryNames, copyFroms, copyTos, deletes, copyCrcs, hbcTransform);
+        return new PatchArchiveContents(entryNames, manifestJson);
     }
 
     /**
-     * Shared first half of the two patch tasks: download the archive, unpack
-     * it into the staging directory and have the native planner validate it.
+     * Shared first half of the two patch tasks: download the archive and
+     * unpack it into the staging directory. The native applyArchiveDelta
+     * validates what it declared.
      */
-    private PatchArchiveContents stagePatchArchive(int patchType)
-        throws IOException, JSONException {
+    private PatchArchiveContents stagePatchArchive() throws IOException {
         downloadFile();
         artifactSha256 = archiveSha256();
-        PatchArchiveContents contents = extractPatchArchive(params.targetFile, stagingDirectory());
-        contents.plan = buildArchivePlan(
-            patchType, contents.entryNames, contents.copyFroms, contents.copyTos, contents.deletes);
-        return contents;
+        return extractPatchArchive(params.targetFile, stagingDirectory());
     }
 
     private void doFullPatch() throws IOException {
@@ -670,53 +560,48 @@ class DownloadTask implements Runnable {
         deleteResumeSidecar(params.targetFile);
     }
 
-    private void doPatchFromApk() throws IOException, JSONException {
-        PatchArchiveContents contents =
-            stagePatchArchive(DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK);
+    private void doPatchFromApk() throws IOException {
+        PatchArchiveContents contents = stagePatchArchive();
         File work = stagingDirectory();
-        HashMap<String, ArrayList<File>> copyList = buildCopyList(
-            work, buildCopyGroups(contents.copyFroms, contents.copyTos));
 
         File originBundleFile = new File(work, ".origin.bundle");
         copyBundledAssetToFile("index.android.bundle", originBundleFile);
+        CopyGroupResult[] copies;
         try {
-            applyDeltaFromSource(
+            // The APK's resources are zip entries, not files: the core
+            // rebuilds the bundle and hands the manifest copies back.
+            copies = applyArchiveDelta(
+                DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK,
+                contents.entryNames,
+                contents.manifestJson,
                 work.getAbsolutePath(),
                 work.getAbsolutePath(),
                 originBundleFile.getAbsolutePath(),
                 new File(work, BUNDLE_DELTA_ENTRY).getAbsolutePath(),
                 InstallRecord.bundleFile(work).getAbsolutePath(),
-                "",
-                false,
-                new String[0],
-                new String[0],
-                new String[0],
-                contents.hbcTransformMetaFor(BUNDLE_DELTA_ENTRY)
+                true
             );
         } finally {
             originBundleFile.delete();
         }
 
-        bundledResourceCopier.copyFromResource(copyList, contents.copyCrcs);
+        bundledResourceCopier.copyFromResource(work, copies);
         deleteConsumedArchive();
     }
 
-    private void doPatchFromPpk() throws IOException, JSONException {
-        PatchArchiveContents contents =
-            stagePatchArchive(DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK);
+    private void doPatchFromPpk() throws IOException {
+        PatchArchiveContents contents = stagePatchArchive();
         File work = stagingDirectory();
-        applyDeltaFromSource(
+        applyArchiveDelta(
+            DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK,
+            contents.entryNames,
+            contents.manifestJson,
             params.originDirectory.getAbsolutePath(),
             work.getAbsolutePath(),
             InstallRecord.bundleFile(params.originDirectory).getAbsolutePath(),
             new File(work, BUNDLE_DELTA_ENTRY).getAbsolutePath(),
             InstallRecord.bundleFile(work).getAbsolutePath(),
-            contents.plan.mergeSourceSubdir,
-            contents.plan.enableMerge,
-            contents.copyFroms,
-            contents.copyTos,
-            contents.deletes,
-            contents.hbcTransformMetaFor(BUNDLE_DELTA_ENTRY)
+            false
         );
         deleteConsumedArchive();
     }
@@ -903,18 +788,21 @@ class DownloadTask implements Runnable {
         }
     }
 
-    private static native void applyDeltaFromSource(
+    // The native half of a patch install (cpp/patch_core/archive_patch_core.h
+    // ApplyArchivePatch): checks the archive's entries, parses and validates
+    // manifestJson (__diff.json), rebuilds the bundle and, unless
+    // hostCopiesResources, performs the copies, deletes and merge. Returns
+    // the copies the caller still owes (empty unless hostCopiesResources).
+    private static native CopyGroupResult[] applyArchiveDelta(
+        int patchType,
+        String[] entryNames,
+        byte[] manifestJson,
         String sourceRoot,
         String targetRoot,
         String originBundlePath,
         String bundlePatchPath,
         String bundleOutputPath,
-        String mergeSourceSubdir,
-        boolean enableMerge,
-        String[] copyFroms,
-        String[] copyTos,
-        String[] deletes,
-        String hbcTransformMeta
+        boolean hostCopiesResources
     );
 
     // trashDir non-empty: move the selected entries there instead of
@@ -924,18 +812,5 @@ class DownloadTask implements Runnable {
         String[] keepNames,
         int maxAgeDays,
         String trashDir
-    );
-
-    private static native ArchivePatchPlanResult buildArchivePlan(
-        int patchType,
-        String[] entryNames,
-        String[] copyFroms,
-        String[] copyTos,
-        String[] deletes
-    );
-
-    private static native CopyGroupResult[] buildCopyGroups(
-        String[] copyFroms,
-        String[] copyTos
     );
 }

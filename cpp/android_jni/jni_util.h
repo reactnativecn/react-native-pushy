@@ -9,8 +9,6 @@
 #include <utility>
 #include <vector>
 
-#include "../patch_core/patch_core.h"
-
 // Small JNI helpers shared by every Android glue translation unit
 // (update_core_android.cpp and update_flow_jni.cpp). Header-only with inline
 // linkage so each can include it without a separate compilation unit.
@@ -125,22 +123,18 @@ inline void ThrowRuntimeException(JNIEnv* env, const std::string& message) {
   ThrowRuntimeException(env, message.c_str());
 }
 
-// Reads the parallel copy_froms/copy_tos arrays (+ deletes, may be null) into
-// a PatchManifest via delta::BuildPatchManifest. On failure (length mismatch)
-// a RuntimeException is pending and false is returned.
-inline bool ReadPatchManifest(
-    JNIEnv* env,
-    jobjectArray copy_froms,
-    jobjectArray copy_tos,
-    jobjectArray deletes,
-    delta::PatchManifest* out) {
-  const delta::Status status = delta::BuildPatchManifest(
-      JArrayToVector(env, copy_froms), JArrayToVector(env, copy_tos),
-      JArrayToVector(env, deletes), out);
-  if (!status.ok) {
-    ThrowRuntimeException(env, status.message);
+// The bytes of a Java byte[] as-is (an empty string for null).
+inline std::string JByteArrayToString(JNIEnv* env, jbyteArray values) {
+  if (values == nullptr) {
+    return std::string();
   }
-  return status.ok;
+  const jsize size = env->GetArrayLength(values);
+  std::string result(static_cast<size_t>(size), '\0');
+  if (size > 0) {
+    env->GetByteArrayRegion(values, 0, size,
+                            reinterpret_cast<jbyte*>(&result[0]));
+  }
+  return result;
 }
 
 // Runs a native method body so no C++ exception (bad_alloc/length_error from

@@ -3,7 +3,6 @@
 # no-arg constructor and every field must survive shrinking with their names
 # (a -keepnames rule alone lets R8 strip the unreferenced constructor/fields).
 -keep class cn.reactnative.modules.update.StateCoreResult { <init>(); <fields>; }
--keep class cn.reactnative.modules.update.ArchivePatchPlanResult { <init>(); <fields>; }
 -keep class cn.reactnative.modules.update.CopyGroupResult { <init>(); <fields>; }
 
 # Native methods are bound from JNI_OnLoad by class/method name (the encoded

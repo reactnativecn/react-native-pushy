@@ -47,10 +47,25 @@ final class BundledResourceCopier {
         this.context = context.getApplicationContext();
     }
 
-    void copyFromResource(
-        HashMap<String, ArrayList<File>> resToCopy,
-        HashMap<String, Long> crcByFrom
-    ) throws IOException {
+    /**
+     * Performs the manifest copies of an APK-based patch (the host share of
+     * the native applyArchiveDelta): each group's targets, relative to
+     * targetRoot, receive its source entry. The native manifest parser has
+     * already validated every path and the copiesCrc rules.
+     */
+    void copyFromResource(File targetRoot, CopyGroupResult[] groups) throws IOException {
+        HashMap<String, ArrayList<File>> resToCopy = new HashMap<String, ArrayList<File>>();
+        HashMap<String, Long> crcByFrom = new HashMap<String, Long>();
+        for (CopyGroupResult group : groups) {
+            ArrayList<File> targets = new ArrayList<File>();
+            for (String to : group.toPaths) {
+                targets.add(new File(targetRoot, to));
+            }
+            resToCopy.put(group.from, targets);
+            if (group.expectedCrc >= 0) {
+                crcByFrom.put(group.from, group.expectedCrc);
+            }
+        }
         ArrayList<String> apkPaths = collectApkPaths();
         ArrayList<SafeZipFile> zipFiles = new ArrayList<SafeZipFile>();
         // Entry name -> first archive (base APK first) that carries it.
@@ -111,7 +126,7 @@ final class BundledResourceCopier {
                 ZipSource entry = availableEntries.get(fromPath);
                 String actualSourcePath = fromPath;
                 ResolvedResourceSource resolvedResource = null;
-                Long wantedCrc = crcByFrom != null ? crcByFrom.get(fromPath) : null;
+                Long wantedCrc = crcByFrom.get(fromPath);
 
                 if (entry == null) {
                     String normalizedFrom = normalizeResPath(fromPath);

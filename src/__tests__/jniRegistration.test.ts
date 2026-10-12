@@ -16,6 +16,7 @@ const descriptor = (type: string): string => {
   const base = array ? type.slice(0, -2) : type;
   const primitives: Record<string, string> = {
     boolean: 'Z',
+    byte: 'B',
     int: 'I',
     long: 'J',
     double: 'D',
@@ -72,7 +73,7 @@ const registered = () => {
 describe('JNI registration table', () => {
   test('matches every Java native declaration', () => {
     const natives = javaNatives();
-    expect(natives.length).toBe(14);
+    expect(natives.length).toBe(12);
     expect(registered()).toEqual(natives);
   });
 

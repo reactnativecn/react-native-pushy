@@ -18,8 +18,8 @@ namespace {
 
 using pushy::jni_util::GuardJni;
 using pushy::jni_util::JArrayToVector;
+using pushy::jni_util::JByteArrayToString;
 using pushy::jni_util::JStringToString;
-using pushy::jni_util::ReadPatchManifest;
 using pushy::jni_util::ThrowRuntimeException;
 using pushy::jni_util::ToJString;
 using pushy::state_ops::StateOperation;
@@ -47,14 +47,6 @@ struct StateResultIds {
   jfieldID consumed_first_time = nullptr;
 };
 
-struct PlanResultIds {
-  bool ready = false;
-  jclass clazz = nullptr;
-  jmethodID constructor = nullptr;
-  jfieldID merge_source_subdir = nullptr;
-  jfieldID enable_merge = nullptr;
-};
-
 struct CopyGroupIds {
   bool ready = false;
   jclass clazz = nullptr;
@@ -62,10 +54,10 @@ struct CopyGroupIds {
   jmethodID constructor = nullptr;
   jfieldID from = nullptr;
   jfieldID to_paths = nullptr;
+  jfieldID expected_crc = nullptr;
 };
 
 StateResultIds g_state;
-PlanResultIds g_plan;
 CopyGroupIds g_copy_group;
 
 // Resolves a class to a global ref. Logs and clears the pending exception on
@@ -138,22 +130,6 @@ bool InitStateResultIds(JNIEnv* env) {
   return ok;
 }
 
-bool InitPlanResultIds(JNIEnv* env) {
-  const std::string name = pushy::text::Reveal(
-      "3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c81af997f5d270bdbc9b181974c55371dc2c8b9926855");
-  PlanResultIds ids;
-  ids.clazz = FindGlobalClass(env, name);
-  if (ids.clazz == nullptr) {
-    return false;
-  }
-  bool ok = LookupConstructor(env, ids.clazz, name, &ids.constructor);
-  ok &= LookupField(env, ids.clazz, name, "mergeSourceSubdir", kStringSig, &ids.merge_source_subdir);
-  ok &= LookupField(env, ids.clazz, name, "enableMerge", "Z", &ids.enable_merge);
-  ids.ready = ok;
-  g_plan = ids;
-  return ok;
-}
-
 bool InitCopyGroupIds(JNIEnv* env) {
   const std::string name = pushy::text::Reveal(
       "3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c83b28a6e732301fed897878c695522");
@@ -166,6 +142,7 @@ bool InitCopyGroupIds(JNIEnv* env) {
   bool ok = LookupConstructor(env, ids.clazz, name, &ids.constructor);
   ok &= LookupField(env, ids.clazz, name, "from", kStringSig, &ids.from);
   ok &= LookupField(env, ids.clazz, name, "toPaths", "[Ljava/lang/String;", &ids.to_paths);
+  ok &= LookupField(env, ids.clazz, name, "expectedCrc", "J", &ids.expected_crc);
   ids.ready = ok;
   g_copy_group = ids;
   return ok;
@@ -263,22 +240,6 @@ jobject NewStateCoreResult(
   return result;
 }
 
-jobject NewArchivePatchPlanResult(
-    JNIEnv* env,
-    const pushy::archive_patch::ArchivePatchPlan& plan) {
-  if (!RequireReady(env, g_plan.ready, "archive plan result")) {
-    return nullptr;
-  }
-  jobject result = env->NewObject(g_plan.clazz, g_plan.constructor);
-  if (result == nullptr) {
-    return nullptr;
-  }
-
-  SetStringField(env, result, g_plan.merge_source_subdir, plan.merge_source_subdir);
-  SetBooleanField(env, result, g_plan.enable_merge, plan.enable_merge);
-  return result;
-}
-
 // Caller has checked g_copy_group.ready.
 jobject NewCopyGroupResult(
     JNIEnv* env,
@@ -302,6 +263,9 @@ jobject NewCopyGroupResult(
     env->SetObjectField(result, g_copy_group.to_paths, to_paths);
     env->DeleteLocalRef(to_paths);
   }
+  env->SetLongField(
+      result, g_copy_group.expected_crc,
+      group.has_expected_crc ? static_cast<jlong>(group.expected_crc) : -1);
 
   return result;
 }
@@ -311,7 +275,6 @@ jobject NewCopyGroupResult(
 bool pushy::jni_natives::InitResultClassCache(JNIEnv* env) {
   // Every class is attempted so the log names all missing members at once.
   bool ok = InitStateResultIds(env);
-  ok &= InitPlanResultIds(env);
   ok &= InitCopyGroupIds(env);
   return ok;
 }
@@ -402,71 +365,56 @@ jobject pushy::jni_natives::RunStateCore(
       });
 }
 
-jobject pushy::jni_natives::BuildArchivePlan(
+jobjectArray pushy::jni_natives::ApplyArchiveDelta(
     JNIEnv* env,
     jclass,
     jint patch_type,
     jobjectArray entry_names,
-    jobjectArray copy_froms,
-    jobjectArray copy_tos,
-    jobjectArray deletes) {
+    jbyteArray manifest_json,
+    jstring source_root,
+    jstring target_root,
+    jstring origin_bundle_path,
+    jstring bundle_patch_path,
+    jstring bundle_output_path,
+    jboolean host_copies_resources) {
   return GuardJni(
-      env, "Unexpected native exception while planning archive",
-      [&]() -> jobject {
-        pushy::delta::PatchManifest manifest;
-        if (!ReadPatchManifest(env, copy_froms, copy_tos, deletes, &manifest)) {
-          return nullptr;
-        }
-        // The shared parser keeps Android and HarmonyOS in agreement on which
-        // integer values are valid; neither silently falls back to kFull.
-        pushy::archive_patch::ArchivePatchType archive_type;
-        if (!pushy::archive_patch::TryParseArchivePatchType(
-                static_cast<int>(patch_type), &archive_type)) {
-          ThrowRuntimeException(env, "Unknown archive delta type");
-          return nullptr;
-        }
-        pushy::archive_patch::ArchivePatchPlan plan;
-        pushy::delta::Status status =
-            pushy::archive_patch::BuildArchivePatchPlan(
-                archive_type, manifest, JArrayToVector(env, entry_names), &plan);
-        if (!status.ok) {
-          ThrowRuntimeException(env, status.message);
-          return nullptr;
-        }
-
-        return NewArchivePatchPlanResult(env, plan);
-      });
-}
-
-jobjectArray pushy::jni_natives::BuildCopyGroups(
-    JNIEnv* env,
-    jclass,
-    jobjectArray copy_froms,
-    jobjectArray copy_tos) {
-  return GuardJni(
-      env, "Unexpected native exception in buildCopyGroups",
+      env, "Unexpected native exception while applying archive delta",
       [&]() -> jobjectArray {
-        pushy::delta::PatchManifest manifest;
-        if (!ReadPatchManifest(env, copy_froms, copy_tos, nullptr, &manifest)) {
-          return nullptr;
-        }
-        std::vector<pushy::archive_patch::CopyGroup> groups;
-        pushy::delta::Status status =
-            pushy::archive_patch::BuildCopyGroups(manifest, &groups);
-        if (!status.ok) {
-          ThrowRuntimeException(env, status.message);
-          return nullptr;
-        }
-
         if (!RequireReady(env, g_copy_group.ready, "copy group result")) {
           return nullptr;
         }
+        pushy::archive_patch::ArchivePatchRequest request;
+        // Unknown values never fall back to kFull (which would skip the
+        // manifest and entry checks).
+        if (!pushy::archive_patch::TryParseArchivePatchType(
+                static_cast<int>(patch_type), &request.archive.type)) {
+          ThrowRuntimeException(env, "Unknown archive delta type");
+          return nullptr;
+        }
+        request.archive.entry_names = JArrayToVector(env, entry_names);
+        // The manifest's own UTF-8 bytes: a jstring would come through as
+        // modified UTF-8 and mangle supplementary characters in paths.
+        request.archive.manifest_json = JByteArrayToString(env, manifest_json);
+        request.source_root = JStringToString(env, source_root);
+        request.target_root = JStringToString(env, target_root);
+        request.origin_bundle_path = JStringToString(env, origin_bundle_path);
+        request.bundle_patch_path = JStringToString(env, bundle_patch_path);
+        request.bundle_output_path = JStringToString(env, bundle_output_path);
+        request.host_copies_resources = host_copies_resources == JNI_TRUE;
+
+        std::vector<pushy::archive_patch::CopyGroup> groups;
+        const pushy::delta::Status status =
+            pushy::archive_patch::ApplyArchivePatch(request, &groups);
+        if (!status.ok) {
+          ThrowRuntimeException(env, status.message);
+          return nullptr;
+        }
+
         jobjectArray result = env->NewObjectArray(
             static_cast<jsize>(groups.size()), g_copy_group.clazz, nullptr);
         if (result == nullptr) {
           return nullptr;
         }
-
         for (jsize index = 0; index < static_cast<jsize>(groups.size());
              ++index) {
           jobject group = NewCopyGroupResult(env, groups[index]);
@@ -475,42 +423,6 @@ jobjectArray pushy::jni_natives::BuildCopyGroups(
         }
         return result;
       });
-}
-
-void pushy::jni_natives::ApplyDeltaFromSource(
-    JNIEnv* env,
-    jclass,
-    jstring source_root,
-    jstring target_root,
-    jstring origin_bundle_path,
-    jstring bundle_patch_path,
-    jstring bundle_output_path,
-    jstring merge_source_subdir,
-    jboolean enable_merge,
-    jobjectArray copy_froms,
-    jobjectArray copy_tos,
-    jobjectArray deletes,
-    jstring hbc_transform_meta) {
-  GuardJni(env, "Unexpected native exception while applying delta", [&] {
-    pushy::delta::FileSourcePatchOptions options;
-    if (!ReadPatchManifest(env, copy_froms, copy_tos, deletes, &options.manifest)) {
-      return;
-    }
-    options.source_root = JStringToString(env, source_root);
-    options.target_root = JStringToString(env, target_root);
-    options.origin_bundle_path = JStringToString(env, origin_bundle_path);
-    options.bundle_patch_path = JStringToString(env, bundle_patch_path);
-    options.bundle_output_path = JStringToString(env, bundle_output_path);
-    options.merge_source_subdir = JStringToString(env, merge_source_subdir);
-    options.enable_merge = enable_merge == JNI_TRUE;
-    options.manifest.bundle_hbc_transform_meta = JStringToString(env, hbc_transform_meta);
-
-    const pushy::delta::Status status =
-        pushy::delta::ApplyPatchFromFileSource(options);
-    if (!status.ok) {
-      ThrowRuntimeException(env, status.message);
-    }
-  });
 }
 
 void pushy::jni_natives::CleanupOldEntries(
