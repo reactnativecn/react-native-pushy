@@ -55,19 +55,32 @@ const required = [
   'src/NativePushy.ts',
   'android/build.gradle',
   'android/src/main/java/cn/reactnative/modules/update/UpdateContext.java',
-  'cpp/hpatch/hpatch.c',
   'ios/RCTPushy/RCTPushy.mm',
   'ios/RCTPushy/RCTPushyOrchestrator.mm',
   'react-native-update.podspec',
+  // The shared cores iOS (podspec Core) and Harmony (CMakeLists.txt) compile
+  // from the package by directory.
   'cpp/patch_core/patch_core.cpp',
   'cpp/patch_core/archive_limits.h',
   'cpp/patch_core/install_record.h',
   'cpp/update_flow_core/update_flow_core.cpp',
+  'cpp/hpatch/hpatch.c',
+  'cpp/hpatch/hpatch.h',
   'harmony/pushy/src/main/ets/PushyTurboModule.ts',
   'harmony/hvigor-plugin.ts',
   'expo-module.config.json',
   'react-native.config.js',
-  ...(release ? ['harmony/pushy.har'] : []),
+  ...(release
+    ? [
+        'harmony/pushy.har',
+        // Submodule sources hpatch.c decodes with (lint CI checks out
+        // without submodules; the publish jobs check them out).
+        'android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c',
+        'android/jni/HDiffPatch/file_for_patch.c',
+        'android/jni/lzma/C/LzmaDec.c',
+        'android/jni/lzma/C/Lzma2Dec.c',
+      ]
+    : []),
 ];
 const requiredAbis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'];
 

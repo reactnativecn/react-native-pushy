@@ -91,8 +91,7 @@ describe('native host API naming', () => {
       'ios/',
       'android/src/main/',
       'harmony/pushy/src/main/',
-      'cpp/patch_core/',
-      'cpp/update_flow_core/',
+      'cpp/',
     ].flatMap(shippedNativeSources);
     expect(paths).toContain(`${android}PushyRuntime.java`);
     const offenders = paths.filter((path) => {
@@ -107,8 +106,7 @@ describe('native host API naming', () => {
       'ios/',
       'android/src/main/',
       'harmony/pushy/src/main/',
-      'cpp/patch_core/',
-      'cpp/update_flow_core/',
+      'cpp/',
     ].flatMap(shippedNativeSources);
     const offenders = paths.flatMap((path) =>
       stripComments(source(path))

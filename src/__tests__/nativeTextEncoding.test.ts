@@ -21,8 +21,7 @@ const paths = [
   'ios/',
   'android/src/main/',
   'harmony/pushy/src/main/',
-  'cpp/patch_core/',
-  'cpp/update_flow_core/',
+  'cpp/',
 ].flatMap(shippedNativeSources);
 
 const encodedIn = (text: string) =>
