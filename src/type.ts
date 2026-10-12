@@ -93,6 +93,9 @@ export type EventType =
   | 'crashRescue'
   | 'reset'
   | 'errorReset'
+  // The host app configured the native module itself while JS still claims
+  // ownership of the native config (NATIVE_CONFIG_CONFLICT). Local only.
+  | 'errorNativeConfig'
   // Server reported bundleStatus: unknownBundle — the installed binary is not
   // registered on the update platform (developer-facing only, local logger;
   // not a server telemetry event).

@@ -18,6 +18,7 @@ mock.module('../i18n', () => {
 
 import {
   computeProgress,
+  createNonSecureId,
   enhancedFetch,
   fetchWithTimeout,
   info,
@@ -438,5 +439,41 @@ describe('log gating (1.11)', () => {
     } finally {
       logSpy.mockRestore();
     }
+  });
+});
+
+describe('createNonSecureId', () => {
+  test('matches the nanoid default format (21 URL-safe chars)', () => {
+    const ids = new Set<string>();
+    for (let i = 0; i < 50; i++) {
+      const id = createNonSecureId();
+      expect(id).toMatch(/^[A-Za-z0-9_-]{21}$/);
+      ids.add(id);
+    }
+    expect(ids.size).toBe(50);
+    expect(createNonSecureId(8)).toHaveLength(8);
+  });
+});
+
+describe('testUrls on web', () => {
+  test('resolves the first url without probing or throwing', async () => {
+    mock.module('react-native', () => ({ Platform: { OS: 'web' } }));
+    const fetchMock = mock(async () => {
+      throw new Error('must not probe on web');
+    });
+    (globalThis as any).fetch = fetchMock;
+    const cacheKey = 'web-ping';
+    const webUtils: typeof import('../utils') = await import(
+      `../utils?${cacheKey}`
+    );
+
+    expect(webUtils.isWeb).toBe(true);
+    expect(
+      await webUtils.testUrls([
+        'https://a.example.com',
+        'https://b.example.com',
+      ])
+    ).toBe('https://a.example.com');
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

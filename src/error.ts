@@ -36,7 +36,10 @@ export type UpdateErrorCode =
   | 'INVALID_HASH_INFO'
   | 'UNSUPPORTED_PLATFORM'
   | 'APK_INSTALL_PERMISSION_REQUIRED'
-  | 'APK_INSTALL_FAILED';
+  | 'APK_INSTALL_FAILED'
+  // syncNativeConfig refused: the host called the native configure() API in
+  // this process, but JS still runs in nativeConfigSource: 'javascript'.
+  | 'NATIVE_CONFIG_CONFLICT';
 
 const KNOWN_CODES = new Set<string>([
   'MODULE_NOT_LOADED',
@@ -61,6 +64,7 @@ const KNOWN_CODES = new Set<string>([
   'UNSUPPORTED_PLATFORM',
   'APK_INSTALL_PERMISSION_REQUIRED',
   'APK_INSTALL_FAILED',
+  'NATIVE_CONFIG_CONFLICT',
 ]);
 
 /**

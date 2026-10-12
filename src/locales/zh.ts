@@ -45,6 +45,8 @@ export default {
   error_apk_download_failed: '安装包下载或安装失败',
   error_reset_not_supported:
     '当前安装的原生模块不支持 resetToPackagedBundle，请使用最新版 react-native-update 重新打包后再试。',
+  error_native_config_conflict:
+    '应用已调用原生 configure() 接口，更新配置归原生侧所有，但 JS 客户端仍处于默认的 nativeConfigSource: "javascript" 模式。请在客户端选项中设置 nativeConfigSource: "native"（并保持 appKey/server 与原生配置一致）。',
 
   // Development messages
   dev_debug_disabled:

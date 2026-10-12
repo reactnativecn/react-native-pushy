@@ -50,6 +50,8 @@ export default {
   error_apk_download_failed: 'Failed to download or install the APK',
   error_reset_not_supported:
     'resetToPackagedBundle is not available in the installed native module. Please rebuild the app with the latest react-native-update.',
+  error_native_config_conflict:
+    'The native configure() API was called in this app, so the native side owns the update configuration, but the JS client is in its default nativeConfigSource: "javascript" mode. Set nativeConfigSource: "native" in the client options (and keep appKey/server consistent with the native configuration).',
 
   // Development messages
   dev_debug_disabled:

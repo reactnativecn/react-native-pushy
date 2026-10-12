@@ -55,6 +55,7 @@ import {
   decideDownload,
   isMirrorRetryableCode,
   isValidCheckResult,
+  nativeConfigsEquivalent,
 } from './updateFlowCore';
 import {
   assertWeb,
@@ -63,6 +64,7 @@ import {
   fetchWithTimeout,
   info,
   log,
+  error as logError,
   noop,
   promiseAny,
   setDebugLogging,
@@ -157,6 +159,17 @@ export const sharedState: {
   applyingUpdate: false,
 };
 
+// The native cold-start check writes its response cache at most once per
+// launch (and skips it once JS has checked), so once this process has seen it
+// absent or expired, later reads are near-certain misses: skip the bridge
+// call from then on. The rare miss costs one network check.
+let nativeCheckCacheExhausted = false;
+const NATIVE_CHECK_CACHE_MAX_AGE_S = 120;
+
+// In-flight native markSuccess shared by concurrent callers, so the native
+// call and its telemetry happen once. Cleared once settled.
+let markingPromise: Promise<void> | undefined;
+
 // A reset/new switch invalidates ownership of older async completions and
 // watchdogs before the process-wide applyingUpdate flag can be reused.
 let applyingUpdateGeneration = 0;
@@ -242,6 +255,11 @@ export class Pushy {
   private syncedNativeConfigJson?: string;
   private pendingNativeConfigJson?: string;
   private nativeConfigSyncInFlight = false;
+  // Set once native rejected a write with NATIVE_CONFIG_CONFLICT: the host
+  // owns the config, so further writes would only repeat the same error.
+  private nativeConfigConflict = false;
+  // Config last acknowledged by markJsCheckCompleted.
+  private jsCheckCompletedConfigJson?: string;
   private reportedInvalidUpdates = new Set<string>();
   private reportedExceptions = new WeakSet<object>();
   private globalErrorCleanup?: () => void;
@@ -422,9 +440,10 @@ export class Pushy {
   private flushNativeConfig = () => {
     if (this.options.nativeConfigSource === 'native') {
       this.pendingNativeConfigJson = undefined;
+      this.syncedNativeConfigJson = undefined;
       return;
     }
-    if (this.nativeConfigSyncInFlight) {
+    if (this.nativeConfigSyncInFlight || this.nativeConfigConflict) {
       return;
     }
     const configJson = this.pendingNativeConfigJson;
@@ -443,15 +462,42 @@ export class Pushy {
     }
     syncResult
       .then(() => {
-        this.syncedNativeConfigJson = configJson;
+        // A switch to 'native' while this write was in flight hands storage
+        // to the host; remembering the write would skip it after switching
+        // back.
+        if (this.options.nativeConfigSource !== 'native') {
+          this.syncedNativeConfigJson = configJson;
+        }
       })
       .catch((e: any) => {
+        if (readErrorCode(e).code === 'NATIVE_CONFIG_CONFLICT') {
+          this.handleNativeConfigConflict(e);
+          return;
+        }
         log('syncNativeConfig failed:', e?.message || e);
       })
       .finally(() => {
         this.nativeConfigSyncInFlight = false;
         this.flushNativeConfig();
       });
+  };
+
+  /**
+   * The host app called the native configure() API in this process, so it
+   * owns the persisted config, yet JS is in the default 'javascript' mode and
+   * tried to overwrite it. That is an integration error: say so loudly and
+   * route it through the error pipeline instead of silently dropping writes.
+   */
+  private handleNativeConfigConflict = (e: unknown) => {
+    this.nativeConfigConflict = true;
+    this.pendingNativeConfigJson = undefined;
+    const err = new UpdateError(
+      this.t('error_native_config_conflict'),
+      'NATIVE_CONFIG_CONFLICT',
+      { cause: e }
+    );
+    logError(err.message);
+    this.emitError(err, 'errorNativeConfig');
   };
 
   /**
@@ -469,11 +515,14 @@ export class Pushy {
       return;
     }
     const configJson = this.getNativeConfigJson();
-    if (!configJson) {
+    if (!configJson || configJson === this.jsCheckCompletedConfigJson) {
       return;
     }
     try {
-      Promise.resolve(PushyModule.markJsCheckCompleted(configJson)).catch(
+      Promise.resolve(PushyModule.markJsCheckCompleted(configJson)).then(
+        () => {
+          this.jsCheckCompletedConfigJson = configJson;
+        },
         (e: any) => {
           log('markJsCheckCompleted failed:', e?.message || e);
         }
@@ -485,7 +534,11 @@ export class Pushy {
 
   private syncNativeConfig = () => {
     if (this.options.nativeConfigSource === 'native') {
+      // The host owns the stored config now; forget what JS last wrote so a
+      // switch back to 'javascript' writes again instead of deduping
+      // against a value native storage no longer holds.
       this.pendingNativeConfigJson = undefined;
+      this.syncedNativeConfigJson = undefined;
       return;
     }
     if (
@@ -1044,34 +1097,35 @@ export class Pushy {
     requestBody: Record<string, any>
   ): Promise<CheckResult | undefined> => {
     try {
-      if (__DEV__ || typeof PushyModule.getNativeCheckCache !== 'function') {
+      if (
+        __DEV__ ||
+        nativeCheckCacheExhausted ||
+        typeof PushyModule.getNativeCheckCache !== 'function'
+      ) {
         return undefined;
       }
       const raw = await Promise.resolve(PushyModule.getNativeCheckCache());
       if (!raw || typeof raw !== 'string') {
+        nativeCheckCacheExhausted = true;
         return undefined;
       }
       const entry = JSON.parse(raw);
-      const config = this.getNativeConfig();
-      const cachedRequest =
-        typeof entry?.request === 'string'
-          ? JSON.parse(entry.request)
-          : undefined;
-      const cachedConfig =
-        typeof entry?.config === 'string'
-          ? JSON.parse(entry.config)
-          : undefined;
-      if (
-        typeof entry?.ts !== 'number' ||
-        typeof entry?.body !== 'string' ||
-        !this.jsonValuesEqual(cachedRequest, requestBody) ||
-        !config ||
-        !this.jsonValuesEqual(cachedConfig, config)
-      ) {
+      // Age first: it is the common miss and needs no further parsing.
+      const ageSeconds =
+        typeof entry?.ts === 'number' ? Date.now() / 1000 - entry.ts : NaN;
+      if (!(ageSeconds >= 0 && ageSeconds <= NATIVE_CHECK_CACHE_MAX_AGE_S)) {
+        nativeCheckCacheExhausted = true;
         return undefined;
       }
-      const ageSeconds = Date.now() / 1000 - entry.ts;
-      if (ageSeconds < 0 || ageSeconds > 120) {
+      const configJson = this.getNativeConfigJson();
+      if (
+        typeof entry.body !== 'string' ||
+        typeof entry.request !== 'string' ||
+        typeof entry.config !== 'string' ||
+        !configJson ||
+        !nativeConfigsEquivalent(entry.config, configJson) ||
+        !this.jsonValuesEqual(JSON.parse(entry.request), requestBody)
+      ) {
         return undefined;
       }
       const result: unknown = JSON.parse(entry.body);
@@ -1098,6 +1152,19 @@ export class Pushy {
     if (sharedState.marked || __DEV__ || !isFirstTime) {
       return;
     }
+    // Concurrent callers (auto mark + an explicit call) would all pass the
+    // check above before the first native call settles: share it.
+    if (!markingPromise) {
+      const promise = this.performMarkSuccess().finally(() => {
+        if (markingPromise === promise) {
+          markingPromise = undefined;
+        }
+      });
+      markingPromise = promise;
+    }
+    return markingPromise;
+  };
+  private performMarkSuccess = async () => {
     try {
       await Promise.resolve(PushyModule.markSuccess());
     } catch (e) {
@@ -1519,6 +1586,11 @@ export class Pushy {
           hash,
         }),
     };
+    // Mirror ranking per strategy, kept across retry attempts: the HEAD race
+    // runs once per strategy per download instead of once per attempt. A
+    // winner that failed its download is demoted to the back for the next
+    // attempt (every mirror is tried on every attempt anyway).
+    const rankedUrls = new Map<DownloadStrategyType, string[]>();
     const errorKeys = {
       diff: 'error_diff_failed',
       pdiff: 'error_pdiff_failed',
@@ -1559,7 +1631,11 @@ export class Pushy {
         // a transfer can die mid-stream). Every mirror of the same artifact
         // gets a real download attempt before the strategy is abandoned —
         // the native cold-start path already behaves this way.
-        const orderedUrls = await this.rankDownloadUrls(urls);
+        let orderedUrls = rankedUrls.get(type);
+        if (!orderedUrls) {
+          orderedUrls = await this.rankDownloadUrls(urls);
+          rankedUrls.set(type, orderedUrls);
+        }
         for (const url of orderedUrls) {
           log(`downloading ${type} from ${url}`);
           try {
@@ -1573,6 +1649,9 @@ export class Pushy {
             // `[CODE] ` message prefix. Either way it survives into the
             // i18n-wrapped error together with the original as cause.
             const { code, message } = readErrorCode(e);
+            if (url === orderedUrls[0] && orderedUrls.length > 1) {
+              rankedUrls.set(type, [...orderedUrls.slice(1), url]);
+            }
             const errorMessage = this.t(errorKeys[type], {
               message: message || String(e ?? ''),
             });

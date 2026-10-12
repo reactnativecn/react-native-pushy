@@ -3,9 +3,11 @@ import type { CheckResult } from '../type';
 import {
   buildCheckFingerprint,
   buildCheckRequestBody,
+  canonicalizeNativeConfig,
   decideDownload,
   isMirrorRetryableCode,
   isValidCheckResult,
+  nativeConfigsEquivalent,
   orderEndpointCandidates,
 } from '../updateFlowCore';
 
@@ -333,5 +335,89 @@ describe('isValidCheckResult', () => {
     expect(isValidCheckResult('upToDate')).toBe(false);
     expect(isValidCheckResult({ upToDate: 'yes' })).toBe(false);
     expect(isValidCheckResult({ update: 1 })).toBe(false);
+  });
+});
+
+describe('native config canonical equality (C1)', () => {
+  const base = {
+    appKey: 'demo-app',
+    packageVersion: '1.0.0',
+    endpoints: ['https://a.example.com', 'https://b.example.com'],
+    queryUrls: ['https://q.example.com/endpoints.json'],
+    afterDownload: 'setNeedUpdate',
+    rnu: '10.0.0',
+    rn: '0.73.0',
+  };
+  const json = (value: unknown) => JSON.stringify(value);
+
+  test('key order is ignored', () => {
+    const reordered = Object.fromEntries(Object.entries(base).reverse());
+    expect(nativeConfigsEquivalent(json(base), json(reordered))).toBe(true);
+  });
+
+  test('absent keys equal their native defaults', () => {
+    const minimal = {
+      appKey: 'demo-app',
+      endpoints: ['https://a.example.com'],
+    };
+    const explicit = {
+      ...minimal,
+      disabled: false,
+      queryUrls: [],
+      rnu: '',
+      rn: '',
+      afterDownload: 'none',
+    };
+    expect(nativeConfigsEquivalent(json(minimal), json(explicit))).toBe(true);
+    expect(
+      nativeConfigsEquivalent(
+        json(minimal),
+        json({ ...minimal, afterDownload: 'setNeedUpdate' })
+      )
+    ).toBe(false);
+  });
+
+  test('endpoint lists ignore trailing slashes and duplicates, not order', () => {
+    const noisy = {
+      ...base,
+      endpoints: [
+        'https://a.example.com/',
+        'https://a.example.com',
+        'https://b.example.com//',
+      ],
+      queryUrls: [
+        'https://q.example.com/endpoints.json/',
+        'https://q.example.com/endpoints.json',
+      ],
+    };
+    expect(nativeConfigsEquivalent(json(base), json(noisy))).toBe(true);
+    expect(canonicalizeNativeConfig(json(noisy))?.endpoints).toEqual([
+      'https://a.example.com',
+      'https://b.example.com',
+    ]);
+    const swapped = {
+      ...base,
+      endpoints: ['https://b.example.com', 'https://a.example.com'],
+    };
+    expect(nativeConfigsEquivalent(json(base), json(swapped))).toBe(false);
+  });
+
+  test('a real difference is detected', () => {
+    expect(
+      nativeConfigsEquivalent(
+        json(base),
+        json({ ...base, appKey: 'another-app' })
+      )
+    ).toBe(false);
+    expect(
+      nativeConfigsEquivalent(json(base), json({ ...base, extra: 1 }))
+    ).toBe(false);
+  });
+
+  test('unparseable or non-object JSON is never equivalent', () => {
+    expect(nativeConfigsEquivalent('not json', 'not json')).toBe(false);
+    expect(nativeConfigsEquivalent('null', 'null')).toBe(false);
+    expect(nativeConfigsEquivalent('[]', '[]')).toBe(false);
+    expect(nativeConfigsEquivalent(json(base), '')).toBe(false);
   });
 });
