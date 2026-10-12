@@ -410,17 +410,22 @@ napi_value NewCopyGroupArray(
   return result;
 }
 
-pushy::delta::PatchManifest BuildManifest(
-    const std::vector<std::string>& copy_froms,
-    const std::vector<std::string>& copy_tos,
-    const std::vector<std::string>& deletes) {
-  pushy::delta::PatchManifest manifest;
-  for (size_t index = 0; index < copy_froms.size(); ++index) {
-    manifest.copies.push_back(
-        pushy::delta::CopyOperation{copy_froms[index], copy_tos[index]});
+// The parallel copy lists (+ deletes) as a PatchManifest via the shared
+// delta::BuildPatchManifest. On failure (length mismatch) a JS error is
+// pending and false is returned.
+bool ReadPatchManifest(
+    napi_env env,
+    std::vector<std::string> copy_froms,
+    std::vector<std::string> copy_tos,
+    std::vector<std::string> deletes,
+    pushy::delta::PatchManifest* out) {
+  const pushy::delta::Status status = pushy::delta::BuildPatchManifest(
+      std::move(copy_froms), std::move(copy_tos), std::move(deletes), out);
+  if (!status.ok) {
+    ThrowError(env, status.message);
+    return false;
   }
-  manifest.deletes = deletes;
-  return manifest;
+  return true;
 }
 
 napi_value SyncStateWithBinaryVersion(napi_env env, napi_callback_info info) {
@@ -546,8 +551,13 @@ napi_value BuildArchivePatchPlan(napi_env env, napi_callback_info info) {
       !GetStringArray(env, args[4], &deletes)) {
     return nullptr;
   }
-  if (copy_froms.size() != copy_tos.size()) {
-    ThrowError(env, "copyFroms and copyTos length mismatch");
+  pushy::delta::PatchManifest manifest;
+  if (!ReadPatchManifest(
+          env,
+          std::move(copy_froms),
+          std::move(copy_tos),
+          std::move(deletes),
+          &manifest)) {
     return nullptr;
   }
 
@@ -564,8 +574,6 @@ napi_value BuildArchivePatchPlan(napi_env env, napi_callback_info info) {
     }
   }
 
-  const pushy::delta::PatchManifest manifest =
-      BuildManifest(copy_froms, copy_tos, deletes);
   pushy::archive_patch::ArchivePatchType archive_type;
   if (!pushy::archive_patch::TryParseArchivePatchType(patch_type, &archive_type)) {
     ThrowError(env, "Unknown archive delta type");
@@ -600,13 +608,12 @@ napi_value BuildCopyGroups(napi_env env, napi_callback_info info) {
       !GetStringArray(env, args[1], &copy_tos)) {
     return nullptr;
   }
-  if (copy_froms.size() != copy_tos.size()) {
-    ThrowError(env, "copyFroms and copyTos length mismatch");
+  pushy::delta::PatchManifest manifest;
+  if (!ReadPatchManifest(
+          env, std::move(copy_froms), std::move(copy_tos), {}, &manifest)) {
     return nullptr;
   }
 
-  const pushy::delta::PatchManifest manifest =
-      BuildManifest(copy_froms, copy_tos, std::vector<std::string>());
   std::vector<pushy::archive_patch::CopyGroup> groups;
   const pushy::delta::Status status =
       pushy::archive_patch::BuildCopyGroups(manifest, &groups);
@@ -851,13 +858,16 @@ napi_value ApplyPatchFromFileSource(napi_env env, napi_callback_info info) {
       !GetOptionalBoolProperty(env, args[0], "enableMerge", true, &enable_merge)) {
     return nullptr;
   }
-  if (copy_froms.size() != copy_tos.size()) {
-    ThrowError(env, "copyFroms and copyTos length mismatch");
-    return nullptr;
-  }
 
   ApplyPatchWork work;
-  work.options.manifest = BuildManifest(copy_froms, copy_tos, deletes);
+  if (!ReadPatchManifest(
+          env,
+          std::move(copy_froms),
+          std::move(copy_tos),
+          std::move(deletes),
+          &work.options.manifest)) {
+    return nullptr;
+  }
   work.options.source_root = source_root;
   work.options.target_root = target_root;
   work.options.origin_bundle_path = origin_bundle_path;
