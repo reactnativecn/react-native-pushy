@@ -1,50 +1,40 @@
 /**
  * Provider <-> client contract, exercised with the REAL Pushy client (only
- * the native module / core constants are mocked, as in client.test.ts). The
- * render tests next door use a hand-written fake client; this file is what
- * keeps that fake honest about the members the provider actually relies on.
+ * the native module / core constants are mocked, as in client.test.ts): the
+ * provider's lifecycle (mount claim, AppState, timers, option changes)
+ * against the client's own option and singleton machinery.
  */
-import {
-  afterAll,
-  beforeEach,
-  describe,
-  expect,
-  mock,
-  spyOn,
-  test,
-} from 'bun:test';
+import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import type React from 'react';
 import TestRenderer from 'react-test-renderer';
+import {
+  createClient,
+  createJsonResponse,
+  flush,
+  mockCore,
+  mockI18n,
+  setDevForFile,
+} from './helpers';
 import { emitAppStateChange, mockAlert } from './setup';
 
 // Release code paths (assertDebug allows checks, default strategies apply).
-const _origDEV = (globalThis as any).__DEV__;
-(globalThis as any).__DEV__ = false;
+setDevForFile(false);
 
 const { useUpdate } = await import('../context');
 
-const createJsonResponse = (payload: unknown) =>
-  ({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify(payload),
-    json: async () => payload,
-  }) as Response;
-
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let importSeq = 0;
 
-// A fresh client module per test: the client is a process-level singleton
-// (module state), so every test gets its own module instance instead of
-// inheriting the previous test's options, listeners and dedup window.
+// A fresh client (and provider) module per test: the client is a
+// process-level singleton (module state), so every test gets its own module
+// instance instead of inheriting the previous test's options, listeners and
+// dedup window.
 const setupRealClient = async (
   options: Record<string, any> = {},
   native: { markSuccess?: ReturnType<typeof mock>; isFirstTime?: boolean } = {}
 ) => {
-  const seq = ++importSeq;
-  mock.module('../core', () => ({
+  mockCore({
     PushyModule: {
       markSuccess: native.markSuccess ?? mock(() => Promise.resolve()),
       reloadUpdate: mock(() => Promise.resolve()),
@@ -56,32 +46,13 @@ const setupRealClient = async (
       restartApp: mock(() => Promise.resolve()),
       resetToPackagedBundle: mock(() => Promise.resolve()),
     },
-    buildTime: '2023-01-01',
-    cInfo: { rnu: '10.0.0', rn: '0.73.0', os: 'ios', uuid: 'uuid' },
-    currentVersion: 'hash',
-    currentVersionInfo: {},
     isFirstTime: native.isFirstTime ?? false,
-    isRolledBack: false,
-    packageVersion: '1.0.0',
-    pushyNativeEventEmitter: {
-      addListener: mock(() => ({ remove: mock(() => {}) })),
-    },
-    rolledBackVersion: '',
-    setLocalHashInfo: mock(() => {}),
-    supportedDiffVersion: 2,
-    getBundleHash: mock(() => ''),
-    getCurrentVersionInfo: async () => ({}),
-  }));
-  mock.module('../i18n', () => ({
-    default: {
-      t: (key: string, params?: Record<string, unknown>) =>
-        params ? `${key}${JSON.stringify(params)}` : key,
-      setLocale: mock(() => {}),
-    },
-  }));
-  const { Pushy } = await import(`../client?contract-${seq}`);
-  const { UpdateProvider } = await import(`../provider?contract-${seq}`);
-  const client = new Pushy({ appKey: 'contract-app', ...options });
+  });
+  mockI18n({ withParams: true });
+  const { client } = await createClient({ appKey: 'contract-app', ...options });
+  const { UpdateProvider } = await import(
+    `../provider?contract-${++importSeq}`
+  );
   // Count the provider's calls into the client without changing what they do.
   const realCheckUpdate = client.checkUpdate;
   const checkUpdate = mock((extra?: Record<string, any>) =>
@@ -112,10 +83,6 @@ describe('UpdateProvider <-> Pushy contract', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse({ upToDate: true })
     );
-  });
-
-  afterAll(() => {
-    (globalThis as any).__DEV__ = _origDEV;
   });
 
   test('a second concurrently mounted provider throws SINGLETON_VIOLATION', async () => {

@@ -1,10 +1,12 @@
 import { describe, expect, mock, test } from 'bun:test';
+import { realProjectModules } from './setup';
 
 const importFreshMetadata = (cacheKey: string) =>
   import(`../metadata?${cacheKey}`);
 
 const mockCore = (overrides: Record<string, any> = {}) => {
   mock.module('../core', () => ({
+    ...realProjectModules['../core'],
     buildTime: '1719999999',
     currentBundleSha256: 'c'.repeat(64),
     cInfo: { rnu: '10.53.1', rn: '0.85.2', os: 'ios 17.5', uuid: 'u-1' },

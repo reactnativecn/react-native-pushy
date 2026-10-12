@@ -1,21 +1,4 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-
-mock.module('react-native', () => {
-  return {
-    Platform: {
-      OS: 'ios',
-    },
-  };
-});
-
-mock.module('../i18n', () => {
-  return {
-    default: {
-      t: (key: string) => key,
-    },
-  };
-});
-
 import { joinUrls } from '../updateFlowCore';
 import {
   computeProgress,
@@ -31,6 +14,7 @@ import {
   testUrls,
   warn,
 } from '../utils';
+import { restoreDevAfterEach } from './helpers';
 
 const originalFetch = globalThis.fetch;
 
@@ -397,9 +381,8 @@ describe('parseQueryParams', () => {
 });
 
 describe('log gating (1.11)', () => {
-  const origDev = (globalThis as any).__DEV__;
+  restoreDevAfterEach();
   afterEach(() => {
-    (globalThis as any).__DEV__ = origDev;
     setDebugLogging(false);
   });
 
