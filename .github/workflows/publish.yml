@@ -115,6 +115,9 @@ jobs:
           path: android/lib/
           if-no-files-found: error
 
+  # The two publish jobs differ only in where harmony/pushy.har comes from;
+  # everything else lives in .github/actions/publish-npm. They stay separate
+  # jobs: the HAR build needs the HarmonyOS container, the reuse path does not.
   publish_with_harmony:
     needs: [check_changes, build_android_so]
     if: needs.check_changes.outputs.harmony_changed == 'true'
@@ -126,47 +129,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-      - name: Configure git safe.directory
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git submodule foreach --recursive 'git config --global --add safe.directory "$toplevel/$sm_path"'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Build Harmony HAR and publish
+        uses: ./.github/actions/publish-npm
         with:
-          bun-version: 1.4.0
-      # Setup .npmrc file to publish to npm
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          registry-url: 'https://registry.npmjs.org'
-      - run: bun install --frozen-lockfile
-      # Drop the committed binaries first: the artifact must fully replace
-      # android/lib, so any layout regression makes the verify step fail loudly
-      # instead of silently passing against stale committed .so files.
-      - name: Remove committed Android native libraries
-        run: rm -rf android/lib
-      - name: Use CI-built Android native libraries
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: android-so
-          path: android/lib
-      - name: Verify Android native libraries
-        run: node scripts/verify-android-so.js
-      - name: Build Harmony HAR
-        run: npm run build:harmony-har -- --build-mode release
-      - name: Verify Harmony HAR artifact
-        run: test -f harmony/pushy.har
-      - name: Verify release tag matches package version
-        run: node scripts/check-release-version.js
-      - name: Verify publish file list
-        run: node scripts/check-packlist.js --release
-      - name: Publish to npm
-        shell: bash
-        run: |
-          if [[ "${{ github.event.release.tag_name }}" == *"beta"* ]]; then
-            npm publish --provenance --access public --tag beta
-          else
-            npm publish --provenance --access public
-          fi
+          harmony-har: build
 
   publish_without_harmony:
     needs: [check_changes, build_android_so]
@@ -177,58 +143,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
-      - name: Configure git safe.directory
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git submodule foreach --recursive 'git config --global --add safe.directory "$toplevel/$sm_path"'
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Reuse the previous Harmony HAR and publish
+        uses: ./.github/actions/publish-npm
         with:
-          bun-version: 1.4.0
-      # Setup .npmrc file to publish to npm
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          registry-url: 'https://registry.npmjs.org'
-      - run: bun install --frozen-lockfile
-      # Drop the committed binaries first: the artifact must fully replace
-      # android/lib, so any layout regression makes the verify step fail loudly
-      # instead of silently passing against stale committed .so files.
-      - name: Remove committed Android native libraries
-        run: rm -rf android/lib
-      - name: Use CI-built Android native libraries
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: android-so
-          path: android/lib
-      - name: Verify Android native libraries
-        run: node scripts/verify-android-so.js
-      # Fail closed: the package must always ship harmony/pushy.har
-      # (package.json `files` lists it and check-packlist.js --release
-      # requires it). If the previous release can't
-      # be fetched, fix the cause or re-run — never publish a HAR-less package.
-      - name: Fetch previous Harmony HAR
-        shell: bash
-        run: |
-          PREV_VERSION="${{ needs.check_changes.outputs.prev_tag }}"
-          PREV_VERSION="${PREV_VERSION#v}"
-          echo "Fetching harmony/pushy.har from react-native-update@$PREV_VERSION"
-          npm pack "react-native-update@$PREV_VERSION"
-          tar -xzf "react-native-update-${PREV_VERSION}.tgz" package/harmony/pushy.har
-          mkdir -p harmony
-          cp package/harmony/pushy.har harmony/pushy.har
-          # Clean up temporary pack and extraction files to prevent publishing them
-          rm -rf "react-native-update-${PREV_VERSION}.tgz" package
-      - name: Verify Harmony HAR artifact
-        run: test -f harmony/pushy.har
-      - name: Verify release tag matches package version
-        run: node scripts/check-release-version.js
-      - name: Verify publish file list
-        run: node scripts/check-packlist.js --release
-      - name: Publish to npm
-        shell: bash
-        run: |
-          if [[ "${{ github.event.release.tag_name }}" == *"beta"* ]]; then
-            npm publish --provenance --access public --tag beta
-          else
-            npm publish --provenance --access public
-          fi
+          harmony-har: previous
+          previous-tag: ${{ needs.check_changes.outputs.prev_tag }}

@@ -1,0 +1,98 @@
+name: E2E common setup
+description: >-
+  Platform-neutral part of the Detox e2e setup: Node/Bun toolchains, the Bun
+  cache, the e2e project's dependencies, the local react-native-update link
+  and (optionally) a built react-native-update-cli. Runs after the
+  react-native-update checkout (this action lives in it); platform toolchains
+  (Java/KVM, Xcode/Homebrew) are set up by the caller.
+inputs:
+  project-dir:
+    description: E2E app directory, relative to the workspace.
+    default: Example/e2etest
+  checkout-cli:
+    description: Check out and build react-native-update-cli (needed to prepare update artifacts).
+    default: 'true'
+  bun-cache-scope:
+    description: Extra bun cache key segment for jobs whose dependency set differs.
+    default: ''
+  bun-cache-key-suffix:
+    description: Extra hash appended to the bun cache key.
+    default: ''
+  create-project:
+    description: Command that generates the e2e project before its dependencies are installed.
+    default: ''
+  frozen-lockfile:
+    description: Install with --frozen-lockfile (false only for generated projects that have no lockfile).
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Checkout react-native-update-cli
+      if: inputs.checkout-cli == 'true'
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        repository: reactnativecn/react-native-update-cli
+        path: react-native-update-cli
+
+    - name: Setup Node.js
+      uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version: 1.4.0
+
+    - name: Cache Bun dependencies
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-e2e${{ inputs.bun-cache-scope }}-${{ hashFiles('Example/e2etest/bun.lock', 'react-native-update-cli/bun.lock') }}${{ inputs.bun-cache-key-suffix }}
+        restore-keys: |
+          ${{ runner.os }}-bun-e2e${{ inputs.bun-cache-scope }}-
+          ${{ runner.os }}-bun-e2e-
+
+    - name: Create e2e project
+      if: inputs.create-project != ''
+      shell: bash
+      env:
+        CREATE_PROJECT: ${{ inputs.create-project }}
+      run: eval "$CREATE_PROJECT"
+
+    - name: Install e2e project dependencies
+      shell: bash
+      working-directory: ${{ inputs.project-dir }}
+      env:
+        FROZEN: ${{ inputs.frozen-lockfile }}
+      run: |
+        if [ "$FROZEN" = 'true' ]; then
+          bun install --frozen-lockfile
+        else
+          bun install
+        fi
+
+    - name: Link local react-native-update
+      # Mirrors what an npm install ships (package.json `files`), plus cpp/
+      # for the iOS/Android native builds; scripts/ is dev-only and unused
+      # by any build step.
+      shell: bash
+      env:
+        E2E_DIR: ${{ inputs.project-dir }}
+      run: |
+        set -euo pipefail
+        LOCAL_RNU_VERSION="$(node -p "require('./${E2E_DIR}/node_modules/react-native-update/package.json').version")"
+        LOCAL_RNU_DIR="$PWD/$E2E_DIR/.e2e-artifacts/local-react-native-update"
+        export LOCAL_RNU_VERSION LOCAL_RNU_DIR
+        rm -rf "$LOCAL_RNU_DIR" "$E2E_DIR/node_modules/react-native-update"
+        mkdir -p "$LOCAL_RNU_DIR"
+        cp package.json react-native-update.podspec react-native.config.js expo-module.config.json "$LOCAL_RNU_DIR"/
+        rsync -a --exclude='.git' src ios android cpp "$LOCAL_RNU_DIR"/
+        node -e "const fs = require('fs'); const file = process.env.LOCAL_RNU_DIR + '/package.json'; const pkg = JSON.parse(fs.readFileSync(file, 'utf8')); pkg.version = process.env.LOCAL_RNU_VERSION; fs.writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');"
+        ln -s ../.e2e-artifacts/local-react-native-update "$E2E_DIR/node_modules/react-native-update"
+
+    - name: Install react-native-update-cli dependencies
+      if: inputs.checkout-cli == 'true'
+      shell: bash
+      working-directory: react-native-update-cli
+      run: bun install --frozen-lockfile && bun run build

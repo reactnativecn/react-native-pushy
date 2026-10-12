@@ -1,23 +1,20 @@
 #!/bin/sh
+# Flag variables ($SANITIZE_FLAGS, $CORE_WARNINGS, ...) must split into
+# compiler arguments.
+# shellcheck disable=SC2086
 set -eu
 
+# Intentional one-command CDPATH assignment.
+# shellcheck disable=SC1007
 ROOT_DIR="$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)"
 BUILD_DIR="$ROOT_DIR/.tmp/patch-core-tests"
 
 mkdir -p "$BUILD_DIR"
 
-# Opt-in AddressSanitizer + UndefinedBehaviorSanitizer build. The patch core
-# processes untrusted (downloaded) patch data, so running the tests under
-# sanitizers catches memory/UB regressions. Enable with: SANITIZE=1 npm run test:patch-core
-SANITIZE_FLAGS=""
-if [ "${SANITIZE:-0}" = "1" ]; then
-  SANITIZE_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -g"
-  echo "Building patch core tests with AddressSanitizer + UBSan"
-fi
-
-# The cpp/ cores must build warning-free (-Werror); the vendored HDiffPatch /
-# lzma C sources are compiled with -Wall -Wextra only.
-CORE_WARNINGS="-Wall -Wextra -Werror"
+# SANITIZE=1 / FUZZ=1 conventions and CORE_WARNINGS.
+# shellcheck source-path=SCRIPTDIR source=lib/cpp-test-common.sh
+. "$ROOT_DIR/scripts/lib/cpp-test-common.sh"
+cpp_test_sanitize_flags "patch core tests"
 
 COMMON_INCLUDES="
   -I$ROOT_DIR/cpp/patch_core
@@ -27,6 +24,8 @@ COMMON_INCLUDES="
   -I$ROOT_DIR/android/jni/lzma/C
 "
 
+# The vendored HDiffPatch / lzma C sources are compiled with -Wall -Wextra
+# only (no -Werror).
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/hpatch.c" -o "$BUILD_DIR/hpatch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c" -o "$BUILD_DIR/patch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/HDiffPatch/file_for_patch.c" -o "$BUILD_DIR/file_for_patch.o"
@@ -65,34 +64,24 @@ c++ \
 "$BUILD_DIR/hbc_transform_test" "$ROOT_DIR/cpp/patch_core/tests/fixtures"
 
 # Opt-in libFuzzer run of the hbcTransform wire parser (untrusted __diff.json
-# metadata): FUZZ=1 npm run test:patch-core. Needs clang with the libFuzzer
-# runtime (libclang_rt.fuzzer); without it the step is skipped, not failed.
-# FUZZ_SECONDS bounds the run (default 20).
-if [ "${FUZZ:-0}" = "1" ]; then
-  FUZZ_PROBE="$BUILD_DIR/fuzz_probe.cpp"
-  printf '#include <cstddef>\n#include <cstdint>\nextern "C" int LLVMFuzzerTestOneInput(const uint8_t*, size_t) { return 0; }\n' > "$FUZZ_PROBE"
-  if ! command -v clang++ >/dev/null 2>&1; then
-    echo "FUZZ=1: clang++ not found, skipping the libFuzzer run"
-  elif ! clang++ -fsanitize=fuzzer,address,undefined "$FUZZ_PROBE" -o "$BUILD_DIR/fuzz_probe" >/dev/null 2>&1; then
-    echo "FUZZ=1: clang++ has no libFuzzer runtime (libclang_rt.fuzzer), skipping the libFuzzer run"
-  else
-    echo "Fuzzing hbcTransform wire parser for ${FUZZ_SECONDS:-20}s"
-    clang++ \
-      -std=c++17 \
-      $CORE_WARNINGS \
-      -g -O1 -fno-omit-frame-pointer \
-      -fsanitize=fuzzer,address,undefined \
-      "$ROOT_DIR/cpp/patch_core/tests/fuzz_hbc_transform_wire.cpp" \
-      "$ROOT_DIR/cpp/patch_core/hbc_transform.cpp" \
-      "$ROOT_DIR/cpp/patch_core/hbc_transform_wire.cpp" \
-      -o "$BUILD_DIR/fuzz_hbc_transform_wire"
-    CORPUS_DIR="$BUILD_DIR/fuzz-corpus-hbc-transform-wire"
-    mkdir -p "$CORPUS_DIR"
-    cp "$ROOT_DIR/cpp/patch_core/tests/fixtures/v96.meta.json" "$CORPUS_DIR/seed-v96-meta.json"
-    "$BUILD_DIR/fuzz_hbc_transform_wire" \
-      -max_total_time="${FUZZ_SECONDS:-20}" \
-      -max_len=8192 \
-      -print_final_stats=1 \
-      "$CORPUS_DIR"
-  fi
+# metadata): FUZZ=1 bun run test:patch-core.
+if cpp_test_fuzz_compiler; then
+  echo "Fuzzing hbcTransform wire parser for ${FUZZ_SECONDS:-20}s ($FUZZ_CXX)"
+  "$FUZZ_CXX" \
+    -std=c++17 \
+    $CORE_WARNINGS \
+    -g -O1 -fno-omit-frame-pointer \
+    -fsanitize=fuzzer,address,undefined \
+    "$ROOT_DIR/cpp/patch_core/tests/fuzz_hbc_transform_wire.cpp" \
+    "$ROOT_DIR/cpp/patch_core/hbc_transform.cpp" \
+    "$ROOT_DIR/cpp/patch_core/hbc_transform_wire.cpp" \
+    -o "$BUILD_DIR/fuzz_hbc_transform_wire"
+  CORPUS_DIR="$BUILD_DIR/fuzz-corpus-hbc-transform-wire"
+  mkdir -p "$CORPUS_DIR"
+  cp "$ROOT_DIR/cpp/patch_core/tests/fixtures/v96.meta.json" "$CORPUS_DIR/seed-v96-meta.json"
+  "$BUILD_DIR/fuzz_hbc_transform_wire" \
+    -max_total_time="${FUZZ_SECONDS:-20}" \
+    -max_len=8192 \
+    -print_final_stats=1 \
+    "$CORPUS_DIR"
 fi

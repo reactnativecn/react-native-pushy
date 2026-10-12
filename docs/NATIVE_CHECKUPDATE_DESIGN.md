@@ -1,13 +1,16 @@
 # 原生检测更新设计：让砖机也能被修好
 
-> 状态：**实现完成（2026-08-07，e34f390..24f3adf）**——三端编排全部落地：
-> 标定层 syncNativeConfig、iOS RCTPushyOrchestrator、Android
-> NativeCheckOrchestrator（librnupdate.so 已重编 4 ABI 并过符号/对齐校验）、
-> Harmony NativeCheckOrchestrator.ts + NAPI，§10.3 的 JS 响应缓存复用
-> （getNativeCheckCache，2 分钟 TTL）也已闭环。剩余：e2e 用例（沿用
-> Example/e2etest 基建，验证"坏 bundle 下原生仍拉到修复版"端到端场景）、
-> README/CHANGELOG、发版。
-> 取代：`REMOTE_RESET_DESIGN.md`（本地启动熔断方案，已放弃，理由见 §1.2）
+> 状态：**已发布**。§10 原生冷启动检测随 10.51.0 发布（#620 / 62290556，
+> 含标定层 syncNativeConfig、§10.3 JS 响应缓存复用
+> getNativeCheckCache），§11 崩溃时刻救援 + 断点续传随 10.52.0 发布（2d7f2b38），鸿蒙
+> 方法表漏注册在 10.52.1 修复。现行三端编排：iOS `RCTPushyOrchestrator.mm`、
+> Android `SyncCoordinator.java`、Harmony `SyncCoordinator.ts`（b8bfe1fd 前叫
+> NativeCheckOrchestrator；下文的 `librnupdate.so` 即现在的
+> `librnpushy.so`）。README 已写明能力与覆盖边界；e2e
+> `Example/e2etest/e2e/native/native-check.test.ts` 覆盖 Android/iOS 的
+> forceBoot 激活。仍开放的项（鸿蒙 native-check e2e、救砖自动化 e2e 等）见
+> `NATIVE_CHECK_FOLLOWUPS.md`。
+> 取代：本地启动熔断方案（原 `REMOTE_RESET_DESIGN.md`，未入库，已放弃，理由见 §1.2）
 > 前置：bundleHash 迁移 Phase 0/1/2 已上线且 buildTime 永久保留作 fallback 已定稿
 > （2026-08-03）——checkUpdate 的 wire protocol 已稳定，协议前置解除
 > 关联：[[native-update-reset-design]] 的 Phase 3
@@ -294,7 +297,7 @@ app 侧的 `client.ts` / `UpdateProvider` 仍然负责**交互**：更新提示�
 
 ## 9. 已写代码的处置
 
-`REMOTE_RESET_DESIGN.md` 那一版的本地熔断已经三端实现完毕（未提交）。按 §1.2 应当整体撤回。可留用的只有：
+本地熔断那一版（原 `REMOTE_RESET_DESIGN.md`，未入库）曾三端实现完毕（未提交）。按 §1.2 应当整体撤回。可留用的只有：
 
 - `blockedVersions` —— 与本方案无关，可独立保留或一并撤回
 - `autoReset` 遥测事件 —— 无 reset 动作后失去意义，撤回

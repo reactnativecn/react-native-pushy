@@ -7,7 +7,8 @@
 // disk or a zip bomb. The caps are generous for real packages (a large full
 // bundle with assets is tens of MB) and exist purely as damage bounds.
 //
-// Mirrors that cannot include this header MUST stay in sync by hand:
+// Mirrors that cannot include this header MUST stay in sync by hand
+// (scripts/check-constant-parity.js, part of `bun lint`, asserts they do):
 //   - android/.../ArchiveLimits.java
 //   - harmony/pushy/src/main/ets/ArchiveLimits.ts
 // iOS (RCTPushy.mm) includes this header directly.

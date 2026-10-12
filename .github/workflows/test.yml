@@ -40,6 +40,7 @@ jobs:
               - 'cpp/**'
               - 'android/jni/**'
               - 'scripts/test-*'
+              - 'scripts/lib/**'
               # TS reference the C++ golden vectors are generated from.
               - 'src/updateFlowCore.ts'
               - 'scripts/generate-flow-vectors.ts'
@@ -80,7 +81,8 @@ jobs:
           submodules: recursive
 
       - name: Install build dependencies
-        run: sudo apt-get update && sudo apt-get install -y zlib1g-dev libbz2-dev
+        # clang (+ libFuzzer runtime) is for the bounded fuzz step below.
+        run: sudo apt-get update && sudo apt-get install -y zlib1g-dev libbz2-dev clang
 
       - name: Build HDiffPatch library
         working-directory: android/jni/HDiffPatch
@@ -113,8 +115,6 @@ jobs:
       # libFuzzer is unavailable on the runner.
       - name: Fuzz parsers (bounded)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y clang
           FUZZ=1 ./scripts/test-update-flow-core.sh
           FUZZ=1 ./scripts/test-patch-core.sh
 

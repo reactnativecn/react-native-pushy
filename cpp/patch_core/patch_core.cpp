@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "hbc_transform.h"
@@ -497,6 +498,25 @@ Status Status::Error(const std::string& message) {
 
 Status ValidateManifest(const PatchManifest& manifest) {
   return ValidateManifestImpl(manifest);
+}
+
+Status BuildPatchManifest(
+    std::vector<std::string> copy_froms,
+    std::vector<std::string> copy_tos,
+    std::vector<std::string> deletes,
+    PatchManifest* out) {
+  if (copy_froms.size() != copy_tos.size()) {
+    return Status::Error("copy_froms and copy_tos length mismatch");
+  }
+  PatchManifest manifest;
+  manifest.copies.reserve(copy_froms.size());
+  for (size_t index = 0; index < copy_froms.size(); ++index) {
+    manifest.copies.push_back(CopyOperation{
+        std::move(copy_froms[index]), std::move(copy_tos[index])});
+  }
+  manifest.deletes = std::move(deletes);
+  *out = std::move(manifest);
+  return Status::Ok();
 }
 
 const BundleRebuilder& DefaultBundleRebuilder() {
