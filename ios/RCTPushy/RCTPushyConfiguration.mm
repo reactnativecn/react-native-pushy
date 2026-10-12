@@ -6,14 +6,23 @@ static volatile unsigned char PushyTextKeyBase = 0x5A;
 
 NSString *RCTPushyRevealText(const char *hex) {
     size_t length = strlen(hex) / 2;
-    NSMutableString *text = [NSMutableString stringWithCapacity:length];
+    unsigned char *bytes = (unsigned char *)malloc(length > 0 ? length : 1);
+    if (bytes == NULL) {
+        return @"";
+    }
     unsigned char base = PushyTextKeyBase;
     for (size_t i = 0; i < length; i++) {
         char pair[3] = {hex[i * 2], hex[i * 2 + 1], 0};
         unsigned char byte = (unsigned char)strtoul(pair, NULL, 16);
-        [text appendFormat:@"%c", (char)(byte ^ (unsigned char)(base + 0x1D * i))];
+        bytes[i] = byte ^ (unsigned char)(base + 0x1D * i);
     }
-    return text;
+    // One decode into a byte buffer (the texts are ASCII, see
+    // scripts/encode-native-text.ts) instead of a format call per character.
+    NSString *text = [[NSString alloc] initWithBytes:bytes
+                                              length:length
+                                            encoding:NSUTF8StringEncoding];
+    free(bytes);
+    return text ?: @"";
 }
 
 NSString *RCTPushyQueryPath(void) {
@@ -47,9 +56,13 @@ static NSArray *PushyConfigUrls(id value, NSString *name, BOOL base) {
             name, base ? @"a non-empty" : @"an"]);
     }
     NSMutableArray *result = [NSMutableArray array];
-    NSRegularExpression *authority = [NSRegularExpression regularExpressionWithPattern:
-        @"^https?://(\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+)(:[0-9]+)?([/?#]|$)"
-        options:0 error:nil];
+    static NSRegularExpression *authority;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        authority = [NSRegularExpression regularExpressionWithPattern:
+            @"^https?://(\\[[0-9a-fA-F:]+\\]|[a-zA-Z0-9.-]+)(:[0-9]+)?([/?#]|$)"
+            options:0 error:nil];
+    });
     for (id item in value) {
         NSString *url = [PushyConfigString(item, name, NO) stringByTrimmingCharactersInSet:
             NSCharacterSet.whitespaceAndNewlineCharacterSet];

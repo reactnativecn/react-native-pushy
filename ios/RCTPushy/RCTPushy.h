@@ -26,8 +26,20 @@ typedef void (^RCTPushyBundlePreparationCompletion)(NSDictionary<NSString *, id>
  * Result keys: status (skipped/noUpdate/downloaded/failed/cancelled), reason,
  * hash (empty when nothing was installed), activated (selected for NEXT
  * launch, not a reload of the running instance).
+ *
+ * Waits at most 30 minutes for the round (longer than any round takes).
  */
 + (void)prepareBundleWithCompletion:(RCTPushyBundlePreparationCompletion _Nullable)completion
     NS_SWIFT_NAME(prepareBundle(completion:));
+
+/**
+ * Same as prepareBundleWithCompletion:, but the completion runs after at most
+ * `timeout` seconds. On expiry the result is status failed, reason timeout;
+ * the round keeps running in the background and its result still applies to
+ * the next launch.
+ */
++ (void)prepareBundleWithTimeout:(NSTimeInterval)timeout
+                      completion:(RCTPushyBundlePreparationCompletion _Nullable)completion
+    NS_SWIFT_NAME(prepareBundle(timeout:completion:));
 
 @end

@@ -1,7 +1,8 @@
 # Deterministic native purge-restore ordering tests
 
 Follow-up to #646. These tests exercise the tvOS Release branch of the real
-`RCTPushy.mm` startup/commit/reset code in a macOS Foundation-only executable.
+`RCTPushy.mm` / `RCTPushyOrchestrator.mm` startup/commit/reset code in a macOS
+Foundation-only executable.
 There are no production code changes, React Native mocks to install, CocoaPods,
 simulator builds, network requests, or sleeps.
 
@@ -25,8 +26,10 @@ python3 -m unittest discover -s scripts/tests/ios-purge-restore -p test_extract.
 
 ## Production code, not a second state machine
 
-`extract.py` reads the checkout's `ios/RCTPushy/RCTPushy.mm` on every build. It
-copies the exact definitions (with `#line` locations) of `bundleURL`,
+`extract.py` reads the checkout's `ios/RCTPushy/RCTPushy.mm` and
+`RCTPushyOrchestrator.mm` on every build (each definition must exist exactly
+once across them; pod-internal `PUSHY_HIDDEN` definitions count like `static`
+ones). It copies the exact definitions (with `#line` locations) of `bundleURL`,
 `resolveLaunchBundleURL`, `restorePurgedLaunch`, `commitRoundWithGeneration`,
 `resetToPackagedBundle`, their state/defaults helpers, and the relevant globals
 into build-only `.inc` files. These are compiled unchanged with the actual
@@ -39,8 +42,9 @@ or compilation instead of silently testing a stale copy.
 
 The host replaces only collaborators: React Native export/logging plumbing,
 application paths/configuration, defaults storage, network round delivery,
-cold-start scheduling, the launch wait's return value/completion delivery, and
-post-reset filesystem cleanup. Bundle-existence checks use real temporary files.
+cold-start scheduling, the launch wait's return value/completion delivery, the
+time elapsed since process start, the network-path probe, and post-reset
+filesystem cleanup. Bundle-existence checks use real temporary files.
 The production state lock is real; every defaults mutation asserts ownership of
 that same `os_unfair_lock`.
 
@@ -77,6 +81,13 @@ preferences domain.
 | `reset_wins` | Pause reset inside the real state lock; start stale commit; release reset | Old generation rejects **all** commit writes: no current/last version, version metadata or response cache; install UUID survives |
 | `commit_wins` | Pause commit inside the real state lock; start reset; release commit | Earlier commit succeeds, then reset clears its state, metadata and cache; a delayed done signal cannot restore it |
 | `complete_in_time` | Commit and done signal both arrive before wait returns | Normal successful restore still launches B with first-load protection |
+| `late_launch` | 4.5s already elapsed since process start | Round deadline and launch wait shrink to the remaining 7.5s; B still launches |
+| `offline_skip` | Network-path probe reports no path | No window, no round, no wait; packaged bundle launches |
+| `spent_budget_skip` | 10.5s already elapsed (under the 2s minimum left) | Same as offline: the restore is not attempted |
+
+`config_equivalence` additionally checks the cross-platform canonical config
+equality (defaults, key order, trailing slashes, duplicates; `0` is not
+`false`; unparseable is never equivalent).
 
 A real GCD worker captures the request generation and blocks at a controlled
 response boundary. Semaphores establish each ordering. Reset races are exercised
@@ -84,7 +95,8 @@ in both legal lock orders, with one operation paused while it owns the lock and
 the competing operation started on another thread. Five-second waits are only
 fail-fast deadlock guards, never timing assumptions. The launch wait itself is
 injected, so the tests do not spend 12 seconds per case. They still assert that
-production requests a 12-second (not 13-second) wait budget.
+production requests exactly the 12-second budget minus the time already spent
+since process start.
 
 ## Negative controls
 

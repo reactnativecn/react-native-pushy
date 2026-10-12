@@ -1,4 +1,4 @@
-#import "RCTPushy.h"
+#import "RCTPushyInternal.h"
 #import "RCTPushyConfiguration.h"
 #import "RCTPushyDownloader.h"
 #import "ZipArchive.h"
@@ -31,12 +31,6 @@
 
 #import <React/RCTConvert.h>
 #import <React/RCTLog.h>
-// RN's log macros pass __FILE__, which would embed this file's absolute build
-// path in the binary; log with the bare file name instead.
-#if RCTLOG_ENABLED
-#undef _RCTLog
-#define _RCTLog(lvl, ...) _RCTLogNativeInternal(lvl, __FILE_NAME__, __LINE__, __VA_ARGS__)
-#endif
 #import <objc/runtime.h>
 #import <os/lock.h>
 
@@ -44,7 +38,7 @@
 #include <sys/stat.h>
 
 // Immutable host-facing snapshot; activated always means NEXT launch.
-static NSDictionary *PushyHostResult(NSString *status, NSString *reason,
+PUSHY_HIDDEN NSDictionary *PushyHostResult(NSString *status, NSString *reason,
                                     NSString *hash, BOOL activated) {
     return @{@"status": status, @"reason": reason ?: @"",
              @"hash": hash ?: @"", @"activated": @(activated)};
@@ -66,39 +60,66 @@ static NSString *const paramLastVersion = @"lastVersion";
 static NSString *const paramCurrentVersion = @"currentVersion";
 static NSString *const paramIsFirstTime = @"isFirstTime";
 static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
-static NSString *const keyUuid = @"REACTNATIVECN_PUSHY_UUID";
+PUSHY_HIDDEN NSString *const keyUuid = @"REACTNATIVECN_PUSHY_UUID";
 static NSString *const keyHashInfo = @"REACTNATIVECN_PUSHY_HASH_";
 static NSString *const keyFirstLoadMarked = @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY";
 static NSString *const keyRolledBackMarked = @"REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY";
-static NSString *const KeyPackageUpdatedMarked = RCTPushyRevealText("0832d5f29aa549710b0939daf88ca058790f3dded7e888b451640d2ec3f69099bb43711523cafa8ea7bb4372132a");
+// Encoded constants (RCTPushyRevealText) are decoded on first use, not by
+// static initializers at image load.
+PUSHY_HIDDEN NSString *PushyRevealOnce(NSString *__strong *slot, dispatch_once_t *once,
+                                 const char *hex) {
+    dispatch_once(once, ^{
+        *slot = RCTPushyRevealText(hex);
+    });
+    return *slot;
+}
+
+static NSString *KeyPackageUpdatedMarked(void) {
+    static NSString *value;
+    static dispatch_once_t once;
+    return PushyRevealOnce(&value, &once, "0832d5f29aa549710b0939daf88ca058790f3dded7e888b451640d2ec3f69099bb43711523cafa8ea7bb4372132a");
+}
 // bundleHash cache: "<cacheKey>|<sha256hex>" where cacheKey identifies the
 // installed binary (packageVersion + embedded bundle size + mtime). Recomputed
 // only when the key changes, i.e. once per install.
 static NSString *const keyBundleHashCache = @"REACTNATIVECN_PUSHY_BUNDLEHASH_KEY";
 // Raw JSON persisted by JS (syncNativeConfig) for the native cold-start
 // update check; parsed on read by the orchestrator. Absent = check disabled.
-static NSString *const keyNativeConfig = @"REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY";
+PUSHY_HIDDEN NSString *const keyNativeConfig = @"REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY";
 // Raw response cache written by the native cold-start check for the JS side
 // to reuse (§10.3), scoped to the request and config that produced it.
-static NSString *const keyNativeCheckCache = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY";
+PUSHY_HIDDEN NSString *const keyNativeCheckCache = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY";
 // Set when a native check round starts, cleared when it ends (§11.4). Residue
 // on the next launch means the previous process died mid-round (a crash
 // rescue was truncated): that launch resumes immediately instead of waiting.
-static NSString *const keyNativeCheckIncomplete = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY";
+PUSHY_HIDDEN NSString *const keyNativeCheckIncomplete = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY";
 static NSString *const PushyErrorDomain = @"cn.reactnative.pushy";
 
 // file def
 static NSString * const BUNDLE_FILE_NAME = @"index.bundlejs";
 static NSString * const SOURCE_PATCH_NAME = @"__diff.json";
-static NSString * const BUNDLE_PATCH_NAME = RCTPushyRevealText("3319f0d4b6c56a502c3b10fcdca0de7d4b3307e9");
+static NSString *BUNDLE_PATCH_NAME(void) {
+    static NSString *value;
+    static dispatch_once_t once;
+    return PushyRevealOnce(&value, &once, "3319f0d4b6c56a502c3b10fcdca0de7d4b3307e9");
+}
 // Protocol strings and version-info flags read by JS, stored encoded
 // (RCTPushyRevealText) so they do not appear as plain binary strings.
-static NSString * const PushyOptionUrlKey = RCTPushyRevealText("2f07f0d0ba8e5d572e");
-static NSString * const PushyIpaDeltaSuffix = RCTPushyRevealText("741ee4d0e09b69512137");
-static NSString * const PushyPpkDeltaSuffix = RCTPushyRevealText("7407e4dae09b69512137");
-static NSString * const PushyInfoCrashHold = RCTPushyRevealText("3905f5c2a6b96d56212a19");
-static NSString * const PushyInfoForceBoot = RCTPushyRevealText("3c18e6d2aba9674a360d19ead5a695");
-static NSString * const PushyStatusNone = RCTPushyRevealText("3418c1c1aa8a7c40");
+PUSHY_HIDDEN NSString *PushyOptionUrlKey(void) {
+    static NSString *value;
+    static dispatch_once_t once;
+    return PushyRevealOnce(&value, &once, "2f07f0d0ba8e5d572e");
+}
+static NSString *PushyIpaDeltaSuffix(void) {
+    static NSString *value;
+    static dispatch_once_t once;
+    return PushyRevealOnce(&value, &once, "741ee4d0e09b69512137");
+}
+static NSString *PushyPpkDeltaSuffix(void) {
+    static NSString *value;
+    static dispatch_once_t once;
+    return PushyRevealOnce(&value, &once, "7407e4dae09b69512137");
+}
 #define VERSION_COMPLETE_FILE_NAME_LITERAL ".pushy-complete"
 static NSString * const VERSION_COMPLETE_FILE_NAME = @VERSION_COMPLETE_FILE_NAME_LITERAL;
 
@@ -112,25 +133,15 @@ static NSString *PushyCode(const char *code) {
     return [NSString stringWithUTF8String:code];
 }
 
-// cInfo.os label prefix; must match the JS side (core.ts) so the server
-// buckets tvOS devices apart from iOS ones.
-#if TARGET_OS_TV
-static NSString * const PushyOsName = @"tvos";
-#else
-static NSString * const PushyOsName = @"ios";
-#endif
-
 // event def
 static NSString * const EVENT_PROGRESS_DOWNLOAD = @"RCTPushyDownloadProgress";
 static NSString * const PARAM_PROGRESS_HASH = @"hash";
 static NSString * const PARAM_PROGRESS_RECEIVED = @"received";
 static NSString * const PARAM_PROGRESS_TOTAL = @"total";
 
-static NSTimeInterval PushyMonotonicNow(void) {
+PUSHY_HIDDEN NSTimeInterval PushyMonotonicNow(void) {
     return [NSProcessInfo processInfo].systemUptime;
 }
-
-static std::string PushyToStdString(NSString *value);
 
 static NSString *PushyStagingDirForVersionDir(NSString *versionDir) {
     return [versionDir stringByAppendingString:@(pushy::install_record::kStagingSuffix)];
@@ -155,9 +166,17 @@ static NSDictionary *PushyReadInstallRecord(NSString *versionDir) {
     return [object isKindOfClass:[NSDictionary class]] ? (NSDictionary *)object : nil;
 }
 
+// Whether a non-empty record names this version under the current schema.
+static BOOL PushyInstallRecordMatches(NSDictionary *record, NSString *hash) {
+    return [record[@"schema"] isKindOfClass:[NSNumber class]]
+        && [record[@"schema"] intValue] == pushy::install_record::kSchema
+        && [record[@"versionHash"] isKindOfClass:[NSString class]]
+        && [record[@"versionHash"] isEqualToString:hash];
+}
+
 // Presence check (launch / dedup paths, no digest work): bundle present and
 // the record exists and, unless legacy-empty, names this version.
-static BOOL PushyHasCompletedVersionAtPath(NSString *versionDir, NSString *hash) {
+PUSHY_HIDDEN BOOL PushyHasCompletedVersionAtPath(NSString *versionDir, NSString *hash) {
     NSString *bundlePath = [versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
     if (![[NSFileManager defaultManager] fileExistsAtPath:bundlePath]) {
         return NO;
@@ -166,37 +185,69 @@ static BOOL PushyHasCompletedVersionAtPath(NSString *versionDir, NSString *hash)
     if (record == nil) {
         return NO;
     }
-    if (record.count == 0) {
-        return YES;
+    return record.count == 0 || PushyInstallRecordMatches(record, hash);
+}
+
+// Identity of a file's bytes on disk without reading them: a rewrite or an
+// atomic replacement (new inode) changes it.
+struct PushyFileStamp {
+    bool exists = false;
+    dev_t device = 0;
+    ino_t inode = 0;
+    off_t size = 0;
+    struct timespec modified = {0, 0};
+
+    bool operator==(const PushyFileStamp &other) const {
+        return exists == other.exists && device == other.device && inode == other.inode
+            && size == other.size && modified.tv_sec == other.modified.tv_sec
+            && modified.tv_nsec == other.modified.tv_nsec;
     }
-    return [record[@"schema"] isKindOfClass:[NSNumber class]]
-        && [record[@"schema"] intValue] == pushy::install_record::kSchema
-        && [record[@"versionHash"] isKindOfClass:[NSString class]]
-        && [record[@"versionHash"] isEqualToString:hash];
+    bool operator!=(const PushyFileStamp &other) const { return !(*this == other); }
+};
+
+static PushyFileStamp PushyStampFile(NSString *path) {
+    PushyFileStamp stamp;
+    struct stat info;
+    if (path != nil && stat(path.fileSystemRepresentation, &info) == 0) {
+        stamp.exists = true;
+        stamp.device = info.st_dev;
+        stamp.inode = info.st_ino;
+        stamp.size = info.st_size;
+        stamp.modified = info.st_mtimespec;
+    }
+    return stamp;
 }
 
 // Activation check: re-hashes the bundle when the record carries a digest.
 // Returns nil when the directory may be activated, the reason otherwise.
-static NSString *PushyVerifyInstallForActivation(NSString *versionDir, NSString *hash) {
+// Slow (a full read of the bundle): never call it under the state lock. On
+// success *recordOut and *stampOut describe exactly what was verified, so the
+// caller can confirm under the lock that nothing changed since.
+static NSString *PushyVerifyInstallForActivation(NSString *versionDir, NSString *hash,
+                                                 NSDictionary **recordOut,
+                                                 PushyFileStamp *stampOut) {
+    NSString *bundlePath = [versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+    PushyFileStamp before = PushyStampFile(bundlePath);
     NSDictionary *record = PushyReadInstallRecord(versionDir);
     if (record == nil) {
         return [NSString stringWithFormat:@"Bundle version %@ has no valid completion record.", hash];
     }
+    *recordOut = record;
+    *stampOut = before;
     if (record.count == 0) {
         return nil;
     }
-    if (![record[@"schema"] isKindOfClass:[NSNumber class]]
-        || [record[@"schema"] intValue] != pushy::install_record::kSchema
-        || ![record[@"versionHash"] isKindOfClass:[NSString class]]
-        || ![record[@"versionHash"] isEqualToString:hash]) {
+    if (!PushyInstallRecordMatches(record, hash)) {
         return [NSString stringWithFormat:@"Bundle version %@ completion record mismatch.", hash];
     }
     NSString *expected = record[@"bundleSha256"];
     if (![expected isKindOfClass:[NSString class]] || expected.length == 0) {
         return nil;
     }
-    std::string actual = pushy::digest::Sha256File(
-        PushyToStdString([versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME]));
+    std::string actual = pushy::digest::Sha256File(PushyToStdString(bundlePath));
+    if (PushyStampFile(bundlePath) != before) {
+        return [NSString stringWithFormat:@"Bundle version %@ changed while being verified.", hash];
+    }
     if ([[expected lowercaseString] isEqualToString:[NSString stringWithUTF8String:actual.c_str()]]) {
         return nil;
     }
@@ -319,23 +370,23 @@ static NSError *PushyDownloadDeadlineExpiredError(void) {
 }
 
 
-typedef NS_ENUM(NSInteger, PushyType) {
-    PushyTypeFullDownload = 1,
-    PushyTypePatchFromPackage = 2,
-    PushyTypePatchFromPpk = 3,
-};
-
 static std::atomic<bool> ignoreRollback{false};
+// Set once the host calls +configure:completion: in this process; JS
+// syncNativeConfig then rejects with NATIVE_CONFIG_CONFLICT. Local literal
+// until cpp/patch_core/error_codes.h carries the code (reconciled at merge).
+static std::atomic<bool> pushyHostConfigured{false};
+static const char *const kPushyNativeConfigConflict = "NATIVE_CONFIG_CONFLICT";
 // Whether the host asked +bundleURL for the bundle to load (the
 // isUsingBundleUrl constant, mirroring Android/Harmony). NO means the app
 // runs a bundle this SDK never resolved, so updates cannot take effect.
 static std::atomic<bool> pushyIsUsingBundleUrl{false};
-// Bumped by resetToPackagedBundle. The cold-start check runs for minutes and
+// Bumped by resetToPackagedBundle only (config replacement has its own
+// pushyNativeConfigGeneration). The cold-start check runs for minutes and
 // may already hold a decision when the app resets to the packaged bundle; it
 // samples this counter and abandons activation (and its response cache) when
 // the value moved, so an in-flight rescue can never resurrect the version the
 // app just reset away from.
-static std::atomic<uint64_t> pushyResetGeneration{0};
+PUSHY_HIDDEN std::atomic<uint64_t> pushyResetGeneration{0};
 // The version whose bundle this process actually loaded (resolved in
 // +bundleURL). resetToPackagedBundle must not delete its directory: update
 // assets (images/fonts) are read from it on demand at runtime, so wiping it
@@ -470,7 +521,7 @@ static void PushyFinishDownload(NSString *hash, NSError *error) {
 // overwritten by a concurrent bundleURL and the version being rolled back.
 static os_unfair_lock pushyStateLock = OS_UNFAIR_LOCK_INIT;
 
-static void PushyWithStateLock(void (NS_NOESCAPE ^block)(void)) {
+PUSHY_HIDDEN void PushyWithStateLock(void (NS_NOESCAPE ^block)(void)) {
 #if DEBUG
     // Not re-entrant: a nested acquisition deadlocks in release, so catch it
     // where it is written.
@@ -484,7 +535,7 @@ static void PushyWithStateLock(void (NS_NOESCAPE ^block)(void)) {
     }
 }
 
-static std::string PushyToStdString(NSString *value) {
+PUSHY_HIDDEN std::string PushyToStdString(NSString *value) {
     if (value == nil) {
         return std::string();
     }
@@ -500,11 +551,11 @@ static NSError *PushyNSErrorFromStatus(const pushy::delta::Status &status) {
                            }];
 }
 
-static NSUserDefaults *PushyDefaults(void) {
+PUSHY_HIDDEN NSUserDefaults *PushyDefaults(void) {
     return [NSUserDefaults standardUserDefaults];
 }
 
-static NSString *PushyFromStdString(const std::string &value) {
+PUSHY_HIDDEN NSString *PushyFromStdString(const std::string &value) {
     if (value.empty()) {
         return nil;
     }
@@ -519,7 +570,7 @@ static void PushySetNullableString(NSUserDefaults *defaults, NSString *key, NSSt
     }
 }
 
-static NSString *PushyHashInfoKey(NSString *hash) {
+PUSHY_HIDDEN NSString *PushyHashInfoKey(NSString *hash) {
     return [keyHashInfo stringByAppendingString:hash ?: @""];
 }
 
@@ -537,7 +588,7 @@ static BOOL PushyStringIsBlank(NSString *value) {
 // Server-provided identifiers (hash/originHash) are used as child names under
 // the download root; anything that could resolve outside of it (path
 // separators, "..", ".") must be rejected before touching the filesystem.
-static BOOL PushyIsSafePathComponent(NSString *value) {
+PUSHY_HIDDEN BOOL PushyIsSafePathComponent(NSString *value) {
     if (PushyStringIsBlank(value)) {
         return NO;
     }
@@ -647,7 +698,7 @@ static NSString *PushyBinaryIdentityValue(NSUserDefaults *defaults, NSString *ke
     return [defaults stringForKey:key] ?: [defaults stringForKey:legacyKey];
 }
 
-static pushy::state::State PushyStateFromDefaults(NSUserDefaults *defaults) {
+PUSHY_HIDDEN pushy::state::State PushyStateFromDefaults(NSUserDefaults *defaults) {
     pushy::state::State state;
     state.package_version = PushyToStdString(
         PushyBinaryIdentityValue(defaults, paramPackageVersion, legacyParamPackageVersion));
@@ -699,7 +750,7 @@ static void PushyApplyStateToDefaults(NSUserDefaults *defaults, const pushy::sta
 // hold it. Lets the cold-start check commit its whole result (version info,
 // switch, response cache) inside one lock acquisition, so resetToPackagedBundle
 // can never interleave between the generation check and the writes.
-static void PushySwitchVersionLocked(NSString *hash) {
+PUSHY_HIDDEN void PushySwitchVersionLocked(NSString *hash) {
     NSUserDefaults *defaults = PushyDefaults();
     pushy::state::State next = pushy::state::SwitchVersion(
         PushyStateFromDefaults(defaults),
@@ -710,187 +761,7 @@ static void PushySwitchVersionLocked(NSString *hash) {
     ignoreRollback = false;
 }
 
-@interface RCTPushy ()
-- (void)fetchPackage:(PushyType)type
-               options:(NSDictionary *)options
-              resolver:(RCTPromiseResolveBlock)resolve
-              rejecter:(RCTPromiseRejectBlock)reject;
-- (void)performFetch:(PushyType)type
-              options:(NSDictionary *)options
-             callback:(void (^)(NSError *error))callback;
-- (NSError *)restartBridgeWithReason:(NSString *)reason;
-- (void)unzipDownloadedPackage:(NSString *)zipFilePath
-                          hash:(NSString *)hash
-                          type:(PushyType)type
-                    originHash:(NSString *)originHash
-                      callback:(void (^)(NSError *error))callback;
-- (void)finishDownloadedPackage:(NSString *)hash
-                           type:(PushyType)type
-                     originHash:(NSString *)originHash
-                       callback:(void (^)(NSError *error))callback;
-- (void)applyDeltaForHash:(NSString *)hash
-                     type:(PushyType)type
-               fromBundle:(NSString *)bundleOrigin
-                   source:(NSString *)sourceOrigin
-                 callback:(void (^)(NSError *error))callback;
-- (BOOL)switchVersion:(NSString *)hash error:(NSError **)error;
-- (BOOL)ensureDirectoryExistsAtPath:(NSString *)path;
-+ (void)excludeFromBackup:(NSString *)path;
-- (void)unzipFileAtPath:(NSString *)path
-          toDestination:(NSString *)destination
-      completionHandler:(void (^)(NSError *error))completionHandler;
-+ (NSString *)downloadDir;
-+ (NSURL *)binaryBundleURL;
-+ (NSString *)packageVersion;
-+ (NSString *)buildTime;
-@end
 
-// Native cold-start update check (NATIVE_CHECKUPDATE_DESIGN §10): runs once
-// per process, a few seconds after launch, entirely independent of the app
-// bundle — this is what lets a bricked hot update be replaced on the next
-// launch. Decisions come from cpp/update_flow_core; this class is IO glue.
-@interface RCTPushyOrchestrator : NSObject
-+ (void)persistConfiguration:(NSString *)config;
-+ (BOOL)hasRunnableConfig;
-+ (NSDictionary *)prepareBundle;
-+ (void)scheduleFromColdStart:(NSString *)launchRolledBackVersion;
-#if TARGET_OS_TV && !DEBUG
-+ (BOOL)restorePurgedLaunch:(NSString *)purgedVersion
-                 rolledBack:(NSString *)launchRolledBackVersion;
-#endif
-+ (void)recordJsRound:(NSString *)config;
-+ (void)startRoundWithDeadline:(NSTimeInterval)deadlineUptime;
-+ (void)runOnce:(NSString *)launchRolledBackVersion deadline:(NSTimeInterval)deadlineUptime;
-+ (void)runHoldRoundWithDeadline:(NSTimeInterval)deadlineUptime;
-+ (BOOL)commitRoundWithGeneration:(uint64_t)generation
-                         hashInfo:(NSDictionary *)hashInfoEntry
-                         activate:(NSString *)hashToActivate
-                     responseText:(NSString *)responseText
-                          request:(NSString *)requestBody
-                           config:(NSString *)configJson
-                       responseAt:(long long)responseAtSeconds
-                        activated:(BOOL *)activatedOut;
-@end
-
-// One round per process, whoever starts it first — the delayed cold-start
-// path or the crash-rescue thread (§11.3). The semaphore lets the rescue
-// wait out an in-flight round instead of racing it.
-static std::atomic<bool> pushyRoundStarted{false};
-static std::atomic<bool> pushyRoundCompleted{false};
-// Flipped the moment a crash is being held. JS is dead from that point on,
-// so there is no second decision maker: the round force-activates whatever
-// it downloads (§11.3).
-static std::atomic<bool> pushyCrashHoldActive{false};
-static std::atomic<bool> pushyHoldAttempted{false};
-// Set when this process's round is the tvOS purged-version restore.
-static std::atomic<bool> pushyPurgeRestoreActive{false};
-// True while +bundleURL waits for that restore. Only then may the round
-// activate what it downloads on its own (JS has not started to decide), since
-// the launch resolves the bundle again afterwards. Closed once the wait ends,
-// timeout or not; guarded by the state lock that every activation commits
-// under, so a commit lands either before the close (and launches) or after it
-// (and is left to JS) — never selected behind the packaged bundle's back.
-static bool pushyPurgeRestoreWindowOpen = false;
-static dispatch_semaphore_t pushyRoundDone;
-static NSString *pushyLaunchRolledBackForHold = nil;
-// A version this process downloaded but left for JS to activate. If the
-// process then crashes, JS will never activate it — the crash handler
-// activates it directly (bounded local work, no network). The generation is
-// the one the round committed under: a reset that lands afterwards bumps it,
-// and the late activation must lose to that reset exactly like the round
-// itself would. Guarded by @synchronized (RCTPushyOrchestrator class).
-static NSString *pushyUnactivatedHash = nil;
-static uint64_t pushyUnactivatedGeneration = 0;
-static NSUncaughtExceptionHandler *pushyPreviousExceptionHandler = NULL;
-// ≈ process start: scheduleFromColdStart runs during the first bundleURL.
-static NSTimeInterval pushyProcessAnchorUptime = 0;
-// Config JSON for which JS reported a completed check in this process
-// (markJsCheckCompleted). Process-scoped by design. Guarded by
-// @synchronized (RCTPushyOrchestrator class).
-static NSString *pushyJsCompletedConfig = nil;
-// The group supplements (rather than consumes) the crash-rescue semaphore.
-static dispatch_group_t pushyHostRoundGroup;
-static std::atomic<bool> pushySyncReady{false};
-static NSDictionary *pushyHostRoundResult = nil;
-static NSString *pushyHostRoundConfig = nil;
-static uint64_t pushyHostRoundGeneration = 0;
-static std::atomic<uint64_t> pushyNativeConfigGeneration{0};
-static uint64_t pushyHostRoundConfigGeneration = 0;
-
-static const NSTimeInterval kPushyHoldTriggerUptime = 60;
-static const NSTimeInterval kPushyHoldBudgetBackgroundThread = 10;
-// A held main thread freezes UI teardown; stay well under the watchdog.
-static const NSTimeInterval kPushyHoldBudgetMainThread = 3.5;
-// The purged-version restore blocks +bundleURL, usually inside
-// application:didFinishLaunching: — stay clear of the launch watchdog.
-static const NSTimeInterval kPushyPurgeRestoreBudget = 12;
-
-static void PushyMaybeHoldProcess(void) {
-    // Once per process; a second crashing thread passes straight through
-    // instead of waiting behind the first (§11.3: prefer under-rescuing over
-    // wedging the teardown).
-    bool expected = false;
-    if (!pushyHoldAttempted.compare_exchange_strong(expected, true)) {
-        return;
-    }
-    NSTimeInterval uptime = PushyMonotonicNow() - pushyProcessAnchorUptime;
-    bool roundInFlight = pushyRoundStarted.load() && !pushyRoundCompleted.load();
-    // Early crashes are the brick signature; a crash with an in-flight round
-    // is worth finishing regardless of uptime. Everything else is an ordinary
-    // crash whose UX must not be delayed.
-    if (uptime >= kPushyHoldTriggerUptime && !roundInFlight) {
-        return;
-    }
-    NSTimeInterval budget = [NSThread isMainThread]
-        ? kPushyHoldBudgetMainThread
-        : kPushyHoldBudgetBackgroundThread;
-    NSTimeInterval deadline = PushyMonotonicNow() + budget;
-    NSLog(@"RCTPushy -- crash hold: holding process for up to %.1fs "
-          @"(uptime %.1fs)", budget, uptime);
-
-    // The rescue runs on its own queue and the dying thread only waits with a
-    // hard timeout: even a deadlocked rescue (a thread that died holding a
-    // lock — uncaught ObjC exceptions skip @finally) can only delay the
-    // process death, never prevent it.
-    dispatch_semaphore_t done = dispatch_semaphore_create(0);
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        @try {
-            [RCTPushyOrchestrator runHoldRoundWithDeadline:deadline];
-        } @catch (NSException *exception) {
-            NSLog(@"RCTPushy -- crash hold failed: %@", exception.reason);
-        }
-        dispatch_semaphore_signal(done);
-    });
-    if (dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW,
-            (int64_t)(budget * NSEC_PER_SEC))) != 0) {
-        NSLog(@"RCTPushy -- crash hold: budget exhausted, letting go");
-    }
-}
-
-// Crash-moment brick rescue (§11): when the app is dying of an uncaught
-// exception during startup (RCTFatal raises NSException in release), the
-// process is still alive and JS will never run again — a natural,
-// false-positive-free window to finish the cold-start check. The previous
-// handler (crash reporters chain the same way) always runs afterwards.
-static void PushyCrashHoldExceptionHandler(NSException *exception) {
-    @try {
-        PushyMaybeHoldProcess();
-    } @catch (NSException *inner) {
-        // The dying process owes the previous handler its turn no matter
-        // what the rescue did.
-    }
-    if (pushyPreviousExceptionHandler != NULL) {
-        pushyPreviousExceptionHandler(exception);
-    }
-}
-
-static void PushyInstallCrashHoldHandler(void) {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        pushyPreviousExceptionHandler = NSGetUncaughtExceptionHandler();
-        NSSetUncaughtExceptionHandler(&PushyCrashHoldExceptionHandler);
-    });
-}
 
 // Single-flight for the digest in PushyBundleHashSync: the delayed cold-start
 // round (utility queue) and JS getBundleHash (_fileQueue) can both miss the
@@ -919,7 +790,7 @@ static NSString *PushyCachedBundleHash(NSUserDefaults *defaults, NSString *cache
 // main thread). Without it only the cache is consulted: a crash rescue on
 // the main thread has a 3.5s budget in total, and hashing a large bundle on
 // a fresh install would spend all of it before the first request.
-static NSString *PushyBundleHashSync(BOOL computeIfMissing) {
+PUSHY_HIDDEN NSString *PushyBundleHashSync(BOOL computeIfMissing) {
     NSString *path = [[RCTPushy binaryBundleURL] path];
     if (path == nil) {
         return @"";
@@ -962,6 +833,32 @@ static NSString *PushyBundleHashSync(BOOL computeIfMissing) {
     } @finally {
         [lock unlock];
     }
+}
+
+// Host preparation runs off the caller's thread, one at a time; the
+// completion is delivered on the main queue.
+static void PushyRunHostPreparation(NSDictionary *(^work)(void),
+                                    RCTPushyBundlePreparationCompletion completion) {
+    static dispatch_queue_t hostQueue;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        hostQueue = dispatch_queue_create("cn.reactnative.pushy.host-sync", DISPATCH_QUEUE_SERIAL);
+    });
+    dispatch_async(hostQueue, ^{
+        NSDictionary *result;
+        @try {
+            result = work();
+        } @catch (NSException *exception) {
+            RCTLogWarn(@"RCTPushy -- native host sync failed: %@", exception.reason);
+            result = PushyHostResult(@"failed", @"internal_error", nil, NO);
+        }
+        if (completion != nil) {
+            NSDictionary *snapshot = [result copy];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(snapshot);
+            });
+        }
+    });
 }
 
 @implementation RCTPushy {
@@ -1024,7 +921,7 @@ RCT_EXPORT_MODULE(RCTPushy);
             PushyToStdString(curBuildTime)
         );
         if (sync.changed) {
-            [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked];
+            [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked()];
             state = sync.state;
             PushyApplyStateToDefaults(defaults, state);
         }
@@ -1120,6 +1017,10 @@ RCT_EXPORT_MODULE(RCTPushy);
 + (void)configure:(NSDictionary<NSString *, id> *)options
        completion:(RCTPushyConfigurationCompletion)completion
 {
+    // From here on the host owns the config; syncNativeConfig refuses to
+    // overwrite it (set even when these options fail validation: the host's
+    // intent is what conflicts with a JS-owned config).
+    pushyHostConfigured.store(true);
     NSError *validationError = nil;
     // Snapshot nested mutable caller values before crossing a queue boundary.
     NSString *config = RCTPushyNormalizeConfiguration(options, &validationError);
@@ -1148,26 +1049,17 @@ RCT_EXPORT_MODULE(RCTPushy);
 
 + (void)prepareBundleWithCompletion:(RCTPushyBundlePreparationCompletion)completion
 {
-    static dispatch_queue_t hostQueue;
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        hostQueue = dispatch_queue_create("cn.reactnative.pushy.host-sync", DISPATCH_QUEUE_SERIAL);
-    });
-    dispatch_async(hostQueue, ^{
-        NSDictionary *result;
-        @try {
-            result = [RCTPushyOrchestrator prepareBundle];
-        } @catch (NSException *exception) {
-            RCTLogWarn(@"RCTPushy -- native host sync failed: %@", exception.reason);
-            result = PushyHostResult(@"failed", @"internal_error", nil, NO);
-        }
-        if (completion != nil) {
-            NSDictionary *snapshot = [result copy];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                completion(snapshot);
-            });
-        }
-    });
+    PushyRunHostPreparation(^NSDictionary * {
+        return [RCTPushyOrchestrator prepareBundle];
+    }, completion);
+}
+
++ (void)prepareBundleWithTimeout:(NSTimeInterval)timeout
+                      completion:(RCTPushyBundlePreparationCompletion)completion
+{
+    PushyRunHostPreparation(^NSDictionary * {
+        return [RCTPushyOrchestrator prepareBundleWithin:timeout];
+    }, completion);
 }
 
 + (BOOL)requiresMainQueueSetup
@@ -1217,8 +1109,8 @@ RCT_EXPORT_MODULE(RCTPushy);
             [self clearInvalidFiles];
         }
 
-        if ([[defaults objectForKey:KeyPackageUpdatedMarked] boolValue]) {
-            [defaults removeObjectForKey:KeyPackageUpdatedMarked];
+        if ([[defaults objectForKey:KeyPackageUpdatedMarked()] boolValue]) {
+            [defaults removeObjectForKey:KeyPackageUpdatedMarked()];
             [self clearInvalidFiles];
         }
     });
@@ -1264,6 +1156,15 @@ RCT_EXPORT_METHOD(syncNativeConfig:(NSString *)config
     // Provisioning for the native cold-start check (NATIVE_CHECKUPDATE_DESIGN
     // §10.1). Validate at write time: a corrupt config would otherwise
     // silently disable the native check forever with no signal.
+    if (pushyHostConfigured.load()) {
+        // Two owners of one config would overwrite each other on every
+        // launch; fail loudly instead of picking one.
+        PushyRejectError(reject, PushyErrorWithCode(kPushyNativeConfigConflict,
+            @"[NATIVE_CONFIG_CONFLICT] "
+            @"The host app called RCTPushy configure natively in this process; "
+            @"set nativeConfigSource: 'native' in the JS client options."));
+        return;
+    }
     if (PushyStringIsBlank(config)) {
         PushyRejectError(reject, PushyErrorWithCode(pushy::error_codes::kInvalidOptions, ERROR_OPTIONS));
         return;
@@ -1494,7 +1395,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
                 }
             }
             [defaults removeObjectForKey:keyFirstLoadMarked];
-            [defaults removeObjectForKey:KeyPackageUpdatedMarked];
+            [defaults removeObjectForKey:KeyPackageUpdatedMarked()];
             // A cached response still advertises the version this reset just
             // removed; dropping it stops the JS side from reusing that answer.
             [defaults removeObjectForKey:keyNativeCheckCache];
@@ -1600,7 +1501,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
 
 - (void)performFetch:(PushyType)type options:(NSDictionary *)options callback:(void (^)(NSError *error))callback
 {
-    NSString *updateUrl = PushyOptionString(options, PushyOptionUrlKey);
+    NSString *updateUrl = PushyOptionString(options, PushyOptionUrlKey());
     NSString *hash = PushyOptionString(options, @"hash");
 
     if (PushyStringIsBlank(updateUrl) || !PushyIsSafePathComponent(hash)) {
@@ -1827,7 +1728,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
     NSString *unzipDir = PushyStagingDirForVersionDir(
         [[RCTPushy downloadDir] stringByAppendingPathComponent:hash]);
     NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
-    NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME];
+    NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME()];
     
     NSString *destination = [unzipDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
     long long manifestBytes = RCTPushyFileSize(sourcePatch);
@@ -1868,7 +1769,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
         entryNames.push_back(PushyToStdString(SOURCE_PATCH_NAME));
     }
     if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePatch isDirectory:NULL]) {
-        entryNames.push_back(PushyToStdString(BUNDLE_PATCH_NAME));
+        entryNames.push_back(PushyToStdString(BUNDLE_PATCH_NAME()));
     }
 
     pushy::archive_patch::ArchivePatchPlan plan;
@@ -1904,7 +1805,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
     // 存在时透传给 patch 内核执行 T(origin) → hpatch → T⁻¹;缺失走现状路径。
     NSDictionary *hbcTransform = json[@"hbcTransform"];
     if ([hbcTransform isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *meta = hbcTransform[BUNDLE_PATCH_NAME];
+        NSDictionary *meta = hbcTransform[BUNDLE_PATCH_NAME()];
         if ([meta isKindOfClass:[NSDictionary class]]) {
             NSError *metaError = nil;
             NSData *metaData = [NSJSONSerialization dataWithJSONObject:meta options:0 error:&metaError];
@@ -1933,40 +1834,80 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
         return NO;
     }
 
-    __block NSError *switchError = nil;
-    PushyWithStateLock(^{
-        // Same rule as Android: only a version this SDK recorded as completely
-        // installed (bundle + marker) may be activated. Versions activated
-        // before markers existed are grandfathered through current/last
-        // state; any other markerless directory may be a crash-left partial
-        // install or a directory something else put there.
-        NSString *versionDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
+    // Same rule as Android: only a version this SDK recorded as completely
+    // installed (bundle + marker) may be activated. Versions activated before
+    // markers existed are grandfathered through current/last state; any other
+    // markerless directory may be a crash-left partial install or a directory
+    // something else put there.
+    NSString *versionDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
+    std::string hashStd = PushyToStdString(hash);
+    BOOL (^isLegacyActivated)(void) = ^BOOL {
         pushy::state::State state = PushyStateFromDefaults(PushyDefaults());
-        std::string hashStd = PushyToStdString(hash);
-        BOOL legacyActivated = state.current_version == hashStd || state.last_version == hashStd;
-        if (!PushyHasCompletedVersionAtPath(versionDir, hash) && !legacyActivated) {
-            BOOL hasBundle = [[NSFileManager defaultManager] fileExistsAtPath:
-                [versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME]];
-            switchError = PushyErrorWithCode(
-                pushy::error_codes::kSwitchVersionFailed,
-                [NSString stringWithFormat:@"Bundle version %@ %@", hash,
-                    hasBundle ? @"is incomplete." : @"not found."]);
-            return;
-        }
-        if (!legacyActivated) {
+        return state.current_version == hashStd || state.last_version == hashStd;
+    };
+    NSError *(^incompleteError)(void) = ^NSError * {
+        BOOL hasBundle = [[NSFileManager defaultManager] fileExistsAtPath:
+            [versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME]];
+        return PushyErrorWithCode(
+            pushy::error_codes::kSwitchVersionFailed,
+            [NSString stringWithFormat:@"Bundle version %@ %@", hash,
+                hasBundle ? @"is incomplete." : @"not found."]);
+    };
+
+    // The digest check reads the whole bundle, so it runs OUTSIDE the state
+    // lock: +bundleURL takes that lock on the main thread at launch.
+    __block BOOL legacyActivated = NO;
+    PushyWithStateLock(^{
+        legacyActivated = isLegacyActivated();
+    });
+    NSError *switchError = nil;
+    NSDictionary *verifiedRecord = nil;
+    PushyFileStamp verifiedStamp;
+    BOOL verified = NO;
+    if (!legacyActivated) {
+        if (!PushyHasCompletedVersionAtPath(versionDir, hash)) {
+            switchError = incompleteError();
+        } else {
             // The record's bundle digest must match the bytes on disk before
             // the next launch is pointed at them.
-            NSString *reason = PushyVerifyInstallForActivation(versionDir, hash);
+            NSString *reason = PushyVerifyInstallForActivation(
+                versionDir, hash, &verifiedRecord, &verifiedStamp);
             if (reason != nil) {
                 switchError = PushyErrorWithCode(pushy::error_codes::kSwitchVersionFailed, reason);
-                return;
+            } else {
+                verified = YES;
             }
         }
-        PushySwitchVersionLocked(hash);
-    });
-    if (switchError != nil) {
+    }
+
+    __block NSError *lockedError = switchError;
+    if (lockedError == nil) {
+        NSDictionary *record = verifiedRecord;
+        PushyFileStamp stamp = verifiedStamp;
+        PushyWithStateLock(^{
+            if (!isLegacyActivated()) {
+                // Re-check cheaply that the directory is still the one that
+                // was verified: same record, same bundle file (size, mtime,
+                // inode).
+                if (!PushyHasCompletedVersionAtPath(versionDir, hash)) {
+                    lockedError = incompleteError();
+                    return;
+                }
+                NSString *bundlePath = [versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+                if (!verified || ![PushyReadInstallRecord(versionDir) isEqual:record]
+                    || PushyStampFile(bundlePath) != stamp) {
+                    lockedError = PushyErrorWithCode(
+                        pushy::error_codes::kSwitchVersionFailed,
+                        [NSString stringWithFormat:@"Bundle version %@ changed while switching.", hash]);
+                    return;
+                }
+            }
+            PushySwitchVersionLocked(hash);
+        });
+    }
+    if (lockedError != nil) {
         if (error != NULL) {
-            *error = switchError;
+            *error = lockedError;
         }
         return NO;
     }
@@ -2128,9 +2069,9 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
 {
     switch (type) {
         case PushyTypePatchFromPackage:
-            return PushyIpaDeltaSuffix;
+            return PushyIpaDeltaSuffix();
         case PushyTypePatchFromPpk:
-            return PushyPpkDeltaSuffix;
+            return PushyPpkDeltaSuffix();
         case PushyTypeFullDownload:
             break;
     }
@@ -2212,863 +2153,5 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
     return std::make_shared<facebook::react::NativePushySpecJSI>(params);
 }
 #endif
-
-@end
-
-#pragma mark - native cold-start check orchestration
-
-// Refuses an https→http downgrade before the redirected request — and with
-// it the POST body (appKey, uuid, versions) — leaves the device. The shared
-// session would follow first and only the response could be rejected; ATS
-// blocks plaintext by default, this covers apps that opted out with
-// NSAllowsArbitraryLoads. Same rule as RCTPushyDownloader. Returning nil
-// delivers the 3xx itself as the final response, which the status check in
-// PushyHttpRequest then treats as a failed endpoint.
-@interface PushyRequestRedirectGuard : NSObject <NSURLSessionTaskDelegate>
-@end
-
-@implementation PushyRequestRedirectGuard
-
-- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task
-willPerformHTTPRedirection:(NSHTTPURLResponse *)response
-        newRequest:(NSURLRequest *)request
- completionHandler:(void (^)(NSURLRequest *))completionHandler
-{
-    NSString *originalScheme = [task.originalRequest.URL.scheme lowercaseString];
-    NSString *nextScheme = [request.URL.scheme lowercaseString];
-    if ([originalScheme isEqualToString:@"https"] && [nextScheme isEqualToString:@"http"]) {
-        completionHandler(nil);
-        return;
-    }
-    completionHandler(request);
-}
-
-@end
-
-// Blocking JSON HTTP round-trip on the orchestrator's utility thread. Returns
-// the response body on 2xx, nil on any failure. The semaphore timeout is a
-// backstop over the request's own timeoutInterval.
-static NSString *PushyHttpRequest(NSString *urlString, NSString *method,
-                                  NSString *body, NSTimeInterval timeout) {
-    NSURL *url = [NSURL URLWithString:urlString];
-    if (url == nil) {
-        return nil;
-    }
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.HTTPMethod = method;
-    request.timeoutInterval = timeout;
-    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
-    if (body != nil) {
-        [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-        request.HTTPBody = [body dataUsingEncoding:NSUTF8StringEncoding];
-    }
-    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-    __block NSString *result = nil;
-    // A delegate session (not the shared one) so the redirect guard sees the
-    // 3xx before it is followed; the completion handler still receives the
-    // final response.
-    NSURLSession *session = [NSURLSession
-        sessionWithConfiguration:[NSURLSessionConfiguration defaultSessionConfiguration]
-                        delegate:[PushyRequestRedirectGuard new]
-                   delegateQueue:nil];
-    NSURLSessionDataTask *task = [session dataTaskWithRequest:request
-        completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            NSHTTPURLResponse *httpResponse =
-                [response isKindOfClass:[NSHTTPURLResponse class]]
-                    ? (NSHTTPURLResponse *)response
-                    : nil;
-            NSInteger status = httpResponse.statusCode;
-            if (error == nil && httpResponse != nil && status >= 200 && status < 300
-                && data != nil) {
-                result = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-            }
-            dispatch_semaphore_signal(sem);
-        }];
-    [task resume];
-    // The session retains its delegate until invalidated: let this one task
-    // settle, then release everything.
-    [session finishTasksAndInvalidate];
-    if (dispatch_semaphore_wait(
-            sem, dispatch_time(DISPATCH_TIME_NOW,
-                               (int64_t)((timeout + 5) * NSEC_PER_SEC))) != 0) {
-        [task cancel];
-        return nil;
-    }
-    return result;
-}
-
-static NSString *PushyNormalizeEndpointBase(NSString *base) {
-    while ([base hasSuffix:@"/"]) {
-        base = [base substringToIndex:base.length - 1];
-    }
-    return base;
-}
-
-static BOOL PushyIsValidResponse(NSString *responseText) {
-    if (responseText == nil) {
-        return NO;
-    }
-    // Shared schema rule (update_flow_core::IsValidResponse): a 200 with
-    // `{"error": ...}` is a failed endpoint, not a verdict.
-    return flowcore::IsValidResponse(PushyToStdString(responseText)) ? YES : NO;
-}
-
-@implementation RCTPushyOrchestrator
-
-+ (void)persistConfiguration:(NSString *)config {
-    PushyWithStateLock(^{
-        NSUserDefaults *defaults = PushyDefaults();
-        if ([defaults stringForKey:keyUuid].length == 0) {
-            [defaults setObject:[NSUUID UUID].UUIDString forKey:keyUuid];
-        }
-        if ([[defaults stringForKey:keyNativeConfig] isEqualToString:config]) {
-            return;
-        }
-        // The same generation protects reset and replacement of the request
-        // identity/policy, including a late crash-rescue activation.
-        pushyResetGeneration.fetch_add(1);
-        pushyNativeConfigGeneration.fetch_add(1);
-        [defaults setObject:config forKey:keyNativeConfig];
-        [defaults removeObjectForKey:keyNativeCheckCache];
-        [self recordJsRound:nil];
-    });
-    if (pushySyncReady.load() && [self hasRunnableConfig]) {
-        PushyInstallCrashHoldHandler();
-    }
-}
-
-+ (BOOL)hasRunnableConfig {
-    NSString *json = [PushyDefaults() stringForKey:keyNativeConfig];
-    if (json.length == 0) {
-        return NO;
-    }
-    bool ok = false;
-    flowjson::Value config = flowjson::Parse(PushyToStdString(json), &ok);
-    return ok && config.IsObject() && !config.Get("disabled").Truthy()
-        && !config.Get("appKey").AsString().empty();
-}
-
-// Process-wide round state, set up by whichever launch path needs a round
-// first: the delayed cold-start check or the tvOS purged-version restore.
-+ (void)prepareProcess:(NSString *)launchRolledBackVersion {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        pushyRoundDone = dispatch_semaphore_create(0);
-        pushyHostRoundGroup = dispatch_group_create();
-        dispatch_group_enter(pushyHostRoundGroup);
-        pushyProcessAnchorUptime = PushyMonotonicNow();
-        pushyLaunchRolledBackForHold = [launchRolledBackVersion copy];
-        pushySyncReady.store(true);
-        // The crash-hold rescue shares the orchestrator's rollout gate: no
-        // persisted config, no handler (§11.3).
-        if ([PushyDefaults() stringForKey:keyNativeConfig].length > 0) {
-            PushyInstallCrashHoldHandler();
-        }
-    });
-}
-
-+ (void)scheduleFromColdStart:(NSString *)launchRolledBackVersion {
-#if !DEBUG
-    // Once per process; a few seconds of delay keeps the check away from the
-    // cold-start critical path (§7 R5) — its result targets the NEXT launch.
-    // Unless the previous process died mid-round (residual incomplete
-    // marker), in which case every launch second counts (§11.4).
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        [self prepareProcess:launchRolledBackVersion];
-        NSUserDefaults *defaults = PushyDefaults();
-        int64_t delaySeconds =
-            [defaults objectForKey:keyNativeCheckIncomplete] != nil ? 0 : 5;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delaySeconds * NSEC_PER_SEC),
-                       dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            if ([self hasJsRound]) {
-                // Not consuming the round: a later crash rescue may still
-                // need it.
-                NSLog(@"RCTPushy -- native sync skipped: JS already queried in this process");
-                return;
-            }
-            [self startRoundWithDeadline:0];
-        });
-    });
-#endif
-}
-
-#if TARGET_OS_TV && !DEBUG
-// Runs this process's round before the first bundle loads, blocking the
-// caller for at most kPushyPurgeRestoreBudget. The state no longer has a
-// current version, so the server answers with the latest version for the
-// packaged bundle, and the round activates it while the restore window is
-// open. Returns NO when no round can run; otherwise the caller must resolve
-// the launch bundle again: it launches whatever was activated before the
-// window closed, or the packaged bundle. The round stops at the same
-// deadline, keeping a partial download for the next check to resume.
-+ (BOOL)restorePurgedLaunch:(NSString *)purgedVersion
-                 rolledBack:(NSString *)launchRolledBackVersion {
-    [self prepareProcess:launchRolledBackVersion];
-    if (![self hasRunnableConfig]) {
-        RCTLogWarn(@"RCTPushy -- version %@ was purged and no native sync is "
-                   @"configured; launching the packaged bundle", purgedVersion);
-        return NO;
-    }
-    PushyWithStateLock(^{
-        pushyPurgeRestoreWindowOpen = true;
-    });
-    pushyPurgeRestoreActive.store(true);
-    NSTimeInterval deadline = PushyMonotonicNow() + kPushyPurgeRestoreBudget;
-    dispatch_semaphore_t done = dispatch_semaphore_create(0);
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        [self startRoundWithDeadline:deadline];
-        dispatch_semaphore_signal(done);
-    });
-    BOOL timedOut = dispatch_semaphore_wait(done, dispatch_time(DISPATCH_TIME_NOW,
-        (int64_t)(kPushyPurgeRestoreBudget * NSEC_PER_SEC))) != 0;
-    // The round's deadline does not bound a slow response (the request
-    // timeout is an idle timeout) nor a version already on disk, so the close
-    // is what stops a late activation — not the deadline.
-    PushyWithStateLock(^{
-        pushyPurgeRestoreWindowOpen = false;
-    });
-    if (timedOut) {
-        RCTLogWarn(@"RCTPushy -- purged version %@ restore timed out", purgedVersion);
-    } else {
-        NSDictionary *result = pushyHostRoundResult;
-        RCTLogInfo(@"RCTPushy -- purged version %@ restore: %@ %@ %@", purgedVersion,
-                   result[@"status"], result[@"reason"], result[@"hash"]);
-    }
-    return YES;
-}
-#endif
-
-+ (NSDictionary *)prepareBundle {
-#if DEBUG
-    return PushyHostResult(@"skipped", @"debug", nil, NO);
-#else
-    if (!pushySyncReady.load()) {
-        return PushyHostResult(@"skipped", @"not_initialized", nil, NO);
-    }
-    NSString *configJson = [PushyDefaults() stringForKey:keyNativeConfig];
-    if (configJson.length == 0) {
-        return PushyHostResult(@"skipped", @"not_configured", nil, NO);
-    }
-    id config = [NSJSONSerialization JSONObjectWithData:
-        [configJson dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
-    if (![config isKindOfClass:NSDictionary.class]) {
-        return PushyHostResult(@"failed", @"invalid_config", nil, NO);
-    }
-    id disabled = config[@"disabled"];
-    if ([disabled respondsToSelector:@selector(boolValue)] && [disabled boolValue]) {
-        return PushyHostResult(@"skipped", @"disabled", nil, NO);
-    }
-    id appKey = config[@"appKey"];
-    if (![appKey isKindOfClass:NSString.class] || [appKey length] == 0) {
-        return PushyHostResult(@"failed", @"invalid_config", nil, NO);
-    }
-    [self startRoundWithDeadline:0];
-    // A group is broadcast-style. Sharing the rescue semaphore would let one
-    // waiter consume the only signal and leave the other waiting forever.
-    if (!pushyRoundStarted.load()) {
-        return PushyHostResult(@"skipped", @"config_changed", nil, NO);
-    }
-    dispatch_group_wait(pushyHostRoundGroup, DISPATCH_TIME_FOREVER);
-    if (pushyHostRoundConfigGeneration != pushyNativeConfigGeneration.load()
-        || ![configJson isEqualToString:pushyHostRoundConfig]
-        || ![configJson isEqualToString:[PushyDefaults() stringForKey:keyNativeConfig]]) {
-        return PushyHostResult(@"cancelled", @"config_changed", nil, NO);
-    }
-    if (pushyHostRoundGeneration != pushyResetGeneration.load()) {
-        return PushyHostResult(@"cancelled", @"reset", nil, NO);
-    }
-    return pushyHostRoundResult ?: PushyHostResult(@"failed", @"internal_error", nil, NO);
-#endif
-}
-
-+ (void)recordJsRound:(NSString *)config {
-    @synchronized (RCTPushyOrchestrator.class) {
-        pushyJsCompletedConfig = [config copy];
-    }
-}
-
-// True when JS already obtained a valid response in this process for the
-// exact config the native round would use (§10.3): the delayed round is
-// then a duplicate request. Only the scheduled round asks — the crash-rescue
-// path still runs, JS is dead by then.
-+ (BOOL)hasJsRound {
-    NSString *jsConfig;
-    @synchronized (RCTPushyOrchestrator.class) {
-        jsConfig = pushyJsCompletedConfig;
-    }
-    if (jsConfig == nil) {
-        return NO;
-    }
-    NSString *persisted = [PushyDefaults() stringForKey:keyNativeConfig];
-    return persisted != nil && [persisted isEqualToString:jsConfig];
-}
-
-// Runs the process's single round on the calling thread if nobody has
-// started it yet. deadlineUptime > 0 (crash rescue) caps every HTTP call and
-// download phase to the remaining budget.
-+ (void)startRoundWithDeadline:(NSTimeInterval)deadlineUptime {
-    // Missing/disabled configuration is a preflight skip, not a used round.
-    if (![self hasRunnableConfig]) {
-        return;
-    }
-    bool expected = false;
-    if (!pushyRoundStarted.compare_exchange_strong(expected, true)) {
-        return;
-    }
-    @try {
-        [self runOnce:pushyLaunchRolledBackForHold deadline:deadlineUptime];
-    } @catch (NSException *exception) {
-        // The rescue path must never take the app down with it.
-        RCTLogWarn(@"RCTPushy -- native sync crashed: %@", exception.reason);
-        pushyHostRoundResult = PushyHostResult(@"failed", @"internal_error", nil, NO);
-    } @finally {
-        pushyRoundCompleted.store(true);
-        dispatch_semaphore_signal(pushyRoundDone);
-        dispatch_group_leave(pushyHostRoundGroup);
-    }
-}
-
-// Crash-rescue entry (§11.3), called from the handler's worker queue while
-// the uncaught-exception handler holds the dying process. Ensures this
-// process's round runs to completion within the budget, then activates a
-// downloaded-but-unactivated version if one exists — the last chance before
-// the process is gone.
-+ (void)runHoldRoundWithDeadline:(NSTimeInterval)deadlineUptime {
-    pushyCrashHoldActive.store(true);
-    [self startRoundWithDeadline:deadlineUptime];
-    if (pushyRoundStarted.load() && !pushyRoundCompleted.load()) {
-        NSTimeInterval remaining = deadlineUptime - PushyMonotonicNow();
-        if (remaining > 0) {
-            dispatch_semaphore_wait(pushyRoundDone, dispatch_time(DISPATCH_TIME_NOW,
-                (int64_t)(remaining * NSEC_PER_SEC)));
-        }
-    }
-    [self activatePendingVersion];
-}
-
-// The alert-strategy variant of the §10.7 hole: the round downloaded a fix
-// but deferred activation to JS, and JS is now dead. Activation is local and
-// bounded (a state switch under the commit lock).
-+ (void)activatePendingVersion {
-    NSString *hash = nil;
-    uint64_t generation = 0;
-    @synchronized (self) {
-        hash = pushyUnactivatedHash;
-        generation = pushyUnactivatedGeneration;
-    }
-    if (hash == nil) {
-        return;
-    }
-    // Unlike Android's switchVersion, PushySwitchVersionLocked does not
-    // validate the version directory; never point the next launch at bytes
-    // that are gone (e.g. wiped by a reset whose generation bump we would
-    // catch below anyway, or by cleanup).
-    NSString *versionDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
-    if (!PushyHasCompletedVersionAtPath(versionDir, hash)) {
-        NSLog(@"RCTPushy -- crash hold: version %@ no longer on disk, dropping activation", hash);
-        return;
-    }
-    NSDictionary *hashInfoEntry = nil;
-    NSString *existingInfo = [PushyDefaults() stringForKey:PushyHashInfoKey(hash)];
-    NSData *existingData = [existingInfo dataUsingEncoding:NSUTF8StringEncoding];
-    id parsed = existingData == nil ? nil :
-        [NSJSONSerialization JSONObjectWithData:existingData options:0 error:nil];
-    if ([parsed isKindOfClass:[NSDictionary class]]) {
-        NSMutableDictionary *merged = [parsed mutableCopy];
-        merged[PushyInfoCrashHold] = @YES;
-        hashInfoEntry = @{@"hash": hash, @"info": merged};
-    }
-    BOOL committed = [self commitRoundWithGeneration:generation
-                                            hashInfo:hashInfoEntry
-                                            activate:hash
-                                        responseText:nil
-                                             request:nil
-                                              config:nil
-                                          responseAt:0
-                                           activated:NULL];
-    if (committed) {
-        @synchronized (self) {
-            pushyUnactivatedHash = nil;
-        }
-        NSLog(@"RCTPushy -- crash hold: activated downloaded version %@", hash);
-    } else {
-        NSLog(@"RCTPushy -- crash hold: reset since download, dropping activation");
-    }
-}
-
-// A bare module instance drives the existing download/patch pipeline without
-// a bridge: the file queue is process-global and progress events are gated on
-// hasListeners (never set without a bridge).
-+ (RCTPushy *)engine {
-    static RCTPushy *engine;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        engine = [[RCTPushy alloc] init];
-    });
-    return engine;
-}
-
-+ (void)runOnce:(NSString *)launchRolledBackVersion deadline:(NSTimeInterval)deadlineUptime {
-    const uint64_t resetGeneration = pushyResetGeneration.load();
-    pushyHostRoundGeneration = resetGeneration;
-    pushyHostRoundConfigGeneration = pushyNativeConfigGeneration.load();
-    pushyHostRoundResult = PushyHostResult(@"failed", @"check_failed", nil, NO);
-    NSUserDefaults *defaults = PushyDefaults();
-    NSString *configJson = [defaults stringForKey:keyNativeConfig];
-    pushyHostRoundConfig = [configJson copy];
-    if (configJson.length == 0) {
-        pushyHostRoundResult = PushyHostResult(@"skipped", @"not_configured", nil, NO);
-        return;
-    }
-    bool ok = false;
-    flowjson::Value config = flowjson::Parse(PushyToStdString(configJson), &ok);
-    if (!ok || !config.IsObject()) {
-        pushyHostRoundResult = PushyHostResult(@"failed", @"invalid_config", nil, NO);
-        return;
-    }
-    if (config.Get("disabled").Truthy()) {
-        pushyHostRoundResult = PushyHostResult(@"skipped", @"disabled", nil, NO);
-        return;
-    }
-    NSString *appKey = PushyFromStdString(config.Get("appKey").AsString());
-    if (appKey.length == 0) {
-        pushyHostRoundResult = PushyHostResult(@"failed", @"invalid_config", nil, NO);
-        return;
-    }
-    // Preserve the interrupted-round breadcrumb and reset-safe atomic commit.
-    [defaults setObject:@YES forKey:keyNativeCheckIncomplete];
-    @try {
-        [self runConfiguredRound:config
-                      configJson:configJson
-                          appKey:appKey
-        launchRolledBackVersion:launchRolledBackVersion
-                 resetGeneration:resetGeneration
-                        deadline:deadlineUptime];
-    } @finally {
-        [defaults removeObjectForKey:keyNativeCheckIncomplete];
-    }
-}
-
-+ (void)runConfiguredRound:(const flowjson::Value &)config
-                configJson:(NSString *)configJson
-                    appKey:(NSString *)appKey
-   launchRolledBackVersion:(NSString *)launchRolledBackVersion
-           resetGeneration:(uint64_t)resetGeneration
-                  deadline:(NSTimeInterval)deadlineUptime {
-    NSUserDefaults *defaults = PushyDefaults();
-    NSString *packageVersion =
-        PushyFromStdString(config.Get("packageVersion").AsString());
-    if (packageVersion.length == 0) {
-        packageVersion = [RCTPushy packageVersion];
-    }
-
-    __block NSString *currentVersion = nil;
-    PushyWithStateLock(^{
-        pushy::state::State state = PushyStateFromDefaults(PushyDefaults());
-        currentVersion = PushyFromStdString(state.current_version);
-    });
-    NSString *rolledBackVersion = launchRolledBackVersion;
-    NSString *uuid = [defaults stringForKey:keyUuid] ?: @"";
-
-    flowjson::Value identity = flowjson::Value::Object();
-    identity.Set("packageVersion",
-                 flowjson::Value::String(PushyToStdString(packageVersion)));
-    if (currentVersion != nil) {
-        identity.Set("currentVersion",
-                     flowjson::Value::String(PushyToStdString(currentVersion)));
-    }
-    identity.Set("uuid", flowjson::Value::String(PushyToStdString(uuid)));
-    if (rolledBackVersion != nil) {
-        identity.Set("rolledBackVersion",
-                     flowjson::Value::String(PushyToStdString(rolledBackVersion)));
-    }
-
-    flowjson::Value cInfo = flowjson::Value::Object();
-    cInfo.Set("rnu", config.Get("rnu"));
-    cInfo.Set("rn", config.Get("rn"));
-    cInfo.Set("os", flowjson::Value::String(PushyToStdString([NSString
-        stringWithFormat:@"%@ %@", PushyOsName, [[UIDevice currentDevice] systemVersion]])));
-    cInfo.Set("uuid", flowjson::Value::String(PushyToStdString(uuid)));
-
-    flowjson::Value input = flowjson::Value::Object();
-    input.Set("packageVersion", identity.Get("packageVersion"));
-    if (currentVersion != nil) {
-        input.Set("currentVersion", identity.Get("currentVersion"));
-    }
-    input.Set("buildTime",
-              flowjson::Value::String(PushyToStdString([RCTPushy buildTime])));
-    input.Set("cInfo", cInfo);
-    input.Set("supportedDiffVersion",
-              flowjson::Value::Number(pushy::hbc::kSupportedDiffVersion));
-    // Cache-only while a crash is being held (§11.3 budget); computed (and
-    // shared with JS getBundleHash) on the ordinary delayed round.
-    input.Set("bundleHash",
-              flowjson::Value::String(PushyToStdString(
-                  PushyBundleHashSync(!pushyCrashHoldActive.load()))));
-
-    std::string bodyJson =
-        flowjson::Stringify(flowcore::BuildRequestBody(input));
-    NSString *body = [NSString stringWithUTF8String:bodyJson.c_str()];
-    if (body == nil) {
-        RCTLogWarn(@"RCTPushy -- native sync: request body is not valid UTF-8");
-        pushyHostRoundResult = PushyHostResult(@"failed", @"invalid_request", nil, NO);
-        return;
-    }
-
-    NSString *responseText = [self runQueryRequest:config
-                                            appKey:appKey
-                                              body:body
-                                          deadline:deadlineUptime];
-    if (responseText == nil) {
-        RCTLogInfo(@"RCTPushy -- native sync: no endpoint reachable, giving up until next launch");
-        return;
-    }
-    long long responseAtSeconds = (long long)[[NSDate date] timeIntervalSince1970];
-
-    flowjson::Value decision = flowcore::HandleResponse(
-        PushyToStdString(responseText), identity, false,
-        config.Get("afterDownload").AsString());
-    if (decision.Get("action").AsString() != "download") {
-        BOOL committed = [self commitRoundWithGeneration:resetGeneration
-                               hashInfo:nil
-                               activate:nil
-                           responseText:responseText
-                                request:body
-                                 config:configJson
-                             responseAt:responseAtSeconds
-                              activated:NULL];
-        pushyHostRoundResult = committed
-            ? PushyHostResult(PushyStatusNone, PushyFromStdString(decision.Get("reason").AsString()), nil, NO)
-            : PushyHostResult(@"cancelled", @"reset", nil, NO);
-        RCTLogInfo(@"RCTPushy -- native sync: nothing to do (%s)",
-                   decision.Get("reason").AsString().c_str());
-        return;
-    }
-    NSString *hash = PushyFromStdString(decision.Get("hash").AsString());
-    if (!PushyIsSafePathComponent(hash)) {
-        pushyHostRoundResult = PushyHostResult(@"failed", @"invalid_response", nil, NO);
-        return;
-    }
-
-    NSString *versionDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
-    BOOL downloaded = PushyHasCompletedVersionAtPath(versionDir, hash);
-    if (!downloaded) {
-        downloaded = [self performAttempts:decision.Get("attempts")
-                                      hash:hash
-                                originHash:currentVersion
-                                  deadline:deadlineUptime];
-    }
-    if (!downloaded) {
-        BOOL committed = [self commitRoundWithGeneration:resetGeneration
-                               hashInfo:nil
-                               activate:nil
-                           responseText:responseText
-                                request:body
-                                 config:configJson
-                             responseAt:responseAtSeconds
-                              activated:NULL];
-        pushyHostRoundResult = committed
-            ? PushyHostResult(@"failed", @"download_failed", nil, NO)
-            : PushyHostResult(@"cancelled", @"reset", nil, NO);
-        return;
-    }
-
-    // Persist name/description/metaInfo alongside the version, mirroring the
-    // JS side's setLocalHashInfo after a successful download.
-    const flowjson::Value &info = decision.Get("info");
-    NSMutableDictionary *versionInfo = [NSMutableDictionary dictionary];
-    for (const char *key : {"name", "description", "metaInfo"}) {
-        if (info.Get(key).IsString()) {
-            versionInfo[@(key)] = PushyFromStdString(info.Get(key).AsString()) ?: @"";
-        }
-    }
-    // A forceBoot activation is the brick-rescue path: mark it in the
-    // persisted info so JS can report force_boot_rescue when this version
-    // survives to markSuccess. Only the server-sent directive counts — a
-    // silent-strategy activation is ordinary delivery.
-    if (info.Get("config").Get("forceBoot").Truthy()) {
-        versionInfo[PushyInfoForceBoot] = @YES;
-    }
-    if (pushyCrashHoldActive.load()) {
-        versionInfo[PushyInfoCrashHold] = @YES;
-    }
-    // Silent strategies or a server-marked forceBoot version (per-version
-    // remote override — the brick rescue) activate for the next launch;
-    // otherwise activation stays with the JS side (§6/§10.1). Unless a crash
-    // is being held: JS is dead, deferring to it would leave the fix on disk
-    // forever (§11.3). Or the launch is blocked on reinstalling a version
-    // tvOS purged: JS has not started, and the whole point is to boot it —
-    // commitRoundWithGeneration drops that one once the restore window closed.
-    BOOL activate = decision.Get("activate").Truthy() || pushyCrashHoldActive.load()
-        || pushyPurgeRestoreActive.load();
-    BOOL activated = NO;
-    BOOL committed = [self commitRoundWithGeneration:resetGeneration
-                                            hashInfo:@{@"hash": hash, @"info": versionInfo}
-                                            activate:activate ? hash : nil
-                                        responseText:responseText
-                                             request:body
-                                              config:configJson
-                                          responseAt:responseAtSeconds
-                                           activated:&activated];
-    activate = activated;
-    if (!committed) {
-        RCTLogInfo(@"RCTPushy -- native sync: reset during round, dropping result");
-    } else if (activate) {
-        @synchronized (self) {
-            pushyUnactivatedHash = nil;
-        }
-        RCTLogInfo(@"RCTPushy -- native sync: downloaded %@ and set for next launch", hash);
-    } else {
-        // Remembered so a crash later in this process can still activate it
-        // (activatePendingVersion) — JS never will.
-        @synchronized (self) {
-            pushyUnactivatedHash = [hash copy];
-            pushyUnactivatedGeneration = resetGeneration;
-        }
-        RCTLogInfo(@"RCTPushy -- native sync: downloaded %@, activation left to JS", hash);
-    }
-    pushyHostRoundResult = committed
-        ? PushyHostResult(@"downloaded", @"", hash, activate)
-        : PushyHostResult(@"cancelled", @"reset", nil, NO);
-}
-
-// Everything a round persists — version info, the activation, the response
-// cache — is written inside ONE state-lock acquisition that first re-checks the
-// reset generation. resetToPackagedBundle bumps that generation under the same
-// lock, so there is no compare-and-act window: either the whole round commits,
-// or the reset wins and none of it does.
-+ (BOOL)commitRoundWithGeneration:(uint64_t)generation
-                         hashInfo:(NSDictionary *)hashInfoEntry
-                         activate:(NSString *)hashToActivate
-                     responseText:(NSString *)responseText
-                          request:(NSString *)requestBody
-                           config:(NSString *)configJson
-                       responseAt:(long long)responseAtSeconds
-                        activated:(BOOL *)activatedOut {
-    // responseText is nil for the crash handler's activation-only commit
-    // (activatePendingVersion): no round ran, so there is no cache to write.
-    NSData *cacheData = nil;
-    if (responseText != nil) {
-        NSDictionary *cacheEntry = @{
-            @"ts": @(responseAtSeconds),
-            @"body": responseText,
-            @"request": requestBody,
-            @"config": configJson,
-        };
-        cacheData = [NSJSONSerialization dataWithJSONObject:cacheEntry options:0 error:nil];
-    }
-    __block BOOL committed = NO;
-    __block BOOL activated = NO;
-    PushyWithStateLock(^{
-        if (pushyResetGeneration.load() != generation) {
-            return;
-        }
-        NSString *activation = hashToActivate;
-        NSDictionary *info = hashInfoEntry[@"info"];
-        // The tvOS purged-version restore round (a round commit, not the
-        // crash handler's activation-only one): it may take over this launch
-        // only while +bundleURL still waits for it; after that the version is
-        // left to JS unless a crash is being held (JS is dead then).
-        if (responseText != nil && pushyPurgeRestoreActive.load()) {
-            if (pushyPurgeRestoreWindowOpen) {
-                if (activation != nil && info != nil) {
-                    NSMutableDictionary *marked = [info mutableCopy];
-                    marked[@"purgeRestore"] = @YES;
-                    info = marked;
-                }
-            } else if (!pushyCrashHoldActive.load()) {
-                activation = nil;
-            }
-        }
-        NSUserDefaults *defaults = PushyDefaults();
-        if (hashInfoEntry != nil) {
-            NSData *infoData = [NSJSONSerialization dataWithJSONObject:info
-                                                              options:0
-                                                                error:nil];
-            if (infoData != nil) {
-                [defaults setObject:[[NSString alloc] initWithData:infoData encoding:NSUTF8StringEncoding]
-                             forKey:PushyHashInfoKey(hashInfoEntry[@"hash"])];
-            }
-        }
-        if (activation != nil) {
-            PushySwitchVersionLocked(activation);
-            activated = YES;
-        }
-        if (cacheData != nil) {
-            [defaults setObject:[[NSString alloc] initWithData:cacheData encoding:NSUTF8StringEncoding]
-                         forKey:keyNativeCheckCache];
-        }
-        committed = YES;
-    });
-    if (activatedOut != NULL) {
-        *activatedOut = activated;
-    }
-    return committed;
-}
-
-// Sequential fallback over the ordered candidates (§5.1): one request at a
-// time with its own timeout; after the configured round fails, queryUrls
-// discovery merges remote candidates (excluding the already-tried) for one
-// more round. No hedged race on purpose — this path is latency-insensitive.
-// Per-request timeout, capped to the crash-rescue budget when one is active.
-// <= 0 means the budget is gone and the round must stop issuing requests.
-static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
-    if (deadlineUptime <= 0) {
-        return 10;
-    }
-    return MIN(10, deadlineUptime - PushyMonotonicNow());
-}
-
-+ (NSString *)runQueryRequest:(const flowjson::Value &)config
-                       appKey:(NSString *)appKey
-                         body:(NSString *)body
-                     deadline:(NSTimeInterval)deadlineUptime {
-    double sample = arc4random() / 4294967296.0;
-    flowjson::Value ordered =
-        flowcore::OrderEndpointCandidates(config.Get("endpoints"), sample);
-    NSMutableSet<NSString *> *tried = [NSMutableSet set];
-    const NSUInteger maxHttpAttempts = 8;
-    NSUInteger httpAttempts = 0;
-    for (const auto &endpoint : ordered.elements()) {
-        NSString *base = PushyNormalizeEndpointBase(
-            PushyFromStdString(endpoint.AsString()));
-        if (base.length == 0 || [tried containsObject:base]) {
-            continue;
-        }
-        if (httpAttempts++ >= maxHttpAttempts) {
-            return nil;
-        }
-        [tried addObject:base];
-        NSTimeInterval timeout = PushyQueryRequestTimeout(deadlineUptime);
-        if (timeout <= 0) {
-            return nil;
-        }
-        NSString *response = PushyHttpRequest(
-            [NSString stringWithFormat:@"%@%@%@", base, RCTPushyQueryPath(), appKey],
-            @"POST", body, timeout);
-        if (PushyIsValidResponse(response)) {
-            return response;
-        }
-    }
-    for (const auto &queryUrl : config.Get("queryUrls").elements()) {
-        NSString *listUrl = PushyFromStdString(queryUrl.AsString());
-        if (listUrl == nil) {
-            continue;
-        }
-        if (httpAttempts++ >= maxHttpAttempts) {
-            return nil;
-        }
-        NSTimeInterval listTimeout = PushyQueryRequestTimeout(deadlineUptime);
-        if (listTimeout <= 0) {
-            return nil;
-        }
-        NSString *listText = PushyHttpRequest(listUrl, @"GET", nil, listTimeout);
-        if (listText == nil) {
-            continue;
-        }
-        bool ok = false;
-        flowjson::Value remote = flowjson::Parse(PushyToStdString(listText), &ok);
-        if (!ok || !remote.IsArray()) {
-            continue;
-        }
-        for (const auto &endpoint : remote.elements()) {
-            NSString *base = PushyNormalizeEndpointBase(
-                PushyFromStdString(endpoint.AsString()));
-            if (base.length == 0 || [tried containsObject:base]) {
-                continue;
-            }
-            if (httpAttempts++ >= maxHttpAttempts) {
-                return nil;
-            }
-            [tried addObject:base];
-            NSTimeInterval timeout = PushyQueryRequestTimeout(deadlineUptime);
-            if (timeout <= 0) {
-                return nil;
-            }
-            NSString *response = PushyHttpRequest(
-                [NSString stringWithFormat:@"%@%@%@", base, RCTPushyQueryPath(), appKey],
-                @"POST", body, timeout);
-            if (PushyIsValidResponse(response)) {
-                return response;
-            }
-        }
-        break;  // one successfully fetched remote list is enough
-    }
-    return nil;
-}
-
-+ (BOOL)performAttempts:(const flowjson::Value &)attempts
-                   hash:(NSString *)hash
-             originHash:(NSString *)originHash
-               deadline:(NSTimeInterval)holdDeadline {
-    RCTPushy *engine = [self engine];
-    // Crash-rescue budget caps every phase; 0 keeps the normal 10min windows.
-    NSTimeInterval incrementalDeadline = PushyMonotonicNow() + 600;
-    if (holdDeadline > 0) {
-        incrementalDeadline = MIN(incrementalDeadline, holdDeadline);
-    }
-    NSTimeInterval fullDeadline = 0;
-    for (const auto &attempt : attempts.elements()) {
-        const std::string &type = attempt.Get("type").AsString();
-        PushyType pushyType = type == "diff" ? PushyTypePatchFromPpk
-                            : type == "pdiff" ? PushyTypePatchFromPackage
-                                              : PushyTypeFullDownload;
-        if (pushyType == PushyTypePatchFromPpk && originHash.length == 0) {
-            continue;  // diff patches from the running version; none running
-        }
-        BOOL isFullAttempt = pushyType == PushyTypeFullDownload;
-        if (isFullAttempt && fullDeadline == 0) {
-            // diff/pdiff cannot starve the last-resort full download.
-            fullDeadline = PushyMonotonicNow() + 600;
-            if (holdDeadline > 0) {
-                fullDeadline = MIN(fullDeadline, holdDeadline);
-            }
-        }
-        NSTimeInterval deadline = isFullAttempt ? fullDeadline : incrementalDeadline;
-        for (const auto &urlValue : attempt.Get("urls").elements()) {
-            NSString *url = PushyFromStdString(urlValue.AsString());
-            if (url == nil) {
-                continue;
-            }
-            NSTimeInterval remaining = deadline - PushyMonotonicNow();
-            if (remaining <= 0) {
-                if (isFullAttempt) {
-                    return NO;
-                }
-                break;
-            }
-            NSMutableDictionary *options =
-                [@{
-                    PushyOptionUrlKey: url,
-                    @"hash": hash,
-                    @"deadlineUptime": @(deadline),
-                } mutableCopy];
-            if (pushyType == PushyTypePatchFromPpk) {
-                options[@"originHash"] = originHash;
-            }
-            dispatch_semaphore_t sem = dispatch_semaphore_create(0);
-            __block NSError *resultError = nil;
-            [engine performFetch:pushyType options:options callback:^(NSError *error) {
-                resultError = error;
-                dispatch_semaphore_signal(sem);
-            }];
-            if (dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW,
-                    (int64_t)(remaining * NSEC_PER_SEC))) != 0) {
-                RCTLogWarn(@"RCTPushy -- native sync: %s attempt timed out", type.c_str());
-                if (isFullAttempt) {
-                    return NO;
-                }
-                break;
-            }
-            if (resultError == nil) {
-                return YES;
-            }
-            RCTLogInfo(@"RCTPushy -- native sync: %s attempt failed: %@",
-                       type.c_str(), resultError.localizedDescription);
-        }
-    }
-    return NO;
-}
 
 @end
