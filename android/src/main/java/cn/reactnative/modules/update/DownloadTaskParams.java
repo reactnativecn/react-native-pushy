@@ -13,13 +13,15 @@ class DownloadTaskParams {
     static final int TASK_TYPE_PATCH_FROM_PPK   = 3;
     static final int TASK_TYPE_PLAIN_DOWNLOAD   = 4;
 
+    static final int DEFAULT_MAX_AGE_DAYS = 3;
+
 
     int         type;
     String      url;
     String      hash;
     String      originHash;
     // TASK_TYPE_CLEANUP only: entries younger than this survive; 0 = delete all
-    int         maxAgeDays = 3;
+    int         maxAgeDays = DEFAULT_MAX_AGE_DAYS;
     // Absolute System.nanoTime deadline for orchestrated cold-start downloads;
     // 0 keeps the normal public API's 10-minute per-call timeout.
     long        deadlineNanos;

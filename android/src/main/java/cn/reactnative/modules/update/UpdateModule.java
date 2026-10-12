@@ -1,9 +1,13 @@
 package cn.reactnative.modules.update;
 
+import static cn.reactnative.modules.update.StateSerialRunner.STATE_SERIAL;
+import static cn.reactnative.modules.update.StateSerialRunner.UI_THREAD;
+
 import android.util.Log;
 import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
 import java.util.HashMap;
 import java.util.Map;
@@ -12,32 +16,33 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 /**
- * Everything the "Pushy" native module does, independent of the bridge it is
- * registered with. The old-architecture and new-architecture UpdateModule
- * classes are thin wrappers that only carry their annotations / spec
- * overrides and forward here, so the two cannot drift apart.
+ * The "Pushy" native module for both architectures. NativePushySpec is the
+ * codegen spec under the new architecture and the hand-written stand-in in
+ * src/oldarch otherwise; the old bridge discovers methods through the
+ * @ReactMethod annotations here, so every spec method carries one. Each
+ * state-changing method takes a trailing Promise, so a failed persistence
+ * rejects instead of resolving early (CODE_AUDIT 2.3).
  */
-public class UpdateModuleImpl {
+public class UpdateModule extends NativePushySpec {
     // Download URL option key, stored encoded.
     private static final String OPTION_URL = Texts.reveal("2f07f0d0ba8e5d572e");
-
-
-    public static final String NAME = "Pushy";
 
     private final ReactApplicationContext reactContext;
     private final UpdateContext updateContext;
 
-    public UpdateModuleImpl(ReactApplicationContext reactContext) {
+    public UpdateModule(ReactApplicationContext reactContext) {
         this(reactContext, UpdateContext.getInstance(reactContext));
     }
 
-    public UpdateModuleImpl(ReactApplicationContext reactContext, UpdateContext updateContext) {
+    public UpdateModule(ReactApplicationContext reactContext, UpdateContext updateContext) {
+        super(reactContext);
         this.reactContext = reactContext;
         this.updateContext = updateContext;
         UpdateEventEmitter.register(reactContext);
     }
 
-    public Map<String, Object> getConstants() {
+    @Override
+    protected Map<String, Object> getTypedExportedConstants() {
         final Map<String, Object> constants = new HashMap<String, Object>();
         constants.put("downloadRootDir", updateContext.getRootDir());
         constants.put("packageVersion", updateContext.getPackageVersion());
@@ -65,7 +70,7 @@ public class UpdateModuleImpl {
             // A mismatched librnpushy.so (stale manual copy / build cache)
             // must not crash startup via getConstants; 0 simply means "no v2
             // diff track" and the server degrades gracefully.
-            Log.e("pushy", "supportedDiffVersion missing from the native library", e);
+            Log.e(Texts.LOG_TAG, "supportedDiffVersion missing from the native library", e);
         }
         constants.put("supportedDiffVersion", supportedDiffVersion);
         return constants;
@@ -129,26 +134,13 @@ public class UpdateModuleImpl {
 
             @Override
             public void onDownloadFailed(Throwable error) {
-                promise.reject(downloadErrorCode(error), error);
+                promise.reject(ErrorCodes.forDownloadFailure(error), error);
             }
         };
     }
 
-    // Post-download failures (unzip / hdiff / resource copy, incl. copiesCrc
-    // verification) reject as PATCH_FAILED so JS-side telemetry can separate
-    // patch health from network health; a local refusal (reinstalling the
-    // running version in place) as FILE_OPERATION_FAILED. DownloadTask
-    // classifies them.
-    private static String downloadErrorCode(Throwable error) {
-        if (error instanceof PatchFailedException) {
-            return ErrorCodes.DELTA_FAILED;
-        }
-        if (error instanceof FileOperationException) {
-            return ErrorCodes.FILE_OPERATION_FAILED;
-        }
-        return ErrorCodes.DOWNLOAD_FAILED;
-    }
-
+    @ReactMethod
+    @Override
     public void downloadFullUpdate(final ReadableMap options, final Promise promise) {
         String url = readRequiredString(options, OPTION_URL, promise);
         if (url == null) {
@@ -158,9 +150,11 @@ public class UpdateModuleImpl {
         if (hash == null) {
             return;
         }
-        updateContext.downloadFullUpdate(url, hash, downloadListener(promise));
+        updateContext.downloadFullUpdate(url, hash, downloadListener(promise), 0);
     }
 
+    @ReactMethod
+    @Override
     public void downloadAndInstallApk(final ReadableMap options, final Promise promise) {
         // Every failure of this path — a missing REQUEST_INSTALL_PACKAGES
         // declaration above all — has to come back as a promise rejection,
@@ -205,6 +199,8 @@ public class UpdateModuleImpl {
         }
     }
 
+    @ReactMethod
+    @Override
     public void downloadPatchFromPackage(final ReadableMap options, final Promise promise) {
         String url = readRequiredString(options, OPTION_URL, promise);
         if (url == null) {
@@ -214,9 +210,11 @@ public class UpdateModuleImpl {
         if (hash == null) {
             return;
         }
-        updateContext.downloadPatchFromApk(url, hash, downloadListener(promise));
+        updateContext.downloadPatchFromApk(url, hash, downloadListener(promise), 0);
     }
 
+    @ReactMethod
+    @Override
     public void downloadPatchFromPpk(final ReadableMap options, final Promise promise) {
         String url = readRequiredString(options, OPTION_URL, promise);
         if (url == null) {
@@ -230,79 +228,80 @@ public class UpdateModuleImpl {
         if (originHash == null) {
             return;
         }
-        updateContext.downloadPatchFromPpk(url, hash, originHash, downloadListener(promise));
+        updateContext.downloadPatchFromPpk(url, hash, originHash, downloadListener(promise), 0);
     }
 
+    @ReactMethod
+    @Override
     public void reloadUpdate(final ReadableMap options, final Promise promise) {
         String hash = readRequiredString(options, "hash", promise);
         if (hash == null) {
             return;
         }
-        restartApp(hash, promise);
+        restart(hash, promise);
     }
 
-    public void restartApp(@Nullable final String hash, final Promise promise) {
+    @ReactMethod
+    @Override
+    public void restartApp(Promise promise) {
+        restart(null, promise);
+    }
+
+    private void restart(@Nullable final String hash, final Promise promise) {
         // Two hops (CODE_AUDIT 2.2): the switch (bundle digest + commit) and
         // the launch resolution run on the state serial thread like every
-        // other state write; only the React reload itself is posted to the
-        // UI thread. A failure at either hop rejects with RESTART_FAILED.
-        StateSerialRunner.run(promise, ErrorCodes.RESTART_FAILED, "restartApp", new StateSerialRunner.Operation() {
-            @Override
-            public void run() throws Throwable {
-                final String bundlePath = ReactReloadManager.prepareRestart(updateContext, hash);
-                UiThreadRunner.run(promise, ErrorCodes.RESTART_FAILED, "restartApp", new UiThreadRunner.Operation() {
-                    @Override
-                    public void run() throws Throwable {
-                        ReactReloadManager.reload(updateContext, reactContext, bundlePath);
-                        promise.resolve(true);
-                    }
-                });
+        // other state write — nothing there touches React; only the React
+        // reload itself is posted to the UI thread. A failure at either hop
+        // rejects with RESTART_FAILED.
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.RESTART_FAILED, "restartApp", () -> {
+            if (hash != null) {
+                updateContext.switchVersion(hash);
             }
+            // The bundle to load; null for the packaged one.
+            final String bundlePath = updateContext.getBundleUrl();
+            StateSerialRunner.run(UI_THREAD, promise, ErrorCodes.RESTART_FAILED, "restartApp", () -> {
+                ReactReloadManager.reload(updateContext, reactContext, bundlePath);
+                promise.resolve(true);
+            });
         });
     }
 
+    @ReactMethod
+    @Override
     public void setNeedUpdate(final ReadableMap options, final Promise promise) {
         final String hash = readRequiredString(options, "hash", promise);
         if (hash == null) {
             return;
         }
-        StateSerialRunner.run(promise, ErrorCodes.SWITCH_VERSION_FAILED, "switchVersionLater", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.switchVersion(hash);
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.SWITCH_VERSION_FAILED, "switchVersionLater", () -> {
+            updateContext.switchVersion(hash);
+            promise.resolve(true);
         });
     }
 
+    @ReactMethod
+    @Override
     public void markSuccess(final Promise promise) {
-        StateSerialRunner.run(promise, ErrorCodes.MARK_SUCCESS_FAILED, "markSuccess", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.markSuccess();
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.MARK_SUCCESS_FAILED, "markSuccess", () -> {
+            updateContext.markSuccess();
+            promise.resolve(true);
         });
     }
 
+    @ReactMethod
+    @Override
     public void getBundleHash(final Promise promise) {
         // Threading lives in UpdateContext (its bundle-hash thread); resolve is
         // thread-safe. Never rejects — empty string means "unknown".
-        updateContext.getBundleHash(new UpdateContext.BundleHashListener() {
-            @Override
-            public void onBundleHash(String hash) {
-                promise.resolve(hash);
-            }
-        });
+        updateContext.getBundleHash(promise::resolve);
     }
 
+    @ReactMethod
+    @Override
     public void resetToPackagedBundle(final Promise promise) {
-        StateSerialRunner.run(promise, ErrorCodes.RESET_FAILED, "resetToPackagedBundle", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.resetToPackagedBundle();
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.RESET_FAILED, "resetToPackagedBundle", () -> {
+            updateContext.resetToPackagedBundle();
+            promise.resolve(true);
         });
     }
 
@@ -311,9 +310,25 @@ public class UpdateModuleImpl {
      * reuse instead of re-checking (§10.3). Empty string when absent; never
      * rejects.
      */
+    @ReactMethod
+    @Override
     public void getNativeCheckCache(final Promise promise) {
         String cached = updateContext.getNativeCheckCache();
         promise.resolve(cached == null ? "" : cached);
+    }
+
+    /**
+     * JS obtained a valid check response for this config in this process; the
+     * delayed native round then skips its duplicate request (§10.3).
+     */
+    @ReactMethod
+    @Override
+    public void markJsCheckCompleted(final String config, final Promise promise) {
+        if (requireNonEmpty(config, "config", promise) == null) {
+            return;
+        }
+        SyncCoordinator.recordJsRound(config);
+        promise.resolve(true);
     }
 
     /**
@@ -323,14 +338,8 @@ public class UpdateModuleImpl {
      * Validated at write time — a corrupt config would otherwise silently
      * disable the native check forever with no signal.
      */
-    public void markJsCheckCompleted(final String config, final Promise promise) {
-        if (requireNonEmpty(config, "config", promise) == null) {
-            return;
-        }
-        SyncCoordinator.recordJsRound(config);
-        promise.resolve(true);
-    }
-
+    @ReactMethod
+    @Override
     public void syncNativeConfig(final String config, final Promise promise) {
         if (requireNonEmpty(config, "config", promise) == null) {
             return;
@@ -341,28 +350,26 @@ public class UpdateModuleImpl {
             promise.reject(ErrorCodes.INVALID_OPTIONS, "config must be a JSON object string", e);
             return;
         }
-        StateSerialRunner.run(promise, ErrorCodes.FILE_OPERATION_FAILED, "syncNativeConfig", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.setNativeConfig(config);
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.FILE_OPERATION_FAILED, "syncNativeConfig", () -> {
+            updateContext.setNativeConfig(config);
+            promise.resolve(true);
         });
     }
 
+    @ReactMethod
+    @Override
     public void setUuid(final String uuid, final Promise promise) {
         if (requireNonEmpty(uuid, "uuid", promise) == null) {
             return;
         }
-        StateSerialRunner.run(promise, ErrorCodes.FILE_OPERATION_FAILED, "setUuid", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.setKv("uuid", uuid);
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.FILE_OPERATION_FAILED, "setUuid", () -> {
+            updateContext.setKv("uuid", uuid);
+            promise.resolve(true);
         });
     }
 
+    @ReactMethod
+    @Override
     public void setLocalHashInfo(final String hash, final String info, final Promise promise) {
         if (requireNonEmpty(hash, "hash", promise) == null) {
             return;
@@ -373,15 +380,14 @@ public class UpdateModuleImpl {
         }
         // A state write that did not reach disk (SharedPreferences commit
         // false) is FILE_OPERATION_FAILED, distinct from malformed input.
-        StateSerialRunner.run(promise, ErrorCodes.FILE_OPERATION_FAILED, "setLocalHashInfo", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.setKv("hash_" + hash, info);
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.FILE_OPERATION_FAILED, "setLocalHashInfo", () -> {
+            updateContext.setKv("hash_" + hash, info);
+            promise.resolve(true);
         });
     }
 
+    @ReactMethod
+    @Override
     public void getLocalHashInfo(final String hash, final Promise promise) {
         if (requireNonEmpty(hash, "hash", promise) == null) {
             return;
@@ -399,5 +405,15 @@ public class UpdateModuleImpl {
         }
 
         promise.resolve(value);
+    }
+
+    @ReactMethod
+    @Override
+    public void addListener(String eventName) {
+    }
+
+    @ReactMethod
+    @Override
+    public void removeListeners(double count) {
     }
 }

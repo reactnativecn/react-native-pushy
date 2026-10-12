@@ -13,9 +13,12 @@
     native <methods>;
 }
 
-# Instantiated by React Native / Expo / the system by name.
+# Instantiated or called by name: the module's methods by the bridge /
+# TurboModule JNI (not every React Native version ships a consumer rule
+# keeping NativeModule members), the receiver by the system, Expo's package
+# by Expo.
+# UpdatePackage needs no rule: hosts construct it directly.
 -keep class cn.reactnative.modules.update.UpdateModule { *; }
--keep class cn.reactnative.modules.update.UpdatePackage { *; }
 -keep class cn.reactnative.modules.update.PackageInstallerStatusReceiver { *; }
 -keep class expo.modules.pushy.** { *; }
 
@@ -72,5 +75,3 @@
 -keep class **.BuildConfig {
     public static boolean IS_NEW_ARCHITECTURE_ENABLED;
 }
-
--keepnames class expo.modules.ExpoReactHostFactory$ExpoReactHostDelegate { *; }

@@ -54,12 +54,12 @@ public class HttpUtilsTest {
     }
 
     @Test
-    public void normalizeEndpointBaseStripsTrailingSlashes() {
-        assertEquals("https://update.example.com", HttpUtils.normalizeEndpointBase("https://update.example.com/"));
-        assertEquals("https://update.example.com", HttpUtils.normalizeEndpointBase("https://update.example.com///"));
-        assertEquals("https://update.example.com/api", HttpUtils.normalizeEndpointBase("https://update.example.com/api"));
-        assertEquals("", HttpUtils.normalizeEndpointBase(""));
-        assertEquals("", HttpUtils.normalizeEndpointBase("/"));
+    public void stripTrailingSlashesStripsEveryTrailingSlash() {
+        assertEquals("https://update.example.com", HttpUtils.stripTrailingSlashes("https://update.example.com/"));
+        assertEquals("https://update.example.com", HttpUtils.stripTrailingSlashes("https://update.example.com///"));
+        assertEquals("https://update.example.com/api", HttpUtils.stripTrailingSlashes("https://update.example.com/api"));
+        assertEquals("", HttpUtils.stripTrailingSlashes(""));
+        assertEquals("", HttpUtils.stripTrailingSlashes("/"));
     }
 
     @Test
@@ -71,6 +71,16 @@ public class HttpUtilsTest {
         assertFalse(HttpUtils.isHttpsUrl("ftp://example.com"));
         assertFalse(HttpUtils.isHttpsUrl(""));
         assertFalse(HttpUtils.isHttpsUrl(null));
+    }
+
+    @Test
+    public void isCleartextUrlMatchesOnlyPlainHttp() {
+        assertTrue(HttpUtils.isCleartextUrl("http://example.com/a.ppk"));
+        assertTrue(HttpUtils.isCleartextUrl("HTTP://example.com/a.ppk"));
+        assertFalse(HttpUtils.isCleartextUrl("https://example.com/a.ppk"));
+        assertFalse(HttpUtils.isCleartextUrl("ftp://example.com"));
+        assertFalse(HttpUtils.isCleartextUrl("http:/example.com"));
+        assertFalse(HttpUtils.isCleartextUrl(null));
     }
 
     @Test

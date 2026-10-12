@@ -4,9 +4,9 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -36,9 +36,8 @@ class DownloadTask implements Runnable {
     private static final String BUNDLE_DELTA_ENTRY =
         Texts.reveal("3319f0d4b6c56a502c3b10fcdca0de7d4b3307e9");
 
-    // Read size per loop iteration (and the buffer for small in-memory
-    // reads); progress events are throttled separately.
-    private static final int DOWNLOAD_CHUNK_SIZE = 64 * 1024;
+    // Resume sidecars are a few hundred bytes of JSON.
+    private static final long MAX_SIDECAR_BYTES = 64 * 1024;
     // When the server does not report Content-Length we cannot key progress
     // events on percentage change, so throttle by bytes to avoid flooding the
     // bridge (e.g. a 20MB chunked download would otherwise emit ~5000 events).
@@ -53,10 +52,6 @@ class DownloadTask implements Runnable {
             .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .callTimeout(10, java.util.concurrent.TimeUnit.MINUTES)
             .build();
-
-    static {
-        NativeCore.ensureLoaded();
-    }
 
     // Two-phase install (cpp/patch_core/install_record.h): all unpack/patch
     // work happens in <hash>.staging; the final <hash> directory only ever
@@ -73,18 +68,43 @@ class DownloadTask implements Runnable {
     // transfer first hashes the prefix already on disk); null when this task
     // did not stream the whole file itself and it must be hashed from disk.
     private String streamedArchiveSha256;
-    // Digest of index.bundlejs computed while a full package was extracted;
+    // Digest of the bundle computed while a full package was extracted;
     // null when the bundle was produced some other way (patch tasks).
     private String stagedBundleSha256;
 
+    /** What a staged patch archive declared, as the native planner consumes it. */
     private static final class PatchArchiveContents {
-        final ArrayList<String> entryNames = new ArrayList<String>();
-        final ArrayList<String> copyFroms = new ArrayList<String>();
-        final ArrayList<String> copyTos = new ArrayList<String>();
-        final ArrayList<String> deletes = new ArrayList<String>();
+        final String[] entryNames;
+        final String[] copyFroms;
+        final String[] copyTos;
+        final String[] deletes;
+        // Maps a copy source path ("from") to the CRC32 of the file content,
+        // when provided by the manifest ("copiesCrc"). Lets the resource
+        // copier locate the file by content if the path is not present on
+        // device (APK baseline -> AAB install path shortening).
+        final HashMap<String, Long> copyCrcs;
         // __diff.json 的 hbcTransform 元数据(按 patch 条目名索引);
         // 为空对象/缺失时返回 ""(native 走现状路径)
-        JSONObject hbcTransform;
+        @Nullable
+        final JSONObject hbcTransform;
+        // Set by stagePatchArchive once the native planner accepted the archive.
+        ArchivePatchPlanResult plan;
+
+        PatchArchiveContents(
+            ArrayList<String> entryNames,
+            ArrayList<String> copyFroms,
+            ArrayList<String> copyTos,
+            ArrayList<String> deletes,
+            HashMap<String, Long> copyCrcs,
+            @Nullable JSONObject hbcTransform
+        ) {
+            this.entryNames = entryNames.toArray(new String[0]);
+            this.copyFroms = copyFroms.toArray(new String[0]);
+            this.copyTos = copyTos.toArray(new String[0]);
+            this.deletes = deletes.toArray(new String[0]);
+            this.copyCrcs = copyCrcs;
+            this.hbcTransform = hbcTransform;
+        }
 
         String hbcTransformMetaFor(String patchEntryName) {
             if (hbcTransform == null) {
@@ -93,17 +113,11 @@ class DownloadTask implements Runnable {
             JSONObject meta = hbcTransform.optJSONObject(patchEntryName);
             return meta != null ? meta.toString() : "";
         }
-        // Maps a copy source path ("from") to the CRC32 of the file content,
-        // when provided by the manifest ("copiesCrc"). Lets the resource
-        // copier locate the file by content if the path is not present on
-        // device (APK baseline -> AAB install path shortening).
-        final HashMap<String, Long> copyCrcs = new HashMap<String, Long>();
     }
 
     private final Context context;
     private final DownloadTaskParams params;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final byte[] buffer = new byte[DOWNLOAD_CHUNK_SIZE];
     private final BundledResourceCopier bundledResourceCopier;
     private String hash;
     // Set once downloadFile() returns: failures after this point in a patch
@@ -120,15 +134,12 @@ class DownloadTask implements Runnable {
         // Cross-platform progress contract: unknown length is reported as
         // total=0, never a raw -1 (OkHttp's contentLength for chunked/gzip).
         final long normalizedTotal = total > 0 ? total : 0;
-        mainHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                WritableMap progress = Arguments.createMap();
-                progress.putDouble("received", received);
-                progress.putDouble("total", normalizedTotal);
-                progress.putString("hash", hash);
-                UpdateEventEmitter.sendEvent("RCTPushyDownloadProgress", progress);
-            }
+        mainHandler.post(() -> {
+            WritableMap progress = Arguments.createMap();
+            progress.putDouble("received", received);
+            progress.putDouble("total", normalizedTotal);
+            progress.putString("hash", hash);
+            UpdateEventEmitter.sendEvent("RCTPushyDownloadProgress", progress);
         });
     }
 
@@ -142,7 +153,7 @@ class DownloadTask implements Runnable {
 
     static void deleteResumeSidecar(File archive) {
         File sidecar = resumeSidecarFile(archive);
-        if (sidecar.exists() && !sidecar.delete() && UpdateContext.DEBUG) {
+        if (sidecar.exists() && !sidecar.delete() && BuildConfig.DEBUG) {
             Log.w(Texts.LOG_TAG, "Failed to delete resume sidecar " + sidecar);
         }
     }
@@ -152,9 +163,8 @@ class DownloadTask implements Runnable {
             return null;
         }
         try {
-            byte[] bytes = readBytes(new java.io.FileInputStream(sidecar));
             JSONObject meta = (JSONObject) new JSONTokener(
-                new String(bytes, StandardCharsets.UTF_8)).nextValue();
+                UpdateFileUtils.readSmallUtf8(sidecar, MAX_SIDECAR_BYTES)).nextValue();
             if (url.equals(meta.optString("url"))) {
                 return meta;
             }
@@ -225,24 +235,26 @@ class DownloadTask implements Runnable {
             }
         }
         if (resumeOffset == 0) {
-            if (writePath.exists() && !writePath.delete()) {
-                throw new IOException("Failed to replace existing file: " + writePath);
-            }
-            deleteResumeSidecar(writePath);
+            discardPartial(writePath);
         }
 
         if (!transferArchive(url, writePath, sidecar, resumeMeta, resumeOffset)) {
             // The server rejected the range for a partial that no longer
             // matches (416): drop it and retry once from zero.
-            if (writePath.exists() && !writePath.delete()) {
-                throw new IOException("Failed to replace existing file: " + writePath);
-            }
-            deleteResumeSidecar(writePath);
+            discardPartial(writePath);
             if (!transferArchive(url, writePath, sidecar, null, 0)) {
                 throw new IOException("Server rejected the download range for " + url);
             }
         }
         downloadPhaseCompleted = true;
+    }
+
+    /** Drops a partial download and its sidecar; throws when the bytes stay. */
+    private static void discardPartial(File archive) throws IOException {
+        if (archive.exists() && !archive.delete()) {
+            throw new IOException("Failed to replace existing file: " + archive);
+        }
+        deleteResumeSidecar(archive);
     }
 
     /**
@@ -276,27 +288,13 @@ class DownloadTask implements Runnable {
             }
         }
 
-        OkHttpClient requestClient = HTTP_CLIENT;
-        if (params.deadlineNanos > 0) {
-            long remainingNanos = params.deadlineNanos - System.nanoTime();
-            if (remainingNanos <= 0) {
-                throw new IOException("Download deadline expired before start");
-            }
-            long remainingMillis = Math.max(
-                1L,
-                java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(remainingNanos)
-            );
-            requestClient = HTTP_CLIENT.newBuilder()
-                .callTimeout(remainingMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
-                .build();
-        }
-
-        Call call = requestClient.newCall(builder.build());
+        Call call = HttpClients.withDeadline(HTTP_CLIENT, params.deadlineNanos)
+            .newCall(builder.build());
         // Registered so an orchestrated phase timeout can cancel it
         // (CODE_AUDIT 2.12); cleared once the transfer is over.
         params.attachCall(call);
         try (Response response = call.execute()) {
-            rejectProtocolDowngrade(url, response);
+            HttpClients.rejectProtocolDowngrade(url, response);
             if (response.code() == 416) {
                 long total = resumeMeta == null ? 0 : resumeMeta.optLong("total", 0);
                 if (total > 0 && writePath.length() == total) {
@@ -353,9 +351,7 @@ class DownloadTask implements Runnable {
                 // Destroy the old bytes before the sidecar can vouch for
                 // them with the new validators (a crash between the two
                 // writes must never leave a sidecar describing stale bytes).
-                if (writePath.exists() && !writePath.delete()) {
-                    throw new IOException("Failed to replace existing file: " + writePath);
-                }
+                discardPartial(writePath);
             }
             if (encodedBody) {
                 // No resume across an encoded transfer.
@@ -388,7 +384,7 @@ class DownloadTask implements Runnable {
                 BufferedSink sink = Okio.buffer(Okio.sink(new DigestOutputStream(
                     new FileOutputStream(writePath, append), digest)))
             ) {
-                while ((bytesRead = source.read(sink.buffer(), DOWNLOAD_CHUNK_SIZE)) != -1) {
+                while ((bytesRead = source.read(sink.buffer(), UpdateFileUtils.BUFFER_SIZE)) != -1) {
                     received += bytesRead;
                     if (totalAll <= 0 && received > freeSpaceReservedUntil) {
                         long reserve = Math.max(
@@ -448,28 +444,6 @@ class DownloadTask implements Runnable {
         return true;
     }
 
-    private byte[] readBytes(InputStream input) throws IOException {
-        return readBytes(input, Long.MAX_VALUE);
-    }
-
-    private byte[] readBytes(InputStream input, long maxBytes) throws IOException {
-        try (
-            InputStream in = input;
-            ByteArrayOutputStream out = new ByteArrayOutputStream()
-        ) {
-            int count;
-            long total = 0;
-            while ((count = in.read(buffer)) != -1) {
-                total += count;
-                if (total > maxBytes) {
-                    throw new IOException("content exceeds " + maxBytes + " bytes");
-                }
-                out.write(buffer, 0, count);
-            }
-            return out.toByteArray();
-        }
-    }
-
     private void appendManifestEntries(
         JSONObject manifest,
         ArrayList<String> copyFroms,
@@ -490,7 +464,7 @@ class DownloadTask implements Runnable {
                 }
                 copyFroms.add(from);
                 copyTos.add(to);
-                if (copiesCrc != null && copyCrcs != null && copiesCrc.has(to)) {
+                if (copiesCrc != null && copiesCrc.has(to)) {
                     // Same content => same crc, so grouping multiple "to" under
                     // one "from" stays consistent.
                     copyCrcs.put(from, copiesCrc.getLong(to));
@@ -546,37 +520,51 @@ class DownloadTask implements Runnable {
         UpdateFileUtils.removeDirectory(unzipDirectory);
         UpdateFileUtils.ensureDirectory(unzipDirectory);
 
-        PatchArchiveContents contents = new PatchArchiveContents();
+        ArrayList<String> entryNames = new ArrayList<String>();
+        ArrayList<String> copyFroms = new ArrayList<String>();
+        ArrayList<String> copyTos = new ArrayList<String>();
+        ArrayList<String> deletes = new ArrayList<String>();
+        HashMap<String, Long> copyCrcs = new HashMap<String, Long>();
+        JSONObject hbcTransform = null;
         try (SafeZipFile zipFile = new SafeZipFile(archiveFile)) {
             ensureArchiveWithinLimits(archiveFile, zipFile, unzipDirectory);
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
-                contents.entryNames.add(name);
+                entryNames.add(name);
 
                 if (name.equals("__diff.json")) {
                     if (entry.getSize() > ArchiveLimits.MAX_MANIFEST_BYTES) {
                         throw new IOException("delta manifest too large: " + entry.getSize());
                     }
-                    byte[] bytes = readBytes(
+                    byte[] bytes = UpdateFileUtils.readBytes(
                         zipFile.getInputStream(entry), ArchiveLimits.MAX_MANIFEST_BYTES);
                     String json = new String(bytes, StandardCharsets.UTF_8);
                     JSONObject manifest = (JSONObject) new JSONTokener(json).nextValue();
-                    appendManifestEntries(
-                        manifest,
-                        contents.copyFroms,
-                        contents.copyTos,
-                        contents.deletes,
-                        contents.copyCrcs
-                    );
-                    contents.hbcTransform = manifest.optJSONObject("hbcTransform");
+                    appendManifestEntries(manifest, copyFroms, copyTos, deletes, copyCrcs);
+                    hbcTransform = manifest.optJSONObject("hbcTransform");
                     continue;
                 }
 
                 zipFile.unzipToPath(entry, unzipDirectory);
             }
         }
+        return new PatchArchiveContents(
+            entryNames, copyFroms, copyTos, deletes, copyCrcs, hbcTransform);
+    }
+
+    /**
+     * Shared first half of the two patch tasks: download the archive, unpack
+     * it into the staging directory and have the native planner validate it.
+     */
+    private PatchArchiveContents stagePatchArchive(int patchType)
+        throws IOException, JSONException {
+        downloadFile();
+        artifactSha256 = archiveSha256();
+        PatchArchiveContents contents = extractPatchArchive(params.targetFile, stagingDirectory());
+        contents.plan = buildArchivePlan(
+            patchType, contents.entryNames, contents.copyFroms, contents.copyTos, contents.deletes);
         return contents;
     }
 
@@ -592,7 +580,7 @@ class DownloadTask implements Runnable {
         // bytes as they are extracted, instead of re-reading the bundle right
         // after. Any entry resolving to the bundle path counts; the last write
         // wins on disk and in the digest alike.
-        File bundleTarget = new File(work, "index.bundlejs").getCanonicalFile();
+        File bundleTarget = InstallRecord.bundleFile(work).getCanonicalFile();
         stagedBundleSha256 = null;
         try (SafeZipFile zipFile = new SafeZipFile(params.targetFile)) {
             ensureArchiveWithinLimits(params.targetFile, zipFile, work);
@@ -633,7 +621,7 @@ class DownloadTask implements Runnable {
             UpdateFileUtils.removeDirectory(work);
             return;
         }
-        File bundle = new File(work, "index.bundlejs");
+        File bundle = InstallRecord.bundleFile(work);
         if (!bundle.isFile()) {
             throw new IOException("bundle missing after install: " + bundle);
         }
@@ -683,26 +671,11 @@ class DownloadTask implements Runnable {
     }
 
     private void doPatchFromApk() throws IOException, JSONException {
-        downloadFile();
+        PatchArchiveContents contents =
+            stagePatchArchive(DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK);
         File work = stagingDirectory();
-        artifactSha256 = archiveSha256();
-        PatchArchiveContents contents = extractPatchArchive(params.targetFile, work);
-
-        buildArchivePlan(
-            DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK,
-            contents.entryNames.toArray(new String[0]),
-            contents.copyFroms.toArray(new String[0]),
-            contents.copyTos.toArray(new String[0]),
-            contents.deletes.toArray(new String[0])
-        );
-
         HashMap<String, ArrayList<File>> copyList = buildCopyList(
-            work,
-            buildCopyGroups(
-                contents.copyFroms.toArray(new String[0]),
-                contents.copyTos.toArray(new String[0])
-            )
-        );
+            work, buildCopyGroups(contents.copyFroms, contents.copyTos));
 
         File originBundleFile = new File(work, ".origin.bundle");
         copyBundledAssetToFile("index.android.bundle", originBundleFile);
@@ -712,7 +685,7 @@ class DownloadTask implements Runnable {
                 work.getAbsolutePath(),
                 originBundleFile.getAbsolutePath(),
                 new File(work, BUNDLE_DELTA_ENTRY).getAbsolutePath(),
-                new File(work, "index.bundlejs").getAbsolutePath(),
+                InstallRecord.bundleFile(work).getAbsolutePath(),
                 "",
                 false,
                 new String[0],
@@ -729,30 +702,20 @@ class DownloadTask implements Runnable {
     }
 
     private void doPatchFromPpk() throws IOException, JSONException {
-        downloadFile();
+        PatchArchiveContents contents =
+            stagePatchArchive(DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK);
         File work = stagingDirectory();
-        artifactSha256 = archiveSha256();
-        PatchArchiveContents contents = extractPatchArchive(params.targetFile, work);
-
-        ArchivePatchPlanResult plan = buildArchivePlan(
-            DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK,
-            contents.entryNames.toArray(new String[0]),
-            contents.copyFroms.toArray(new String[0]),
-            contents.copyTos.toArray(new String[0]),
-            contents.deletes.toArray(new String[0])
-        );
-
         applyDeltaFromSource(
             params.originDirectory.getAbsolutePath(),
             work.getAbsolutePath(),
-            new File(params.originDirectory, "index.bundlejs").getAbsolutePath(),
+            InstallRecord.bundleFile(params.originDirectory).getAbsolutePath(),
             new File(work, BUNDLE_DELTA_ENTRY).getAbsolutePath(),
-            new File(work, "index.bundlejs").getAbsolutePath(),
-            plan.mergeSourceSubdir,
-            plan.enableMerge,
-            contents.copyFroms.toArray(new String[0]),
-            contents.copyTos.toArray(new String[0]),
-            contents.deletes.toArray(new String[0]),
+            InstallRecord.bundleFile(work).getAbsolutePath(),
+            contents.plan.mergeSourceSubdir,
+            contents.plan.enableMerge,
+            contents.copyFroms,
+            contents.copyTos,
+            contents.deletes,
             contents.hbcTransformMetaFor(BUNDLE_DELTA_ENTRY)
         );
         deleteConsumedArchive();
@@ -766,19 +729,13 @@ class DownloadTask implements Runnable {
         // Phase 1, under the version-files lock: only renames doomed entries
         // into the trash, so activation is never blocked behind a recursive
         // delete of several version directories.
-        UpdateContext.getInstance(context).runCleanupWithLatestState(
-            new UpdateContext.CleanupAction() {
-                @Override
-                public void run(String[] keepNames) {
-                    cleanupOldEntries(
-                        params.unzipDirectory.getAbsolutePath(),
-                        keepNames,
-                        params.maxAgeDays,
-                        trash.getAbsolutePath()
-                    );
-                }
-            }
-        );
+        UpdateContext.getInstance(context).runCleanupWithLatestState(keepNames ->
+            cleanupOldEntries(
+                params.unzipDirectory.getAbsolutePath(),
+                keepNames,
+                params.maxAgeDays,
+                trash.getAbsolutePath()
+            ));
         // Phase 2, lock released: nothing in the trash is reachable as a
         // version any more. Also purges leftovers of an interrupted run.
         // Best effort: phase 1 already succeeded, and a leftover the native
@@ -813,34 +770,10 @@ class DownloadTask implements Runnable {
                 }
                 break;
             case DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD:
-                if (
-                    params.targetFile.exists()
-                        && !params.targetFile.delete()
-                        && UpdateContext.DEBUG
-                ) {
-                    Log.w(Texts.LOG_TAG, "Failed to clean partial download " + params.targetFile);
-                }
-                deleteResumeSidecar(params.targetFile);
+                deleteConsumedArchive();
                 break;
             default:
                 break;
-        }
-    }
-
-    /**
-     * An https artifact URL must stay on https through every redirect: the
-     * package is the supply-chain boundary and TLS is what authenticates
-     * it. OkHttp follows cross-scheme redirects by default, so the final
-     * request is checked here (the redirected bytes are discarded).
-     */
-    static void rejectProtocolDowngrade(String requestedUrl, Response response)
-        throws IOException {
-        if (requestedUrl != null
-            && requestedUrl.regionMatches(true, 0, "https:", 0, 6)
-            && !response.request().url().isHttps()) {
-            throw new IOException(
-                "https download redirected to plaintext http: "
-                    + response.request().url());
         }
     }
 
@@ -853,8 +786,7 @@ class DownloadTask implements Runnable {
     private boolean hasCompletedDeltaDirectory() {
         return params.unzipDirectory != null
             && params.hash != null
-            && new File(params.unzipDirectory, "index.bundlejs").isFile()
-            && InstallRecord.isComplete(params.unzipDirectory, params.hash);
+            && InstallRecord.isInstalled(params.unzipDirectory, params.hash);
     }
 
     // True when this task targets the version the process is running from.
@@ -873,18 +805,12 @@ class DownloadTask implements Runnable {
      * failure rather than overwritten.
      */
     private void ensureNotReinstallingRunningVersion() throws IOException {
-        File bundle = new File(params.unzipDirectory, "index.bundlejs");
-        if (bundle.isFile() && InstallRecord.isComplete(params.unzipDirectory, params.hash)) {
-            try {
-                InstallRecord.verifyForActivation(params.unzipDirectory, params.hash, bundle);
-                return;
-            } catch (IOException e) {
-                throw new FileOperationException("Running version " + params.hash
-                    + " cannot be reinstalled in place: " + e.getMessage());
-            }
+        try {
+            InstallRecord.verifyInstalled(params.unzipDirectory, params.hash);
+        } catch (IOException e) {
+            throw new FileOperationException("Running version " + params.hash
+                + " cannot be reinstalled in place: " + e.getMessage());
         }
-        throw new FileOperationException("Running version " + params.hash
-            + " has no verifiable install record and cannot be reinstalled in place");
     }
 
     @Override

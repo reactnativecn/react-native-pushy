@@ -197,6 +197,41 @@ public class InstallRecordTest {
     }
 
     @Test
+    public void isInstalledNeedsBundleAndMatchingRecord() throws Exception {
+        File dir = temp.newFolder();
+        InstallRecord.write(dir, InstallRecord.build(HASH, "bb", ""));
+        assertFalse(InstallRecord.isInstalled(dir, HASH));
+
+        writeFile(InstallRecord.bundleFile(dir), "x".getBytes(StandardCharsets.UTF_8));
+        assertTrue(InstallRecord.isInstalled(dir, HASH));
+        assertFalse(InstallRecord.isInstalled(dir, "someotherhash"));
+    }
+
+    @Test
+    public void verifyInstalledChecksBundlePresenceThenDigest() throws Exception {
+        File dir = temp.newFolder();
+        byte[] bundleBytes = "var a = 1;".getBytes(StandardCharsets.UTF_8);
+        InstallRecord.write(dir, InstallRecord.build(HASH, sha256Hex(bundleBytes), ""));
+        try {
+            InstallRecord.verifyInstalled(dir, HASH);
+            fail("a version without its bundle must not activate");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("not found"));
+        }
+
+        writeFile(InstallRecord.bundleFile(dir), bundleBytes);
+        InstallRecord.verifyInstalled(dir, HASH);
+
+        writeFile(InstallRecord.bundleFile(dir), "var a = 2;".getBytes(StandardCharsets.UTF_8));
+        try {
+            InstallRecord.verifyInstalled(dir, HASH);
+            fail("tampered bundle must not activate");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage().contains("digest mismatch"));
+        }
+    }
+
+    @Test
     public void stagingDirectoryIsASibling() {
         File version = new File("/data/_update/" + HASH);
         assertEquals(new File("/data/_update/" + HASH + InstallRecord.STAGING_SUFFIX),

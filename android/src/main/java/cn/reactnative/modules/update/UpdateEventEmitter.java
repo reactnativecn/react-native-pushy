@@ -39,7 +39,7 @@ final class UpdateEventEmitter {
             // emit (this SDK itself triggers reloads); sendEvent runs on the
             // main thread, so a throw here would crash the app for a lost
             // progress tick.
-            Log.w("pushy", "sendEvent " + eventName + " failed: " + e.getMessage());
+            Log.w(Texts.LOG_TAG, "sendEvent " + eventName + " failed: " + e.getMessage());
         }
     }
 

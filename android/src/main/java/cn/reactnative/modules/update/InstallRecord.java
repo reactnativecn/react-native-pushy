@@ -3,7 +3,6 @@ package cn.reactnative.modules.update;
 import android.os.Build;
 import android.util.Log;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -19,8 +18,16 @@ final class InstallRecord {
     static final int SCHEMA = 1;
     static final String FILE_NAME = ".pushy-complete";
     static final String STAGING_SUFFIX = ".staging";
+    // A record is a few hundred bytes; anything larger is not one.
+    private static final long MAX_RECORD_BYTES = 64 * 1024;
+    /** The JS bundle inside a version directory. */
+    static final String BUNDLE_FILE_NAME = "index.bundlejs";
 
     private InstallRecord() {
+    }
+
+    static File bundleFile(File versionDir) {
+        return new File(versionDir, BUNDLE_FILE_NAME);
     }
 
     static File stagingDirectoryFor(File versionDir) {
@@ -76,7 +83,7 @@ final class InstallRecord {
                 dir.toPath(), java.nio.file.StandardOpenOption.READ)) {
             channel.force(true);
         } catch (Throwable e) {
-            Log.w("pushy", "Directory fsync skipped for " + dir + ": " + e);
+            Log.w(Texts.LOG_TAG, "Directory fsync skipped for " + dir + ": " + e);
         }
     }
 
@@ -92,20 +99,8 @@ final class InstallRecord {
         if (file.length() == 0) {
             return new JSONObject();
         }
-        if (file.length() > 64 * 1024) {
-            return null;
-        }
-        try (FileInputStream in = new FileInputStream(file)) {
-            byte[] bytes = new byte[(int) file.length()];
-            int offset = 0;
-            while (offset < bytes.length) {
-                int read = in.read(bytes, offset, bytes.length - offset);
-                if (read < 0) {
-                    break;
-                }
-                offset += read;
-            }
-            return new JSONObject(new String(bytes, 0, offset, StandardCharsets.UTF_8));
+        try {
+            return new JSONObject(UpdateFileUtils.readSmallUtf8(file, MAX_RECORD_BYTES));
         } catch (IOException | JSONException e) {
             return null;
         }
@@ -117,14 +112,33 @@ final class InstallRecord {
      */
     static boolean isComplete(File versionDir, String versionHash) {
         JSONObject record = read(versionDir);
-        if (record == null) {
-            return false;
-        }
-        if (record.length() == 0) {
-            return true;
-        }
+        return record != null && (record.length() == 0 || names(record, versionHash));
+    }
+
+    /** A schema-1 record for this version (the legacy empty marker has no fields). */
+    private static boolean names(JSONObject record, String versionHash) {
         return record.optInt("schema", 0) == SCHEMA
             && versionHash.equals(record.optString("versionHash", ""));
+    }
+
+    /**
+     * Launch / dedup presence check: the bundle exists and the record names
+     * this version. No digest work.
+     */
+    static boolean isInstalled(File versionDir, String versionHash) {
+        return bundleFile(versionDir).isFile() && isComplete(versionDir, versionHash);
+    }
+
+    /**
+     * Activation check of an installed version: the bundle exists and its
+     * bytes match the record's digest. Throws with the reason otherwise.
+     */
+    static void verifyInstalled(File versionDir, String versionHash) throws IOException {
+        File bundle = bundleFile(versionDir);
+        if (!bundle.isFile()) {
+            throw new IOException("Bundle version " + versionHash + " not found.");
+        }
+        verifyForActivation(versionDir, versionHash, bundle);
     }
 
     /**
@@ -141,8 +155,7 @@ final class InstallRecord {
         if (record.length() == 0) {
             return;
         }
-        if (record.optInt("schema", 0) != SCHEMA
-            || !versionHash.equals(record.optString("versionHash", ""))) {
+        if (!names(record, versionHash)) {
             throw new IOException("Bundle version " + versionHash + " completion record mismatch.");
         }
         Object digest = record.opt("bundleSha256");
