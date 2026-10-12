@@ -1,8 +1,4 @@
-import {
-  DeviceEventEmitter,
-  type EmitterSubscription,
-  Platform,
-} from 'react-native';
+import { DeviceEventEmitter, Platform } from 'react-native';
 import {
   buildTime,
   cInfo,
@@ -140,7 +136,6 @@ const createDefaultClientOptions = (): ClientOptions => ({
 });
 
 export const sharedState: {
-  progressHandlers: Record<string, EmitterSubscription>;
   downloadingTasks: Record<string, Promise<string | undefined>>;
   // Progress callbacks per hash: concurrent downloadUpdate callers of the
   // same hash each register theirs here instead of the second one being
@@ -152,7 +147,6 @@ export const sharedState: {
   marked: boolean;
   applyingUpdate: boolean;
 } = {
-  progressHandlers: {},
   downloadingTasks: {},
   progressCallbacks: {},
   downloadedHash: undefined,
@@ -1399,15 +1393,14 @@ export class Pushy {
     }
     sharedState.progressCallbacks[hash] = progressCallbacks;
     const dispatchProgress = (data: ProgressData) => {
-      const callbacks = sharedState.progressCallbacks[hash];
-      if (!callbacks || callbacks.size === 0) {
+      if (progressCallbacks.size === 0) {
         return;
       }
       const payload = {
         ...data,
         progress: computeProgress(data.received, data.total),
       };
-      callbacks.forEach((callback) => {
+      progressCallbacks.forEach((callback) => {
         // One subscriber throwing must not starve the others or abort the
         // download: business callbacks are isolated, the error is logged.
         try {
@@ -1427,17 +1420,10 @@ export class Pushy {
       }
     };
     // @ts-expect-error harmony not in existing platforms
-    if (Platform.OS === 'harmony') {
-      sharedState.progressHandlers[hash] = DeviceEventEmitter.addListener(
-        'RCTPushyDownloadProgress',
-        onNativeProgress
-      );
-    } else {
-      sharedState.progressHandlers[hash] = pushyNativeEventEmitter.addListener(
-        'RCTPushyDownloadProgress',
-        onNativeProgress
-      );
-    }
+    const isHarmony = Platform.OS === 'harmony';
+    const progressSubscription = (
+      isHarmony ? DeviceEventEmitter : pushyNativeEventEmitter
+    ).addListener('RCTPushyDownloadProgress', onNativeProgress);
     const maxRetries = Math.max(0, Math.floor(this.options.maxRetries ?? 3));
     let succeeded = '';
     let lastError: UpdateError | undefined;
@@ -1447,13 +1433,6 @@ export class Pushy {
     // message, so the final report still names it — and skip it on later
     // attempts instead of downloading and patching it again.
     const exhaustedStrategies = new Map<DownloadStrategyType, string>();
-    // Whether any strategy, in any attempt, failed at the patch stage. The
-    // downloadFallback report carries that as its code even when a later,
-    // unrelated transport failure happened to be the last error seen.
-    let patchFailed = false;
-    // The errors of the strategies that failed at the patch stage. A strategy
-    // that failed to apply is never retried, so these do not repeat.
-    const patchErrorMessages: string[] = [];
 
     // The ordered attempts come from decideDownload (the pure decision layer);
     // this side only executes them: probe candidate URLs, run the matching
@@ -1490,100 +1469,101 @@ export class Pushy {
       full: 'error_full_patch_failed',
     } as const;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      if (attempt > 0) {
-        // Exponential backoff with jitter: a bad CDN edge otherwise gets
-        // every client back at the same 1/2/4s marks.
-        const backoffMs = Math.round(
-          Math.min(1000 * 2 ** (attempt - 1), 10000) *
-            (0.75 + Math.random() * 0.5)
-        );
-        log(`retry attempt ${attempt}/${maxRetries}, waiting ${backoffMs}ms`);
-        await new Promise<void>((r) => setTimeout(() => r(), backoffMs));
-        errorMessages.length = 0;
-        errorMessages.push(...exhaustedStrategies.values());
-        lastError = undefined;
-        succeeded = '';
-      }
-      this.report({
-        type: 'downloading',
-        data: {
-          newVersion: hash,
-          attempt,
-        },
-      });
-      for (const { type, urls } of attempts) {
-        if (succeeded) {
-          break;
+    try {
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        if (attempt > 0) {
+          // Exponential backoff with jitter: a bad CDN edge otherwise gets
+          // every client back at the same 1/2/4s marks.
+          const backoffMs = Math.round(
+            Math.min(1000 * 2 ** (attempt - 1), 10000) *
+              (0.75 + Math.random() * 0.5)
+          );
+          log(`retry attempt ${attempt}/${maxRetries}, waiting ${backoffMs}ms`);
+          await new Promise<void>((r) => setTimeout(() => r(), backoffMs));
+          errorMessages.length = 0;
+          errorMessages.push(...exhaustedStrategies.values());
+          lastError = undefined;
+          succeeded = '';
         }
-        if (exhaustedStrategies.has(type)) {
-          continue;
-        }
-        // The HEAD race only ranks mirrors; it is not proof that a mirror can
-        // serve the whole artifact (CDNs answer HEAD and GET differently, and
-        // a transfer can die mid-stream). Every mirror of the same artifact
-        // gets a real download attempt before the strategy is abandoned —
-        // the native cold-start path already behaves this way.
-        let orderedUrls = rankedUrls.get(type);
-        if (!orderedUrls) {
-          orderedUrls = await this.rankDownloadUrls(urls);
-          rankedUrls.set(type, orderedUrls);
-        }
-        for (const url of orderedUrls) {
-          log(`downloading ${type} from ${url}`);
-          try {
-            await runners[type](url);
-            succeeded = type;
+        this.report({
+          type: 'downloading',
+          data: {
+            newVersion: hash,
+            attempt,
+          },
+        });
+        for (const { type, urls } of attempts) {
+          if (succeeded) {
             break;
-          } catch (e: unknown) {
-            // The native rejection's stable code (e.g. PATCH_FAILED vs
-            // DOWNLOAD_FAILED — telemetry classifies on it) may sit on the
-            // `code` property or, from bridges that cannot set it, as a
-            // `[CODE] ` message prefix. Either way it survives into the
-            // i18n-wrapped error together with the original as cause.
-            const { code, message } = readErrorCode(e);
-            if (url === orderedUrls[0] && orderedUrls.length > 1) {
-              rankedUrls.set(type, [...orderedUrls.slice(1), url]);
-            }
-            const errorMessage = this.t(errorKeys[type], {
-              message: message || String(e ?? ''),
-            });
-            errorMessages.push(errorMessage);
-            lastError = new UpdateError(
-              errorMessage,
-              code ?? 'DOWNLOAD_FAILED',
-              {
-                cause: e,
-              }
-            );
-            log(errorMessage);
-            if (lastError.code === 'PATCH_FAILED') {
-              patchFailed = true;
-              patchErrorMessages.push(errorMessage);
-            }
-            if (!isMirrorRetryableCode(lastError.code)) {
-              // The bytes arrived but could not be applied (patch/manifest
-              // mismatch): every mirror serves the same artifact, so move
-              // on to the next strategy instead of re-downloading it.
-              exhaustedStrategies.set(type, errorMessage);
+          }
+          if (exhaustedStrategies.has(type)) {
+            continue;
+          }
+          // The HEAD race only ranks mirrors; it is not proof that a mirror can
+          // serve the whole artifact (CDNs answer HEAD and GET differently, and
+          // a transfer can die mid-stream). Every mirror of the same artifact
+          // gets a real download attempt before the strategy is abandoned —
+          // the native cold-start path already behaves this way.
+          let orderedUrls = rankedUrls.get(type);
+          if (!orderedUrls) {
+            orderedUrls = await this.rankDownloadUrls(urls);
+            rankedUrls.set(type, orderedUrls);
+          }
+          for (const url of orderedUrls) {
+            log(`downloading ${type} from ${url}`);
+            try {
+              await runners[type](url);
+              succeeded = type;
               break;
+            } catch (e: unknown) {
+              // The native rejection's stable code (e.g. PATCH_FAILED vs
+              // DOWNLOAD_FAILED — telemetry classifies on it) may sit on the
+              // `code` property or, from bridges that cannot set it, as a
+              // `[CODE] ` message prefix. Either way it survives into the
+              // i18n-wrapped error together with the original as cause.
+              const { code, message } = readErrorCode(e);
+              if (url === orderedUrls[0] && orderedUrls.length > 1) {
+                rankedUrls.set(type, [...orderedUrls.slice(1), url]);
+              }
+              const errorMessage = this.t(errorKeys[type], {
+                message: message || String(e ?? ''),
+              });
+              errorMessages.push(errorMessage);
+              lastError = new UpdateError(
+                errorMessage,
+                code ?? 'DOWNLOAD_FAILED',
+                {
+                  cause: e,
+                }
+              );
+              log(errorMessage);
+              if (!isMirrorRetryableCode(lastError.code)) {
+                // The bytes arrived but could not be applied (patch/manifest
+                // mismatch): every mirror serves the same artifact, so move
+                // on to the next strategy instead of re-downloading it.
+                exhaustedStrategies.set(type, errorMessage);
+                break;
+              }
             }
           }
         }
+        if (
+          succeeded ||
+          attempts.every(({ type }) => exhaustedStrategies.has(type))
+        ) {
+          // Nothing left that a retry could change.
+          break;
+        }
       }
-      if (
-        succeeded ||
-        attempts.every(({ type }) => exhaustedStrategies.has(type))
-      ) {
-        // Nothing left that a retry could change.
-        break;
-      }
+    } finally {
+      progressSubscription.remove();
+      delete sharedState.progressCallbacks[hash];
     }
-    if (sharedState.progressHandlers[hash]) {
-      sharedState.progressHandlers[hash].remove();
-      delete sharedState.progressHandlers[hash];
-    }
-    delete sharedState.progressCallbacks[hash];
+    // Only a patch-stage failure exhausts a strategy (isMirrorRetryableCode),
+    // and an exhausted strategy is never retried: these are exactly the patch
+    // failures, each once.
+    const patchErrorMessages = [...exhaustedStrategies.values()];
+    const patchFailed = patchErrorMessages.length > 0;
     if (succeeded && errorMessages.length > 0) {
       // An earlier strategy failed and a later one rescued the download
       // (e.g. pdiff copiesCrc mismatch on a rebuilt binary → full). Surface
@@ -1591,9 +1571,10 @@ export class Pushy {
       // platform that incremental delivery is failing for this binary.
       this.report({
         type: 'downloadFallback',
-        // The patch-health signal wins over whatever transport failure
-        // happened to come last (diff PATCH_FAILED, then pdiff network
-        // error, then full succeeded is still a patch_fail server-side).
+        // The patch-health signal (any strategy, in any attempt, failing at
+        // the patch stage) wins over whatever transport failure happened to
+        // come last (diff PATCH_FAILED, then pdiff network error, then full
+        // succeeded is still a patch_fail server-side).
         code: patchFailed ? 'PATCH_FAILED' : lastError?.code,
         data: {
           newVersion: hash,
@@ -1605,36 +1586,25 @@ export class Pushy {
       });
     }
     if (!succeeded) {
-      const message = errorMessages.join(';');
-      if (lastError) {
-        throw this.fail(lastError, 'DOWNLOAD_FAILED', 'errorUpdate', {
-          message,
-          data: { newVersion: hash },
-        });
-      }
-      // No download URL was even attempted (e.g. dev without a full URL):
-      // report for diagnostics but there is no error object to surface.
-      this.report({
-        type: 'errorUpdate',
+      // Every attempt runs at least one download (a plan always has an
+      // artifact URL, devNoop returned above), so a failure left lastError.
+      throw this.fail(lastError, 'DOWNLOAD_FAILED', 'errorUpdate', {
+        message: errorMessages.join(';'),
         data: { newVersion: hash },
-        message,
-      });
-      return;
-    } else {
-      const duration = Date.now() - patchStartTime;
-      const data: Record<string, any> = {
-        newVersion: hash,
-        diff: succeeded,
-        duration,
-      };
-      if (errorMessages.length > 0) {
-        data.error = errorMessages.join(';');
-      }
-      this.report({
-        type: 'downloadSuccess',
-        data,
       });
     }
+    const data: Record<string, any> = {
+      newVersion: hash,
+      diff: succeeded,
+      duration: Date.now() - patchStartTime,
+    };
+    if (errorMessages.length > 0) {
+      data.error = errorMessages.join(';');
+    }
+    this.report({
+      type: 'downloadSuccess',
+      data,
+    });
     log(`downloaded ${succeeded} hash:`, hash);
     const hashInfo: Record<string, any> = {
       name,
@@ -1679,12 +1649,8 @@ export class Pushy {
     sharedState.apkStatus = 'downloading';
     this.report({ type: 'downloadingApk' });
     const progressKey = 'downloadingApk';
-    if (onDownloadProgress) {
-      if (sharedState.progressHandlers[progressKey]) {
-        sharedState.progressHandlers[progressKey].remove();
-      }
-      sharedState.progressHandlers[progressKey] =
-        pushyNativeEventEmitter.addListener(
+    const progressSubscription = onDownloadProgress
+      ? pushyNativeEventEmitter.addListener(
           'RCTPushyDownloadProgress',
           (event: unknown) => {
             const progressData = event as ProgressData;
@@ -1692,8 +1658,8 @@ export class Pushy {
               onDownloadProgress(progressData);
             }
           }
-        );
-    }
+        )
+      : undefined;
     try {
       await PushyModule.downloadAndInstallApk({
         url,
@@ -1710,10 +1676,7 @@ export class Pushy {
         })
       );
     } finally {
-      if (sharedState.progressHandlers[progressKey]) {
-        sharedState.progressHandlers[progressKey].remove();
-        delete sharedState.progressHandlers[progressKey];
-      }
+      progressSubscription?.remove();
     }
   };
   restartApp = async () => {
