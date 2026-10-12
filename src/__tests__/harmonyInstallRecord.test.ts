@@ -4,8 +4,8 @@ import { evalHarmonyModule } from './nativeSources';
 // Harmony InstallRecord.ts (ArkTS mirror of cpp/patch_core/install_record.h)
 // imports @ohos modules, so it is evaluated with its imports stripped and its
 // collaborators (file system, native digest, error factory) supplied as
-// in-memory stubs. The on-device hypium suite (InstallRecord.test.ets) only
-// runs in harmony CI; this keeps the record contract under `bun run test`.
+// in-memory stubs. This covers the disk-backed activation path; the pure
+// record logic is in harmonyInstallRecordLogic.test.ts.
 
 class PushyError extends Error {
   code: string;
