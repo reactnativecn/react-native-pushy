@@ -4,6 +4,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
 import java.io.ByteArrayOutputStream;
@@ -77,14 +78,39 @@ class DownloadTask implements Runnable {
     // null when the bundle was produced some other way (patch tasks).
     private String stagedBundleSha256;
 
+    /** What a staged patch archive declared, as the native planner consumes it. */
     private static final class PatchArchiveContents {
-        final ArrayList<String> entryNames = new ArrayList<String>();
-        final ArrayList<String> copyFroms = new ArrayList<String>();
-        final ArrayList<String> copyTos = new ArrayList<String>();
-        final ArrayList<String> deletes = new ArrayList<String>();
+        final String[] entryNames;
+        final String[] copyFroms;
+        final String[] copyTos;
+        final String[] deletes;
+        // Maps a copy source path ("from") to the CRC32 of the file content,
+        // when provided by the manifest ("copiesCrc"). Lets the resource
+        // copier locate the file by content if the path is not present on
+        // device (APK baseline -> AAB install path shortening).
+        final HashMap<String, Long> copyCrcs;
         // __diff.json 的 hbcTransform 元数据(按 patch 条目名索引);
         // 为空对象/缺失时返回 ""(native 走现状路径)
-        JSONObject hbcTransform;
+        @Nullable
+        final JSONObject hbcTransform;
+        // Set by stagePatchArchive once the native planner accepted the archive.
+        ArchivePatchPlanResult plan;
+
+        PatchArchiveContents(
+            ArrayList<String> entryNames,
+            ArrayList<String> copyFroms,
+            ArrayList<String> copyTos,
+            ArrayList<String> deletes,
+            HashMap<String, Long> copyCrcs,
+            @Nullable JSONObject hbcTransform
+        ) {
+            this.entryNames = entryNames.toArray(new String[0]);
+            this.copyFroms = copyFroms.toArray(new String[0]);
+            this.copyTos = copyTos.toArray(new String[0]);
+            this.deletes = deletes.toArray(new String[0]);
+            this.copyCrcs = copyCrcs;
+            this.hbcTransform = hbcTransform;
+        }
 
         String hbcTransformMetaFor(String patchEntryName) {
             if (hbcTransform == null) {
@@ -93,11 +119,6 @@ class DownloadTask implements Runnable {
             JSONObject meta = hbcTransform.optJSONObject(patchEntryName);
             return meta != null ? meta.toString() : "";
         }
-        // Maps a copy source path ("from") to the CRC32 of the file content,
-        // when provided by the manifest ("copiesCrc"). Lets the resource
-        // copier locate the file by content if the path is not present on
-        // device (APK baseline -> AAB install path shortening).
-        final HashMap<String, Long> copyCrcs = new HashMap<String, Long>();
     }
 
     private final Context context;
@@ -222,24 +243,26 @@ class DownloadTask implements Runnable {
             }
         }
         if (resumeOffset == 0) {
-            if (writePath.exists() && !writePath.delete()) {
-                throw new IOException("Failed to replace existing file: " + writePath);
-            }
-            deleteResumeSidecar(writePath);
+            discardPartial(writePath);
         }
 
         if (!transferArchive(url, writePath, sidecar, resumeMeta, resumeOffset)) {
             // The server rejected the range for a partial that no longer
             // matches (416): drop it and retry once from zero.
-            if (writePath.exists() && !writePath.delete()) {
-                throw new IOException("Failed to replace existing file: " + writePath);
-            }
-            deleteResumeSidecar(writePath);
+            discardPartial(writePath);
             if (!transferArchive(url, writePath, sidecar, null, 0)) {
                 throw new IOException("Server rejected the download range for " + url);
             }
         }
         downloadPhaseCompleted = true;
+    }
+
+    /** Drops a partial download and its sidecar; throws when the bytes stay. */
+    private static void discardPartial(File archive) throws IOException {
+        if (archive.exists() && !archive.delete()) {
+            throw new IOException("Failed to replace existing file: " + archive);
+        }
+        deleteResumeSidecar(archive);
     }
 
     /**
@@ -350,9 +373,7 @@ class DownloadTask implements Runnable {
                 // Destroy the old bytes before the sidecar can vouch for
                 // them with the new validators (a crash between the two
                 // writes must never leave a sidecar describing stale bytes).
-                if (writePath.exists() && !writePath.delete()) {
-                    throw new IOException("Failed to replace existing file: " + writePath);
-                }
+                discardPartial(writePath);
             }
             if (encodedBody) {
                 // No resume across an encoded transfer.
@@ -487,7 +508,7 @@ class DownloadTask implements Runnable {
                 }
                 copyFroms.add(from);
                 copyTos.add(to);
-                if (copiesCrc != null && copyCrcs != null && copiesCrc.has(to)) {
+                if (copiesCrc != null && copiesCrc.has(to)) {
                     // Same content => same crc, so grouping multiple "to" under
                     // one "from" stays consistent.
                     copyCrcs.put(from, copiesCrc.getLong(to));
@@ -543,14 +564,19 @@ class DownloadTask implements Runnable {
         UpdateFileUtils.removeDirectory(unzipDirectory);
         UpdateFileUtils.ensureDirectory(unzipDirectory);
 
-        PatchArchiveContents contents = new PatchArchiveContents();
+        ArrayList<String> entryNames = new ArrayList<String>();
+        ArrayList<String> copyFroms = new ArrayList<String>();
+        ArrayList<String> copyTos = new ArrayList<String>();
+        ArrayList<String> deletes = new ArrayList<String>();
+        HashMap<String, Long> copyCrcs = new HashMap<String, Long>();
+        JSONObject hbcTransform = null;
         try (SafeZipFile zipFile = new SafeZipFile(archiveFile)) {
             ensureArchiveWithinLimits(archiveFile, zipFile, unzipDirectory);
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
             while (entries.hasMoreElements()) {
                 ZipEntry entry = entries.nextElement();
                 String name = entry.getName();
-                contents.entryNames.add(name);
+                entryNames.add(name);
 
                 if (name.equals("__diff.json")) {
                     if (entry.getSize() > ArchiveLimits.MAX_MANIFEST_BYTES) {
@@ -560,20 +586,29 @@ class DownloadTask implements Runnable {
                         zipFile.getInputStream(entry), ArchiveLimits.MAX_MANIFEST_BYTES);
                     String json = new String(bytes, StandardCharsets.UTF_8);
                     JSONObject manifest = (JSONObject) new JSONTokener(json).nextValue();
-                    appendManifestEntries(
-                        manifest,
-                        contents.copyFroms,
-                        contents.copyTos,
-                        contents.deletes,
-                        contents.copyCrcs
-                    );
-                    contents.hbcTransform = manifest.optJSONObject("hbcTransform");
+                    appendManifestEntries(manifest, copyFroms, copyTos, deletes, copyCrcs);
+                    hbcTransform = manifest.optJSONObject("hbcTransform");
                     continue;
                 }
 
                 zipFile.unzipToPath(entry, unzipDirectory);
             }
         }
+        return new PatchArchiveContents(
+            entryNames, copyFroms, copyTos, deletes, copyCrcs, hbcTransform);
+    }
+
+    /**
+     * Shared first half of the two patch tasks: download the archive, unpack
+     * it into the staging directory and have the native planner validate it.
+     */
+    private PatchArchiveContents stagePatchArchive(int patchType)
+        throws IOException, JSONException {
+        downloadFile();
+        artifactSha256 = archiveSha256();
+        PatchArchiveContents contents = extractPatchArchive(params.targetFile, stagingDirectory());
+        contents.plan = buildArchivePlan(
+            patchType, contents.entryNames, contents.copyFroms, contents.copyTos, contents.deletes);
         return contents;
     }
 
@@ -680,26 +715,11 @@ class DownloadTask implements Runnable {
     }
 
     private void doPatchFromApk() throws IOException, JSONException {
-        downloadFile();
+        PatchArchiveContents contents =
+            stagePatchArchive(DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK);
         File work = stagingDirectory();
-        artifactSha256 = archiveSha256();
-        PatchArchiveContents contents = extractPatchArchive(params.targetFile, work);
-
-        buildArchivePlan(
-            DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK,
-            contents.entryNames.toArray(new String[0]),
-            contents.copyFroms.toArray(new String[0]),
-            contents.copyTos.toArray(new String[0]),
-            contents.deletes.toArray(new String[0])
-        );
-
         HashMap<String, ArrayList<File>> copyList = buildCopyList(
-            work,
-            buildCopyGroups(
-                contents.copyFroms.toArray(new String[0]),
-                contents.copyTos.toArray(new String[0])
-            )
-        );
+            work, buildCopyGroups(contents.copyFroms, contents.copyTos));
 
         File originBundleFile = new File(work, ".origin.bundle");
         copyBundledAssetToFile("index.android.bundle", originBundleFile);
@@ -726,30 +746,20 @@ class DownloadTask implements Runnable {
     }
 
     private void doPatchFromPpk() throws IOException, JSONException {
-        downloadFile();
+        PatchArchiveContents contents =
+            stagePatchArchive(DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK);
         File work = stagingDirectory();
-        artifactSha256 = archiveSha256();
-        PatchArchiveContents contents = extractPatchArchive(params.targetFile, work);
-
-        ArchivePatchPlanResult plan = buildArchivePlan(
-            DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK,
-            contents.entryNames.toArray(new String[0]),
-            contents.copyFroms.toArray(new String[0]),
-            contents.copyTos.toArray(new String[0]),
-            contents.deletes.toArray(new String[0])
-        );
-
         applyDeltaFromSource(
             params.originDirectory.getAbsolutePath(),
             work.getAbsolutePath(),
             InstallRecord.bundleFile(params.originDirectory).getAbsolutePath(),
             new File(work, BUNDLE_DELTA_ENTRY).getAbsolutePath(),
             InstallRecord.bundleFile(work).getAbsolutePath(),
-            plan.mergeSourceSubdir,
-            plan.enableMerge,
-            contents.copyFroms.toArray(new String[0]),
-            contents.copyTos.toArray(new String[0]),
-            contents.deletes.toArray(new String[0]),
+            contents.plan.mergeSourceSubdir,
+            contents.plan.enableMerge,
+            contents.copyFroms,
+            contents.copyTos,
+            contents.deletes,
             contents.hbcTransformMetaFor(BUNDLE_DELTA_ENTRY)
         );
         deleteConsumedArchive();
@@ -804,14 +814,7 @@ class DownloadTask implements Runnable {
                 }
                 break;
             case DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD:
-                if (
-                    params.targetFile.exists()
-                        && !params.targetFile.delete()
-                        && UpdateContext.DEBUG
-                ) {
-                    Log.w(Texts.LOG_TAG, "Failed to clean partial download " + params.targetFile);
-                }
-                deleteResumeSidecar(params.targetFile);
+                deleteConsumedArchive();
                 break;
             default:
                 break;
@@ -826,9 +829,7 @@ class DownloadTask implements Runnable {
      */
     static void rejectProtocolDowngrade(String requestedUrl, Response response)
         throws IOException {
-        if (requestedUrl != null
-            && requestedUrl.regionMatches(true, 0, "https:", 0, 6)
-            && !response.request().url().isHttps()) {
+        if (HttpUtils.isHttpsUrl(requestedUrl) && !response.request().url().isHttps()) {
             throw new IOException(
                 "https download redirected to plaintext http: "
                     + response.request().url());
