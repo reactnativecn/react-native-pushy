@@ -8,6 +8,8 @@
 //                                        android/.../ArchiveLimits.java
 //   cpp/patch_core/install_record.h  <-> harmony/.../InstallRecord.ts
 //                                        android/.../InstallRecord.java
+//                                        (only the constants a pair lists
+//                                        under `only`)
 //   cpp/patch_core/error_codes.h     <-> harmony/.../ErrorCodes.ts
 //                                        android/.../ErrorCodes.java
 //                                        src/error.ts (every native code must
@@ -114,6 +116,9 @@ const javaDir = 'android/src/main/java/cn/reactnative/modules/update';
 // regression would otherwise silently drop the pair's coverage).
 const archiveLimitsRequired = ['UnknownLengthFreeSpaceProbeBytes', 'MaxArchiveBytes'];
 const errorCodesRequired = ['DeltaFailed', 'InvalidOptions'];
+// The record logic itself lives in install_record.cpp; the hosts only mirror
+// the names they still build paths from.
+const installRecordMirrored = ['Schema', 'FileName', 'StagingSuffix'];
 
 const pairs = [
   {
@@ -140,12 +145,14 @@ const pairs = [
         FileName: 'INSTALL_RECORD_FILE_NAME',
         StagingSuffix: 'STAGING_SUFFIX',
       })[cppName] || screamingSnake(cppName),
+    only: installRecordMirrored,
   },
   {
     header: 'cpp/patch_core/install_record.h',
     mirror: `${javaDir}/InstallRecord.java`,
     parse: parseJavaConstants,
     mirrorName: screamingSnake,
+    only: installRecordMirrored,
   },
   {
     header: 'cpp/patch_core/error_codes.h',
@@ -185,12 +192,15 @@ for (const pair of pairs) {
     problems.push(`${pair.header}: no constexpr constants parsed`);
     continue;
   }
-  for (const name of pair.required || []) {
+  for (const name of [...(pair.required || []), ...(pair.only || [])]) {
     if (!cpp.has(name)) {
       problems.push(`${pair.header}: k${name} not parsed (required)`);
     }
   }
   for (const [cppName, cppValue] of cpp) {
+    if (pair.only && !pair.only.includes(cppName)) {
+      continue;
+    }
     const mirrorName = pair.byValue ? cppValue : pair.mirrorName(cppName);
     checked += 1;
     if (!mirror.has(mirrorName)) {

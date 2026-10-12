@@ -1,5 +1,6 @@
 #include "../archive_patch_core.h"
 #include "../digest.h"
+#include "../install_record.h"
 #include "../patch_core.h"
 #include "../patch_manifest.h"
 #include "../state_core.h"
@@ -8,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dirent.h>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -1444,6 +1446,298 @@ void TestApplyArchivePatchWithHbcTransform() {
 
 }  // namespace
 
+// ---- Completion records (install_record.h) ----
+
+namespace ir = pushy::install_record;
+
+const char kRecordBundle[] = "index.bundlejs";
+
+std::string ReplaceAll(std::string text, const std::string& from, const std::string& to) {
+  for (size_t at = text.find(from); at != std::string::npos;
+       at = text.find(from, at + to.size())) {
+    text.replace(at, from.size(), to);
+  }
+  return text;
+}
+
+std::string Upper(std::string text) {
+  for (char& c : text) {
+    if (c >= 'a' && c <= 'z') {
+      c = static_cast<char>(c - 'a' + 'A');
+    }
+  }
+  return text;
+}
+
+std::vector<std::string> ListDirectory(const std::string& path) {
+  std::vector<std::string> names;
+  DIR* dir = opendir(path.c_str());
+  if (dir == nullptr) {
+    return names;
+  }
+  while (struct dirent* entry = readdir(dir)) {
+    const std::string name = entry->d_name;
+    if (name != "." && name != "..") {
+      names.push_back(name);
+    }
+  }
+  closedir(dir);
+  return names;
+}
+
+// The shared vectors (tests/install-record-vectors.json): what each record
+// shape means for launch/dedup, activation and crash attribution, including
+// the cases the platforms used to disagree on.
+void TestInstallRecordVectors() {
+  const std::string path =
+      JoinPath(g_fixtures_dir, "../install-record-vectors.json");
+  bool ok = false;
+  const flowjson::Value doc = flowjson::Parse(ReadFile(path), &ok);
+  Expect(ok && doc.Get("vectors").IsArray(), "vectors file must parse: " + path);
+  Expect(doc.Get("vectors").Size() >= 30, "vectors file lost its cases");
+  const std::string bundle = "var a = 1;";
+  pushy::digest::Sha256 hasher;
+  hasher.Update(reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size());
+  const std::string bundle_sha = hasher.HexDigest();
+  pushy::digest::Sha256 other;
+  other.Update(reinterpret_cast<const uint8_t*>("var a = 2;"), 10);
+  const std::string other_sha = other.HexDigest();
+  auto expand = [&](const std::string& text) {
+    return ReplaceAll(ReplaceAll(ReplaceAll(text, "@SHA_UPPER@", Upper(bundle_sha)),
+                                 "@OTHER_SHA@", other_sha),
+                      "@SHA@", bundle_sha);
+  };
+
+  for (const flowjson::Value& vector : doc.Get("vectors").elements()) {
+    const std::string name = vector.Get("name").AsString();
+    const std::string hash =
+        vector.Get("hash").IsString() ? vector.Get("hash").AsString() : "abc";
+    TempDir temp;
+    const std::string dir = temp.path + "/" + hash;
+    EnsureDirectory(dir);
+    if (!vector.Get("bundle").IsBool() || vector.Get("bundle").AsBool()) {
+      WriteFile(dir + "/" + kRecordBundle, bundle);
+    }
+    const bool has_record = vector.Get("record").IsString();
+    if (has_record) {
+      WriteFile(dir + "/" + ir::kFileName, expand(vector.Get("record").AsString()));
+    }
+    Expect(ir::HasRecordFile(dir) == has_record, name + ": HasRecordFile");
+    Expect(ir::IsComplete(dir, hash, kRecordBundle) ==
+               vector.Get("complete").AsBool(),
+           name + ": IsComplete");
+    const std::string recorded = vector.Get("recorded").IsString()
+        ? expand(vector.Get("recorded").AsString())
+        : "";
+    ExpectEq(ir::RecordedBundleSha256(dir), recorded, name + ": RecordedBundleSha256");
+
+    const bool grandfathered =
+        vector.Get("grandfathered").IsBool() && vector.Get("grandfathered").AsBool();
+    ir::Activation activation;
+    activation.record_text = "sentinel";
+    const Status status =
+        ir::CheckActivation(dir, hash, kRecordBundle, grandfathered, &activation);
+    const std::string expected = vector.Get("activation").AsString();
+    if (expected == "ok") {
+      Expect(status.ok, name + ": " + status.message);
+      Expect(ir::Unchanged(dir, kRecordBundle, grandfathered, activation),
+             name + ": an untouched directory is unchanged");
+      Expect(!has_record || activation.basis != ir::Activation::Basis::kGrandfathered,
+             name + ": a recorded directory is never grandfathered");
+    } else {
+      Expect(!status.ok, name + ": expected [" + expected + "], activated");
+      Expect(status.message.find(expected) != std::string::npos,
+             name + ": rejection [" + status.message + "] lacks [" + expected + "]");
+      Expect(status.message.find("Bundle version " + hash + " ") == 0,
+             name + ": rejection names the version: " + status.message);
+      ExpectEq(activation.record_text, "sentinel",
+               name + ": a rejection leaves the output untouched");
+    }
+  }
+}
+
+void TestInstallRecordParse() {
+  Expect(ir::Parse("").state == ir::Record::State::kLegacy, "empty text is legacy");
+  const ir::Record record = ir::Parse(
+      "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"b\",\"artifactSha256\":\"a\"}");
+  Expect(record.state == ir::Record::State::kPresent && record.current_schema,
+         "schema-1 record parses");
+  ExpectEq(record.version_hash, "abc", "versionHash");
+  ExpectEq(record.bundle_sha256, "b", "bundleSha256");
+  ExpectEq(record.artifact_sha256, "a", "artifactSha256");
+  Expect(ir::Names(record, "abc") && !ir::Names(record, "def") && !ir::Names(record, ""),
+         "Names matches the version only");
+  Expect(!ir::Names(ir::Parse(""), "abc"), "the legacy marker names no version");
+
+  // The size cap: a padded record of exactly kMaxRecordBytes still parses
+  // (on disk as well), one byte more does not.
+  const std::string body = "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"b\"}";
+  const std::string at_cap =
+      body + std::string(static_cast<size_t>(ir::kMaxRecordBytes) - body.size(), ' ');
+  Expect(ir::Parse(at_cap).state == ir::Record::State::kPresent, "record at the cap");
+  Expect(ir::Parse(at_cap + " ").state == ir::Record::State::kInvalid,
+         "record over the cap");
+  TempDir temp;
+  WriteFile(temp.path + "/" + kRecordBundle, "x");
+  WriteFile(temp.path + "/" + ir::kFileName, at_cap);
+  Expect(ir::IsComplete(temp.path, "abc", kRecordBundle), "on-disk record at the cap");
+  WriteFile(temp.path + "/" + ir::kFileName, at_cap + " ");
+  Expect(ir::Read(temp.path).state == ir::Record::State::kInvalid,
+         "on-disk record over the cap");
+  Expect(!ir::IsComplete(temp.path, "abc", kRecordBundle), "oversized record is not complete");
+
+  // A directory where the record belongs is a record file, but not a record.
+  unlink((temp.path + "/" + ir::kFileName).c_str());
+  EnsureDirectory(temp.path + "/" + ir::kFileName);
+  Expect(ir::HasRecordFile(temp.path), "a directory counts as a record file");
+  Expect(ir::Read(temp.path).state == ir::Record::State::kInvalid,
+         "a directory is not a record");
+  ir::Activation activation;
+  const Status status =
+      ir::CheckActivation(temp.path, "abc", kRecordBundle, true, &activation);
+  Expect(!status.ok && status.message.find("no valid completion record") != std::string::npos,
+         "a directory record is never grandfathered: " + status.message);
+
+  // A directory where the bundle belongs is no bundle.
+  TempDir other;
+  EnsureDirectory(other.path + "/" + kRecordBundle);
+  WriteFile(other.path + "/" + ir::kFileName, "");
+  Expect(!ir::IsComplete(other.path, "abc", kRecordBundle), "bundle must be a file");
+}
+
+void TestInstallRecordBuild() {
+  std::string text;
+  Expect(ir::Build("abc", "bb", "aa", &text).ok, "build a full record");
+  ExpectEq(text,
+           "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"bb\",\"artifactSha256\":\"aa\"}",
+           "record text");
+  Expect(ir::Build("abc", "bb", "", &text).ok, "artifactSha256 is optional");
+  ExpectEq(text, "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"bb\"}",
+           "record without artifact digest");
+  text = "untouched";
+  const Status refused = ir::Build("abc", "", "aa", &text);
+  Expect(!refused.ok && refused.message.find("no bundle digest") != std::string::npos,
+         "a record without bundleSha256 is never built: " + refused.message);
+  ExpectEq(text, "untouched", "a refused build leaves the output untouched");
+}
+
+void TestInstallRecordWriteIsAtomic() {
+  TempDir temp;
+  std::string text;
+  Expect(ir::Build("abc", "bb", "", &text).ok, "build");
+  Expect(ir::Write(temp.path, text).ok, "write a record");
+  ExpectEq(ReadFile(temp.path + "/" + ir::kFileName), text, "record content");
+  Expect(ListDirectory(temp.path).size() == 1, "no temporary file is left behind");
+
+  // Rewriting replaces the record whole (rename over it).
+  Expect(ir::Write(temp.path, "{\"x\":1}").ok, "rewrite");
+  ExpectEq(ReadFile(temp.path + "/" + ir::kFileName), "{\"x\":1}", "rewritten content");
+  Expect(ListDirectory(temp.path).size() == 1, "still no temporary file");
+
+  // A stale temporary file (crash mid-write) is overwritten, not appended to.
+  WriteFile(temp.path + "/" + ir::kFileName + ".tmp", std::string(100, 'z'));
+  Expect(ir::Write(temp.path, text).ok, "write over a stale temporary file");
+  ExpectEq(ReadFile(temp.path + "/" + ir::kFileName), text, "content after a stale temp");
+  Expect(ListDirectory(temp.path).size() == 1, "the stale temporary file is consumed");
+
+  const Status missing = ir::Write(temp.path + "/missing", text);
+  Expect(!missing.ok && missing.message.find("cannot create completion record") != std::string::npos,
+         "a missing directory fails the write: " + missing.message);
+}
+
+void TestInstallRecordSealAndPromote() {
+  TempDir temp;
+  const std::string staging = temp.path + "/abc" + ir::kStagingSuffix;
+  const std::string version = temp.path + "/abc";
+  EnsureDirectory(staging);
+
+  ir::SealResult sealed = ir::Seal(staging, "abc", kRecordBundle, "ff", "");
+  Expect(!sealed.status.ok && !sealed.file_failure &&
+             sealed.status.message.find("bundle missing after install") != std::string::npos,
+         "no bundle: a bundle failure: " + sealed.status.message);
+  Expect(!ir::HasRecordFile(staging), "no record without a bundle");
+
+  WriteFile(staging + "/" + kRecordBundle, "var a = 1;");
+  sealed = ir::Seal(staging, "abc", kRecordBundle, "ff", "");
+  Expect(sealed.status.ok, "seal hashes the bundle: " + sealed.status.message);
+  const ir::Record record = ir::Read(staging);
+  ExpectEq(record.bundle_sha256, pushy::digest::Sha256File(staging + "/" + kRecordBundle),
+           "sealed digest is the bundle's");
+  ExpectEq(record.artifact_sha256, "ff", "sealed artifact digest");
+  Expect(ir::IsComplete(staging, "abc", kRecordBundle), "sealed staging is complete");
+
+  // A digest computed while extracting is taken as-is.
+  sealed = ir::Seal(staging, "abc", kRecordBundle, "", "0123");
+  Expect(sealed.status.ok, "seal with a known digest");
+  ExpectEq(ir::Read(staging).bundle_sha256, "0123", "known digest recorded");
+  ExpectEq(ir::Read(staging).artifact_sha256, "", "no artifact digest");
+
+  // The version directory must be gone before the rename.
+  EnsureDirectory(version + "/old");
+  const Status blocked = ir::Promote(staging, version);
+  Expect(!blocked.ok && blocked.message.find("cannot move") != std::string::npos,
+         "promote never merges into an existing version directory: " + blocked.message);
+  std::system(("rm -rf \"" + version + "\"").c_str());
+  Expect(ir::Promote(staging, version).ok, "promote");
+  Expect(!Exists(staging) && ir::IsComplete(version, "abc", kRecordBundle),
+         "promoted: installed");
+  ir::Activation activation;
+  const Status wrong = ir::CheckActivation(version, "abc", kRecordBundle, false, &activation);
+  Expect(!wrong.ok && wrong.message.find("bundle digest mismatch") != std::string::npos,
+         "a wrong known digest is caught at activation: " + wrong.message);
+
+  // A record that cannot be written is a file failure. A directory where the
+  // temporary file goes makes the write fail on every platform and user.
+  TempDir blocked_dir;
+  WriteFile(blocked_dir.path + "/" + kRecordBundle, "x");
+  EnsureDirectory(blocked_dir.path + "/" + ir::kFileName + ".tmp");
+  sealed = ir::Seal(blocked_dir.path, "abc", kRecordBundle, "", "");
+  Expect(!sealed.status.ok && sealed.file_failure,
+         "an unwritable record is a file failure: " + sealed.status.message);
+}
+
+void TestInstallRecordUnchanged() {
+  TempDir temp;
+  const std::string dir = temp.path + "/abc";
+  const std::string bundle = dir + "/" + kRecordBundle;
+  WriteFile(bundle, "var a = 1;");
+  Expect(ir::Seal(dir, "abc", kRecordBundle, "", "").status.ok, "seal");
+
+  ir::Activation passed;
+  Expect(ir::CheckActivation(dir, "abc", kRecordBundle, false, &passed).ok, "activate");
+  Expect(passed.basis == ir::Activation::Basis::kDigest, "verified by digest");
+  Expect(ir::Unchanged(dir, kRecordBundle, false, passed), "untouched");
+
+  // Same bytes, new file: a different inode / ctime.
+  unlink(bundle.c_str());
+  WriteFile(bundle, "var a = 1;");
+  Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "a replaced bundle is a change");
+  Expect(ir::CheckActivation(dir, "abc", kRecordBundle, false, &passed).ok, "re-verify");
+  Expect(ir::Unchanged(dir, kRecordBundle, false, passed), "re-verified");
+
+  std::string text;
+  Expect(ir::Build("abc", "00", "", &text).ok, "build");
+  Expect(ir::Write(dir, text).ok, "rewrite record");
+  Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "a rewritten record is a change");
+
+  // Grandfathered: only while there is still no record and the version is
+  // still current/last.
+  unlink((dir + "/" + ir::kFileName).c_str());
+  Expect(ir::CheckActivation(dir, "abc", kRecordBundle, true, &passed).ok, "grandfathered");
+  Expect(passed.basis == ir::Activation::Basis::kGrandfathered, "basis");
+  Expect(ir::Unchanged(dir, kRecordBundle, true, passed), "still grandfathered");
+  Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "no longer current/last");
+  WriteFile(dir + "/" + ir::kFileName, "");
+  Expect(!ir::Unchanged(dir, kRecordBundle, true, passed), "a record appeared");
+
+  // Legacy marker: the marker and the bundle must stay put.
+  Expect(ir::CheckActivation(dir, "abc", kRecordBundle, false, &passed).ok, "legacy");
+  Expect(passed.basis == ir::Activation::Basis::kLegacyMarker, "legacy basis");
+  Expect(ir::Unchanged(dir, kRecordBundle, false, passed), "legacy untouched");
+  unlink(bundle.c_str());
+  Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "bundle gone");
+}
+
 int main(int argc, char** argv) {
   if (argc > 1) {
     g_fixtures_dir = argv[1];
@@ -1490,6 +1784,12 @@ int main(int argc, char** argv) {
       {"ApplyArchivePatchFromPpk", TestApplyArchivePatchFromPpk},
       {"ApplyArchivePatchHostCopies", TestApplyArchivePatchHostCopies},
       {"ApplyArchivePatchWithHbcTransform", TestApplyArchivePatchWithHbcTransform},
+      {"InstallRecordVectors", TestInstallRecordVectors},
+      {"InstallRecordParse", TestInstallRecordParse},
+      {"InstallRecordBuild", TestInstallRecordBuild},
+      {"InstallRecordWriteIsAtomic", TestInstallRecordWriteIsAtomic},
+      {"InstallRecordSealAndPromote", TestInstallRecordSealAndPromote},
+      {"InstallRecordUnchanged", TestInstallRecordUnchanged},
   };
 
   int failures = 0;

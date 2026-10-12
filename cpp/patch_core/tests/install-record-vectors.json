@@ -1,0 +1,222 @@
+{
+  "description": "Completion records (cpp/patch_core/install_record.h), shared by Android, iOS and HarmonyOS. Each vector writes `record` as the raw text of <dir>/.pushy-complete (null: no record file) next to a bundle whose content is `var a = 1;` (unless `bundle` is false), then checks IsComplete(dir, `hash` or \"abc\") against `complete`, CheckActivation(dir, hash, grandfathered = `grandfathered`) against `activation` (\"ok\" or a substring of the rejection) and RecordedBundleSha256 against `recorded` (default \"\"). In the record text, @SHA@ is the bundle's SHA-256 (lowercase hex), @SHA_UPPER@ the same in uppercase and @OTHER_SHA@ the digest of other content. `was` records how the platforms disagreed before the logic was shared.",
+  "vectors": [
+    {
+      "name": "legacy empty marker: installed, activates unverified",
+      "record": "",
+      "complete": true,
+      "activation": "ok"
+    },
+    {
+      "name": "schema-1 record with a matching digest",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA@\",\"artifactSha256\":\"ff\"}",
+      "complete": true,
+      "activation": "ok",
+      "recorded": "@SHA@"
+    },
+    {
+      "name": "digest compare is case-insensitive",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA_UPPER@\"}",
+      "complete": true,
+      "activation": "ok",
+      "recorded": "@SHA_UPPER@"
+    },
+    {
+      "name": "unknown members are ignored",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA@\",\"future\":{\"x\":[1,2]}}",
+      "complete": true,
+      "activation": "ok",
+      "recorded": "@SHA@"
+    },
+    {
+      "name": "schema written as 1.0 is the number 1",
+      "record": "{\"schema\":1.0,\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA@\"}",
+      "complete": true,
+      "activation": "ok",
+      "recorded": "@SHA@"
+    },
+    {
+      "name": "tampered bundle",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"@OTHER_SHA@\"}",
+      "complete": true,
+      "activation": "bundle digest mismatch",
+      "recorded": "@OTHER_SHA@"
+    },
+    {
+      "name": "no bundleSha256: installed for dedup, never activated",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\"}",
+      "complete": true,
+      "activation": "completion record mismatch"
+    },
+    {
+      "name": "empty bundleSha256",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"\"}",
+      "complete": true,
+      "activation": "completion record mismatch"
+    },
+    {
+      "name": "null bundleSha256",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":null}",
+      "complete": true,
+      "activation": "completion record mismatch"
+    },
+    {
+      "name": "numeric bundleSha256 is not a digest",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":123}",
+      "complete": true,
+      "activation": "completion record mismatch",
+      "was": "Android's crash-attribution read coerced it to \"123\""
+    },
+    {
+      "name": "only an artifact digest",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"artifactSha256\":\"@SHA@\"}",
+      "complete": true,
+      "activation": "completion record mismatch"
+    },
+    {
+      "name": "record of another version",
+      "record": "{\"schema\":1,\"versionHash\":\"def\",\"bundleSha256\":\"@SHA@\"}",
+      "complete": false,
+      "activation": "completion record mismatch",
+      "recorded": "@SHA@",
+      "was": "iOS/Harmony switchVersion said \"is incomplete.\""
+    },
+    {
+      "name": "future schema",
+      "record": "{\"schema\":2,\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA@\"}",
+      "complete": false,
+      "activation": "completion record mismatch",
+      "recorded": "@SHA@"
+    },
+    {
+      "name": "schema as a string",
+      "record": "{\"schema\":\"1\",\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA@\"}",
+      "complete": false,
+      "activation": "completion record mismatch",
+      "recorded": "@SHA@",
+      "was": "Android (optInt) accepted it"
+    },
+    {
+      "name": "schema as a boolean",
+      "record": "{\"schema\":true,\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA@\"}",
+      "complete": false,
+      "activation": "completion record mismatch",
+      "recorded": "@SHA@",
+      "was": "iOS (NSNumber intValue) accepted it"
+    },
+    {
+      "name": "fractional schema",
+      "record": "{\"schema\":1.5,\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA@\"}",
+      "complete": false,
+      "activation": "completion record mismatch",
+      "recorded": "@SHA@",
+      "was": "Android (optInt) and iOS (intValue) truncated it to 1"
+    },
+    {
+      "name": "numeric versionHash",
+      "hash": "123",
+      "record": "{\"schema\":1,\"versionHash\":123,\"bundleSha256\":\"@SHA@\"}",
+      "complete": false,
+      "activation": "completion record mismatch",
+      "recorded": "@SHA@",
+      "was": "Android (optString) coerced it to \"123\""
+    },
+    {
+      "name": "an empty JSON object is not the legacy marker",
+      "record": "{}",
+      "complete": false,
+      "activation": "completion record mismatch",
+      "was": "every platform trusted it like the zero-byte marker"
+    },
+    {
+      "name": "malformed JSON",
+      "record": "not json",
+      "complete": false,
+      "activation": "has no valid completion record"
+    },
+    {
+      "name": "truncated record",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\"",
+      "complete": false,
+      "activation": "has no valid completion record"
+    },
+    {
+      "name": "an array",
+      "record": "[1,2]",
+      "complete": false,
+      "activation": "has no valid completion record"
+    },
+    {
+      "name": "null",
+      "record": "null",
+      "complete": false,
+      "activation": "has no valid completion record"
+    },
+    {
+      "name": "whitespace only",
+      "record": " \n",
+      "complete": false,
+      "activation": "has no valid completion record"
+    },
+    {
+      "name": "no record file",
+      "record": null,
+      "complete": false,
+      "activation": "is incomplete",
+      "was": "Android said \"has no valid completion record.\""
+    },
+    {
+      "name": "no record file, current/last version: grandfathered",
+      "record": null,
+      "grandfathered": true,
+      "complete": false,
+      "activation": "ok"
+    },
+    {
+      "name": "a recorded current/last version is verified",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\"}",
+      "grandfathered": true,
+      "complete": true,
+      "activation": "completion record mismatch"
+    },
+    {
+      "name": "a recorded current/last version with a bad digest is refused",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"@OTHER_SHA@\"}",
+      "grandfathered": true,
+      "complete": true,
+      "activation": "bundle digest mismatch",
+      "recorded": "@OTHER_SHA@"
+    },
+    {
+      "name": "legacy marker of a current/last version",
+      "record": "",
+      "grandfathered": true,
+      "complete": true,
+      "activation": "ok"
+    },
+    {
+      "name": "no bundle",
+      "record": "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"@SHA@\"}",
+      "bundle": false,
+      "complete": false,
+      "activation": "not found",
+      "recorded": "@SHA@"
+    },
+    {
+      "name": "no bundle, legacy marker",
+      "record": "",
+      "bundle": false,
+      "complete": false,
+      "activation": "not found"
+    },
+    {
+      "name": "no bundle, grandfathered: still not found",
+      "record": null,
+      "bundle": false,
+      "grandfathered": true,
+      "complete": false,
+      "activation": "not found",
+      "was": "iOS let a grandfathered version without its bundle through"
+    }
+  ]
+}
