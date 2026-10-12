@@ -9,7 +9,9 @@ import { isSafePathComponent } from './PathUtils';
 import { QUERY_PATH, STATUS_NONE } from './Texts';
 import { monotonicNowMs } from './MonotonicClock';
 import {
+  ERROR_DELTA_FAILED,
   ERROR_DOWNLOAD_FAILED,
+  PushyError,
   createPushyError,
   getErrorMessage,
 } from './ErrorCodes';
@@ -745,8 +747,19 @@ async function performAttempts(
         return true;
       } catch (e) {
         logger.warn(TAG, `${type} attempt failed: ${getErrorMessage(e)}`);
+        if (!isMirrorRetryable(e)) {
+          // The bytes arrived but could not be applied: every mirror serves
+          // the same artifact, so move on to the next strategy instead of
+          // re-downloading it (update_flow_core IsMirrorRetryableCode, JS
+          // client.ts isMirrorRetryableCode).
+          break;
+        }
       }
     }
   }
   return false;
+}
+
+function isMirrorRetryable(error: unknown): boolean {
+  return !(error instanceof PushyError && error.code === ERROR_DELTA_FAILED);
 }
