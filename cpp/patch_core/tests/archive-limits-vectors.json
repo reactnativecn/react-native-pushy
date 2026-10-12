@@ -1,0 +1,418 @@
+{
+  "description": "Archive extraction limits (cpp/patch_core/archive_limits.h), shared by Android, iOS and HarmonyOS. `entries`: an EntryAccumulator(archiveBytes) is fed each entry in order — Accept(size, compressed, symlink, name) when `compressed` is given, AcceptExtracted(size, symlink, name) otherwise; `repeat` feeds the same entry that many times — and must stop at `expect` (a substring of the first rejection) or accept them all (\"ok\", then `count`/`total` when given). `uncompressed`: CheckUncompressedSize(archiveBytes, uncompressedBytes). `probes`: PlanUnknownLengthFreeSpaceProbe(knownTotal, writtenBefore, chunkBytes, reservedUntil) must return `probe`, `reserve` and `after` (the new reservedUntil). `reservedNames`: IsReservedEntryName. `was` records how the platforms disagreed before the rules were shared; the strictest reading won.",
+  "entries": [
+    {
+      "name": "a small package",
+      "archiveBytes": 1000,
+      "entries": [
+        {
+          "name": "index.bundlejs",
+          "size": 3000,
+          "compressed": 900
+        },
+        {
+          "name": "assets/",
+          "size": 0,
+          "compressed": 0
+        },
+        {
+          "name": "assets/logo.png",
+          "size": 3,
+          "compressed": 3
+        }
+      ],
+      "expect": "ok",
+      "count": 3,
+      "total": 3003
+    },
+    {
+      "name": "an entry at the per-entry cap",
+      "archiveBytes": 536870912,
+      "entries": [
+        {
+          "name": "big.bin",
+          "size": 536870912,
+          "compressed": 536870912
+        }
+      ],
+      "expect": "ok",
+      "total": 536870912
+    },
+    {
+      "name": "an entry over the per-entry cap",
+      "archiveBytes": 629145600,
+      "entries": [
+        {
+          "name": "big.bin",
+          "size": 536870913,
+          "compressed": 536870913
+        }
+      ],
+      "expect": "archive entry too large: big.bin"
+    },
+    {
+      "name": "the running total over the cap",
+      "archiveBytes": 2726297600,
+      "entries": [
+        {
+          "name": "part.bin",
+          "size": 524288000,
+          "compressed": 524288000,
+          "repeat": 5
+        }
+      ],
+      "expect": "archive expands beyond 2147483648 bytes"
+    },
+    {
+      "name": "an entry at exactly 100:1 above the threshold",
+      "archiveBytes": 3000000,
+      "entries": [
+        {
+          "name": "text.json",
+          "size": 2000000,
+          "compressed": 20000
+        }
+      ],
+      "expect": "ok"
+    },
+    {
+      "name": "an entry just past 100:1",
+      "archiveBytes": 3000000,
+      "entries": [
+        {
+          "name": "text.json",
+          "size": 2000001,
+          "compressed": 20000
+        }
+      ],
+      "expect": "archive entry compression ratio too high: text.json",
+      "was": "Android and iOS divided (2000001 / 20000 = 100) and accepted it; Harmony's whole-archive check already compared size > compressed * 100"
+    },
+    {
+      "name": "no ratio check up to 1 MiB",
+      "archiveBytes": 2097152,
+      "entries": [
+        {
+          "name": "zeros.bin",
+          "size": 1048576,
+          "compressed": 1
+        }
+      ],
+      "expect": "ok"
+    },
+    {
+      "name": "a compression bomb just past 1 MiB",
+      "archiveBytes": 2097152,
+      "entries": [
+        {
+          "name": "bomb.bin",
+          "size": 1048577,
+          "compressed": 1048
+        }
+      ],
+      "expect": "archive entry compression ratio too high: bomb.bin"
+    },
+    {
+      "name": "a zero compressed size bounds nothing",
+      "archiveBytes": 4194304,
+      "entries": [
+        {
+          "name": "bomb.bin",
+          "size": 2097152,
+          "compressed": 0
+        }
+      ],
+      "expect": "archive entry compression ratio too high: bomb.bin",
+      "was": "Android and iOS skipped the ratio check when the compressed size was 0"
+    },
+    {
+      "name": "small entries adding up past the whole-archive ratio",
+      "archiveBytes": 10240,
+      "entries": [
+        {
+          "name": "small.bin",
+          "size": 524288,
+          "compressed": 1024,
+          "repeat": 3
+        }
+      ],
+      "expect": "archive compression ratio exceeds 100:1 (1572864/10240)",
+      "was": "Android and iOS checked each entry only; Harmony checked the whole archive before unpacking"
+    },
+    {
+      "name": "an entry of unknown size",
+      "archiveBytes": 1000,
+      "entries": [
+        {
+          "name": "a.bin",
+          "size": -1,
+          "compressed": 10
+        }
+      ],
+      "expect": "archive entry size unknown: a.bin",
+      "was": "Android skipped an entry whose size was -1"
+    },
+    {
+      "name": "a symlink",
+      "archiveBytes": 1000,
+      "entries": [
+        {
+          "name": "index.bundlejs",
+          "size": 10,
+          "compressed": 10
+        },
+        {
+          "name": "assets",
+          "size": 16,
+          "compressed": 16,
+          "symlink": true
+        }
+      ],
+      "expect": "archive entry is a symlink: assets",
+      "was": "only iOS refused symlinks; java.util.zip writes the link as a regular file and Harmony's walk followed it"
+    },
+    {
+      "name": "a symlink whose name is not known yet",
+      "archiveBytes": 1000,
+      "entries": [
+        {
+          "name": "",
+          "size": 10,
+          "compressed": 10
+        },
+        {
+          "name": "",
+          "size": 16,
+          "compressed": 16,
+          "symlink": true
+        }
+      ],
+      "expect": "archive entry is a symlink: #1"
+    },
+    {
+      "name": "a reserved name",
+      "archiveBytes": 1000,
+      "entries": [
+        {
+          "name": "index.bundlejs",
+          "size": 10,
+          "compressed": 10
+        },
+        {
+          "name": ".pushy-complete",
+          "size": 2,
+          "compressed": 2
+        }
+      ],
+      "expect": "archive contains reserved entry .pushy-complete"
+    },
+    {
+      "name": "a reserved directory component",
+      "archiveBytes": 1000,
+      "entries": [
+        {
+          "name": "assets/.pushy-x/a.png",
+          "size": 2,
+          "compressed": 2
+        }
+      ],
+      "expect": "archive contains reserved entry assets/.pushy-x/a.png",
+      "was": "Android checked the base name only and iOS the last component of each unpacked path; Harmony refused it at any depth"
+    },
+    {
+      "name": "extracted entries within the whole-archive ratio",
+      "archiveBytes": 1048576,
+      "entries": [
+        {
+          "name": "assets",
+          "size": 0
+        },
+        {
+          "name": "assets/a.bin",
+          "size": 2097152
+        }
+      ],
+      "expect": "ok",
+      "count": 2,
+      "total": 2097152
+    },
+    {
+      "name": "extracted entries past the whole-archive ratio",
+      "archiveBytes": 20000,
+      "entries": [
+        {
+          "name": "a.bin",
+          "size": 2097152
+        }
+      ],
+      "expect": "archive compression ratio exceeds 100:1"
+    },
+    {
+      "name": "extracted entry over the per-entry cap",
+      "archiveBytes": 536870912,
+      "entries": [
+        {
+          "name": "big.bin",
+          "size": 536870913
+        }
+      ],
+      "expect": "archive entry too large: big.bin"
+    },
+    {
+      "name": "20000 entries",
+      "archiveBytes": 1000,
+      "entries": [
+        {
+          "name": "e",
+          "size": 0,
+          "compressed": 0,
+          "repeat": 20000
+        }
+      ],
+      "expect": "ok",
+      "count": 20000,
+      "total": 0
+    },
+    {
+      "name": "20001 entries",
+      "archiveBytes": 1000,
+      "entries": [
+        {
+          "name": "e",
+          "size": 0,
+          "compressed": 0,
+          "repeat": 20001
+        }
+      ],
+      "expect": "archive has too many entries (> 20000)"
+    }
+  ],
+  "uncompressed": [
+    {
+      "name": "within both limits",
+      "archiveBytes": 1024,
+      "uncompressedBytes": 4096,
+      "expect": "ok"
+    },
+    {
+      "name": "no ratio check up to 1 MiB",
+      "archiveBytes": 1,
+      "uncompressedBytes": 1048576,
+      "expect": "ok"
+    },
+    {
+      "name": "at the total cap",
+      "archiveBytes": 2147483648,
+      "uncompressedBytes": 2147483648,
+      "expect": "ok"
+    },
+    {
+      "name": "past the total cap",
+      "archiveBytes": 2147483648,
+      "uncompressedBytes": 2147483649,
+      "expect": "archive expands beyond 2147483648 bytes (2147483649)"
+    },
+    {
+      "name": "exactly 100:1",
+      "archiveBytes": 1048576,
+      "uncompressedBytes": 104857600,
+      "expect": "ok"
+    },
+    {
+      "name": "just past 100:1",
+      "archiveBytes": 1048576,
+      "uncompressedBytes": 104857601,
+      "expect": "archive compression ratio exceeds 100:1"
+    },
+    {
+      "name": "an empty archive expanding past 1 MiB",
+      "archiveBytes": 0,
+      "uncompressedBytes": 2097152,
+      "expect": "archive compression ratio exceeds 100:1",
+      "was": "Harmony skipped the ratio when the archive size was 0"
+    },
+    {
+      "name": "an empty archive expanding to little",
+      "archiveBytes": 0,
+      "uncompressedBytes": 1048576,
+      "expect": "ok"
+    }
+  ],
+  "probes": [
+    {
+      "name": "never probes when the length is known",
+      "knownTotal": 1000,
+      "writtenBefore": 0,
+      "chunkBytes": 4096,
+      "reservedUntil": 0,
+      "probe": false,
+      "reserve": 8388608,
+      "after": 0
+    },
+    {
+      "name": "probes the first chunk, reserving PROBE ahead",
+      "knownTotal": 0,
+      "writtenBefore": 0,
+      "chunkBytes": 4096,
+      "reservedUntil": 0,
+      "probe": true,
+      "reserve": 8388608,
+      "after": 8388608
+    },
+    {
+      "name": "a chunk inside the reservation",
+      "knownTotal": 0,
+      "writtenBefore": 4096,
+      "chunkBytes": 4096,
+      "reservedUntil": 8388608,
+      "probe": false,
+      "reserve": 8388608,
+      "after": 8388608
+    },
+    {
+      "name": "a chunk ending on the reservation",
+      "knownTotal": 0,
+      "writtenBefore": 8388598,
+      "chunkBytes": 10,
+      "reservedUntil": 8388608,
+      "probe": false,
+      "reserve": 8388608,
+      "after": 8388608
+    },
+    {
+      "name": "a chunk crossing the reservation",
+      "knownTotal": 0,
+      "writtenBefore": 8388598,
+      "chunkBytes": 11,
+      "reservedUntil": 8388608,
+      "probe": true,
+      "reserve": 8388608,
+      "after": 16777206
+    },
+    {
+      "name": "a chunk larger than PROBE reserves its own size",
+      "knownTotal": 0,
+      "writtenBefore": 100,
+      "chunkBytes": 16777217,
+      "reservedUntil": 0,
+      "probe": true,
+      "reserve": 16777217,
+      "after": 16777317
+    }
+  ],
+  "reservedNames": {
+    ".pushy-complete": true,
+    "sub/dir/.pushy-complete": true,
+    "sub\\dir\\.pushy-anything": true,
+    ".pushy-complete/": true,
+    "a/.pushy-x/b.png": true,
+    ".pushy-": true,
+    "pushy-complete": false,
+    "sub/.pushy/file": false,
+    "index.bundlejs": false,
+    "": false,
+    "a/b.pushy-c": false,
+    ".pushy": false,
+    "assets/x.pushy-": false
+  }
+}

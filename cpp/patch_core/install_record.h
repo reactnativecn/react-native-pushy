@@ -45,6 +45,10 @@ using delta::Status;
 
 constexpr int kSchema = 1;
 constexpr const char* kFileName = ".pushy-complete";
+// Every name starting with this prefix, at any depth of a version directory,
+// belongs to the SDK (the record, its temp file): no archive may ship one
+// (archive_limits::IsReservedEntryName).
+constexpr const char* kReservedPrefix = ".pushy-";
 constexpr const char* kStagingSuffix = ".staging";
 // A record is a few hundred bytes; anything larger is not one.
 constexpr long long kMaxRecordBytes = 64 * 1024;

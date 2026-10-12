@@ -1,3 +1,4 @@
+#include "../archive_limits.h"
 #include "../archive_patch_core.h"
 #include "../digest.h"
 #include "../install_record.h"
@@ -1738,6 +1739,153 @@ void TestInstallRecordUnchanged() {
   Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "bundle gone");
 }
 
+// ---- Archive extraction limits (archive_limits.h) ----
+
+namespace al = pushy::archive_limits;
+
+long long AsLongLong(const flowjson::Value& value) {
+  return static_cast<long long>(value.AsNumber());
+}
+
+void ExpectVerdict(const Status& status, const std::string& expected, const std::string& name) {
+  if (expected == "ok") {
+    Expect(status.ok, name + ": " + status.message);
+    return;
+  }
+  Expect(!status.ok, name + ": expected [" + expected + "], accepted");
+  Expect(status.message.find(expected) != std::string::npos,
+         name + ": rejection [" + status.message + "] lacks [" + expected + "]");
+}
+
+flowjson::Value ArchiveLimitsVectors() {
+  const std::string path = JoinPath(g_fixtures_dir, "../archive-limits-vectors.json");
+  bool ok = false;
+  flowjson::Value doc = flowjson::Parse(ReadFile(path), &ok);
+  Expect(ok && doc.Get("entries").IsArray(), "vectors file must parse: " + path);
+  return doc;
+}
+
+// The shared vectors (tests/archive-limits-vectors.json), including the
+// cases the platforms used to disagree on.
+void TestArchiveLimitsVectors() {
+  const flowjson::Value doc = ArchiveLimitsVectors();
+  Expect(doc.Get("entries").Size() >= 20, "entry vectors lost their cases");
+  for (const flowjson::Value& vector : doc.Get("entries").elements()) {
+    const std::string name = vector.Get("name").AsString();
+    al::EntryAccumulator accumulator(AsLongLong(vector.Get("archiveBytes")));
+    Status status = Status::Ok();
+    for (const flowjson::Value& entry : vector.Get("entries").elements()) {
+      const long long repeat =
+          entry.Get("repeat").IsNumber() ? AsLongLong(entry.Get("repeat")) : 1;
+      const bool symlink = entry.Get("symlink").IsBool() && entry.Get("symlink").AsBool();
+      for (long long i = 0; i < repeat && status.ok; i++) {
+        status = entry.Get("compressed").IsNumber()
+            ? accumulator.Accept(AsLongLong(entry.Get("size")),
+                                 AsLongLong(entry.Get("compressed")), symlink,
+                                 entry.Get("name").AsString())
+            : accumulator.AcceptExtracted(AsLongLong(entry.Get("size")), symlink,
+                                          entry.Get("name").AsString());
+      }
+      if (!status.ok) {
+        break;
+      }
+    }
+    ExpectVerdict(status, vector.Get("expect").AsString(), name);
+    if (vector.Get("count").IsNumber()) {
+      Expect(accumulator.entries() == AsLongLong(vector.Get("count")), name + ": count");
+    }
+    if (vector.Get("total").IsNumber()) {
+      Expect(accumulator.total_uncompressed() == AsLongLong(vector.Get("total")),
+             name + ": total");
+    }
+  }
+
+  for (const flowjson::Value& vector : doc.Get("uncompressed").elements()) {
+    ExpectVerdict(al::CheckUncompressedSize(AsLongLong(vector.Get("archiveBytes")),
+                                            AsLongLong(vector.Get("uncompressedBytes"))),
+                  vector.Get("expect").AsString(), vector.Get("name").AsString());
+  }
+
+  for (const flowjson::Value& vector : doc.Get("probes").elements()) {
+    const std::string name = vector.Get("name").AsString();
+    const al::FreeSpaceProbe plan = al::PlanUnknownLengthFreeSpaceProbe(
+        AsLongLong(vector.Get("knownTotal")), AsLongLong(vector.Get("writtenBefore")),
+        AsLongLong(vector.Get("chunkBytes")), AsLongLong(vector.Get("reservedUntil")));
+    Expect(plan.probe == vector.Get("probe").AsBool(), name + ": probe");
+    Expect(plan.reserve == AsLongLong(vector.Get("reserve")), name + ": reserve");
+    Expect(plan.reserved_until == AsLongLong(vector.Get("after")), name + ": after");
+  }
+
+  const flowjson::Value& names = doc.Get("reservedNames");
+  Expect(names.members().size() >= 10, "reserved name vectors lost their cases");
+  for (const auto& member : names.members()) {
+    Expect(al::IsReservedEntryName(member.first) == member.second.AsBool(),
+           "IsReservedEntryName(" + member.first + ")");
+  }
+}
+
+// Walking a stream of unknown length: no write ever passes a probed
+// reservation, and most chunks need no probe.
+void TestArchiveLimitsProbeWalk() {
+  long long reserved_until = 0;
+  long long written = 0;
+  int probes = 0;
+  const long long chunk = 300 * 1024;
+  for (int i = 0; i < 100; i++) {
+    const al::FreeSpaceProbe plan =
+        al::PlanUnknownLengthFreeSpaceProbe(0, written, chunk, reserved_until);
+    probes += plan.probe ? 1 : 0;
+    reserved_until = plan.reserved_until;
+    written += chunk;
+    Expect(written <= reserved_until, "a write passed the reservation");
+  }
+  Expect(probes > 1 && probes < 100, "probes once per reservation");
+}
+
+void TestArchiveLimitsExtractedDirectory() {
+  {
+    TempDir temp;
+    WriteFile(temp.path + "/index.bundlejs", std::string(3000, 'a'));
+    WriteFile(temp.path + "/assets/img/logo.png", "png");
+    Status status = al::CheckExtractedDirectory(temp.path, 1000);
+    Expect(status.ok, "a plain tree passes: " + status.message);
+    // 1 MiB + 1 of expansion from a 10 KB archive: past the whole-archive ratio.
+    WriteFile(temp.path + "/assets/zeros.bin", std::string(1024 * 1024, '\0'));
+    ExpectVerdict(al::CheckExtractedDirectory(temp.path, 10240),
+                  "archive compression ratio exceeds 100:1", "whole-archive ratio");
+  }
+  {
+    TempDir temp;
+    WriteFile(temp.path + "/assets/.pushy-x/a.png", "png");
+    ExpectVerdict(al::CheckExtractedDirectory(temp.path, 1000),
+                  "archive contains reserved entry assets/.pushy-x", "reserved directory");
+  }
+  {
+    TempDir temp;
+    WriteFile(temp.path + "/index.bundlejs", "x");
+    Expect(symlink("/tmp", (temp.path + "/assets").c_str()) == 0, "create symlink");
+    ExpectVerdict(al::CheckExtractedDirectory(temp.path, 1000),
+                  "archive entry is a symlink: assets", "symlink is not followed");
+  }
+  {
+    TempDir temp;
+    // 20001 entries: 200 directories of 99 files + their own entry, plus one.
+    for (int d = 0; d < 200; d++) {
+      const std::string dir = temp.path + "/d" + std::to_string(d);
+      EnsureDirectory(dir);
+      for (int f = 0; f < 99; f++) {
+        WriteFile(dir + "/f" + std::to_string(f), "");
+      }
+    }
+    Expect(al::CheckExtractedDirectory(temp.path, 1000).ok, "20000 entries pass");
+    WriteFile(temp.path + "/extra", "");
+    ExpectVerdict(al::CheckExtractedDirectory(temp.path, 1000),
+                  "archive has too many entries (> 20000)", "20001 entries");
+  }
+  ExpectVerdict(al::CheckExtractedDirectory("/nonexistent-pushy-dir", 1000),
+                "cannot list extracted directory", "missing directory");
+}
+
 int main(int argc, char** argv) {
   if (argc > 1) {
     g_fixtures_dir = argv[1];
@@ -1790,6 +1938,9 @@ int main(int argc, char** argv) {
       {"InstallRecordWriteIsAtomic", TestInstallRecordWriteIsAtomic},
       {"InstallRecordSealAndPromote", TestInstallRecordSealAndPromote},
       {"InstallRecordUnchanged", TestInstallRecordUnchanged},
+      {"ArchiveLimitsVectors", TestArchiveLimitsVectors},
+      {"ArchiveLimitsProbeWalk", TestArchiveLimitsProbeWalk},
+      {"ArchiveLimitsExtractedDirectory", TestArchiveLimitsExtractedDirectory},
   };
 
   int failures = 0;
