@@ -1,0 +1,353 @@
+{
+  "description": "Contract C1: native config JSON equivalence, replayed by the JS (src/updateFlowCore.ts), Harmony (UpdateContext.ts), Android (ConfigEquivalence.java) and iOS (PushyConfigsEquivalent) implementations. Two strings are equivalent iff both parse to JSON objects whose canonical forms deep-equal (key order ignored). Canonical: absent keys take {disabled:false, queryUrls:[], rnu:\"\", rn:\"\", afterDownload:\"none\"}; each string in endpoints/queryUrls (when an array) loses ALL trailing \"/\", then entries are deduplicated keeping the first occurrence. Present values are never coerced (0 is not false, null is not a default). Anything that is not a JSON object is never equivalent, not even to itself. Every case must hold in both argument orders. Hand-maintained: edit this file, then keep every platform green.",
+  "cases": [
+    {
+      "name": "identical",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "key order is ignored",
+      "a": "{\"appKey\":\"k\",\"packageVersion\":\"1.0\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"endpoints\":[\"https://a.example.com\"],\"packageVersion\":\"1.0\",\"appKey\":\"k\"}",
+      "equivalent": true
+    },
+    {
+      "name": "absent disabled equals false",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"disabled\":false}",
+      "equivalent": true
+    },
+    {
+      "name": "absent queryUrls equals []",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"queryUrls\":[]}",
+      "equivalent": true
+    },
+    {
+      "name": "absent rnu equals \"\"",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"rnu\":\"\"}",
+      "equivalent": true
+    },
+    {
+      "name": "absent rn equals \"\"",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"rn\":\"\"}",
+      "equivalent": true
+    },
+    {
+      "name": "absent afterDownload equals \"none\"",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"afterDownload\":\"none\"}",
+      "equivalent": true
+    },
+    {
+      "name": "every default explicit vs all absent",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"disabled\":false,\"queryUrls\":[],\"rnu\":\"\",\"rn\":\"\",\"afterDownload\":\"none\",\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "empty object vs explicit defaults",
+      "a": "{}",
+      "b": "{\"disabled\":false,\"queryUrls\":[],\"rnu\":\"\",\"rn\":\"\",\"afterDownload\":\"none\"}",
+      "equivalent": true
+    },
+    {
+      "name": "disabled true is not the default",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"disabled\":true}",
+      "equivalent": false
+    },
+    {
+      "name": "disabled true on both sides",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"disabled\":true}",
+      "b": "{\"disabled\":true,\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "disabled 0 is not false",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"disabled\":0}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"disabled\":false}",
+      "equivalent": false
+    },
+    {
+      "name": "disabled 0 is not the absent default",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"disabled\":0}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "non-default afterDownload is a change",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"afterDownload\":\"setNeedUpdate\"}",
+      "equivalent": false
+    },
+    {
+      "name": "non-empty rn is a change",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"rn\":\"0.80.0\"}",
+      "equivalent": false
+    },
+    {
+      "name": "null rn is not the absent default",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"rn\":null}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "null queryUrls is not the absent default",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"queryUrls\":null}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "null equals null",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"extra\":null}",
+      "b": "{\"extra\":null,\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "packageVersion present vs absent (no default)",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"packageVersion\":\"1.0\"}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "empty packageVersion vs absent (no default)",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"packageVersion\":\"\"}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "empty appKey vs absent appKey (no default)",
+      "a": "{\"appKey\":\"\"}",
+      "b": "{}",
+      "equivalent": false
+    },
+    {
+      "name": "different appKey",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"other\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "endpoints [] vs absent endpoints (no default)",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[]}",
+      "b": "{\"appKey\":\"k\"}",
+      "equivalent": false
+    },
+    {
+      "name": "single trailing slash stripped in endpoints",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com/\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "all trailing slashes stripped in endpoints",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com///\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "trailing slash stripped in queryUrls",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"queryUrls\":[\"https://q.example.com/endpoints.json/\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"queryUrls\":[\"https://q.example.com/endpoints.json\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "slash-only entry becomes empty string",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"//\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "trailing path slash stripped, inner slashes kept",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com/api/\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com/api\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "inner double slash is significant",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com//api\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com/api\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "host case is significant",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://A.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "trailing slashes only normalized in endpoints/queryUrls",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"homepage\":\"https://h.example.com/\"}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"homepage\":\"https://h.example.com\"}",
+      "equivalent": false
+    },
+    {
+      "name": "endpoints as a bare string are not normalized",
+      "a": "{\"appKey\":\"k\",\"endpoints\":\"https://a.example.com/\"}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":\"https://a.example.com\"}",
+      "equivalent": false
+    },
+    {
+      "name": "duplicates dropped after stripping, first occurrence kept",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com/\",\"https://b.example.com\",\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\",\"https://b.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "dedupe keeps first-occurrence order",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://b.example.com\",\"https://a.example.com\",\"https://b.example.com/\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://b.example.com\",\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "dedupe does not sort",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://b.example.com\",\"https://a.example.com\",\"https://b.example.com/\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\",\"https://b.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "queryUrls deduped",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"queryUrls\":[\"https://q.example.com//\",\"https://q.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"queryUrls\":[\"https://q.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "non-string list entries are deduped too",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[1,1.0,\"https://a.example.com\",{\"x\":1},{\"x\":1}]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[1,\"https://a.example.com/\",{\"x\":1}]}",
+      "equivalent": true
+    },
+    {
+      "name": "endpoint order is significant",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\",\"https://b.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://b.example.com\",\"https://a.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "queryUrls order is significant",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"queryUrls\":[\"https://q1.example.com\",\"https://q2.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"queryUrls\":[\"https://q2.example.com\",\"https://q1.example.com\"]}",
+      "equivalent": false
+    },
+    {
+      "name": "extra unknown key on one side",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"extra\":1}",
+      "equivalent": false
+    },
+    {
+      "name": "same unknown key on both sides",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"extra\":1}",
+      "b": "{\"extra\":1,\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "number 1 equals 1.0",
+      "a": "{\"appKey\":\"k\",\"n\":1}",
+      "b": "{\"appKey\":\"k\",\"n\":1.0}",
+      "equivalent": true
+    },
+    {
+      "name": "string \"1\" is not number 1",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"n\":\"1\"}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"n\":1}",
+      "equivalent": false
+    },
+    {
+      "name": "nested object key order is ignored",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"extra\":{\"x\":1,\"y\":[1,{\"p\":true,\"q\":null}]}}",
+      "b": "{\"extra\":{\"y\":[1,{\"q\":null,\"p\":true}],\"x\":1},\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"]}",
+      "equivalent": true
+    },
+    {
+      "name": "nested array order is significant",
+      "a": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"extra\":{\"y\":[1,2]}}",
+      "b": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example.com\"],\"extra\":{\"y\":[2,1]}}",
+      "equivalent": false
+    },
+    {
+      "name": "unicode is compared without normalization",
+      "a": "{\"appKey\":\"caf\\u00e9\"}",
+      "b": "{\"appKey\":\"cafe\\u0301\"}",
+      "equivalent": false
+    },
+    {
+      "name": "surrounding whitespace is irrelevant",
+      "a": " \n{\"appKey\":\"k\"}\t ",
+      "b": "{\"appKey\":\"k\"}",
+      "equivalent": true
+    },
+    {
+      "name": "JSON array is never equivalent, even to itself",
+      "a": "[]",
+      "b": "[]",
+      "equivalent": false
+    },
+    {
+      "name": "JSON array of an object is not an object",
+      "a": "[{\"appKey\":\"k\"}]",
+      "b": "{\"appKey\":\"k\"}",
+      "equivalent": false
+    },
+    {
+      "name": "JSON string is never equivalent",
+      "a": "\"{}\"",
+      "b": "\"{}\"",
+      "equivalent": false
+    },
+    {
+      "name": "JSON number is never equivalent",
+      "a": "1",
+      "b": "1",
+      "equivalent": false
+    },
+    {
+      "name": "JSON null is never equivalent",
+      "a": "null",
+      "b": "null",
+      "equivalent": false
+    },
+    {
+      "name": "JSON boolean is never equivalent",
+      "a": "true",
+      "b": "true",
+      "equivalent": false
+    },
+    {
+      "name": "invalid JSON is never equivalent, even to itself",
+      "a": "{",
+      "b": "{",
+      "equivalent": false
+    },
+    {
+      "name": "invalid JSON (unterminated) vs valid object",
+      "a": "{\"appKey\":\"k\"",
+      "b": "{\"appKey\":\"k\"}",
+      "equivalent": false
+    },
+    {
+      "name": "empty string is never equivalent",
+      "a": "",
+      "b": "",
+      "equivalent": false
+    },
+    {
+      "name": "trailing content after the object is invalid JSON",
+      "a": "{\"appKey\":\"k\"} x",
+      "b": "{\"appKey\":\"k\"}",
+      "equivalent": false
+    },
+    {
+      "name": "two concatenated objects are invalid JSON",
+      "a": "{\"appKey\":\"k\"}{\"appKey\":\"k\"}",
+      "b": "{\"appKey\":\"k\"}{\"appKey\":\"k\"}",
+      "equivalent": false
+    }
+  ]
+}

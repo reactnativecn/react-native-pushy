@@ -85,9 +85,10 @@ preferences domain.
 | `offline_skip` | Network-path probe reports no path | No window, no round, no wait; packaged bundle launches |
 | `spent_budget_skip` | 10.5s already elapsed (under the 2s minimum left) | Same as offline: the restore is not attempted |
 
-`config_equivalence` additionally checks the cross-platform canonical config
-equality (defaults, key order, trailing slashes, duplicates; `0` is not
-`false`; unparseable is never equivalent).
+`config_equivalence` additionally replays the cross-platform canonical config
+equality vectors in `cpp/update_flow_core/tests/config-equivalence-vectors.json`
+(contract C1, shared with the JS/Harmony bun test and the Android JUnit test)
+against the extracted `PushyConfigsEquivalent`, in both argument orders.
 
 A real GCD worker captures the request generation and blocks at a controlled
 response boundary. Semaphores establish each ordering. Reset races are exercised

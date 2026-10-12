@@ -127,6 +127,34 @@ const NATIVE_CONFIG_DEFAULTS: Record<string, unknown> = {
   afterDownload: 'none',
 };
 
+const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
+  if (a === b) {
+    return true;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((value, index) => jsonDeepEqual(value, b[index]))
+    );
+  }
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {
+    return false;
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const leftKeys = Object.keys(left);
+  return (
+    leftKeys.length === Object.keys(right).length &&
+    leftKeys.every(
+      (key) => Object.hasOwn(right, key) && jsonDeepEqual(left[key], right[key])
+    )
+  );
+};
+
+// Each string loses every trailing '/', then entries (strings or not) are
+// deduplicated by JSON value, keeping the first occurrence.
 const canonicalUrlList = (value: unknown): unknown => {
   if (!Array.isArray(value)) {
     return value;
@@ -134,14 +162,14 @@ const canonicalUrlList = (value: unknown): unknown => {
   const result: unknown[] = [];
   const visited = new Set<string>();
   for (const item of value) {
-    if (typeof item !== 'string') {
+    if (typeof item === 'string') {
+      const url = item.replace(/\/+$/, '');
+      if (!visited.has(url)) {
+        visited.add(url);
+        result.push(url);
+      }
+    } else if (!result.some((existing) => jsonDeepEqual(existing, item))) {
       result.push(item);
-      continue;
-    }
-    const url = item.replace(/\/+$/, '');
-    if (!visited.has(url)) {
-      visited.add(url);
-      result.push(url);
     }
   }
   return result;
@@ -176,32 +204,6 @@ export function canonicalizeNativeConfig(
   }
   return canonical;
 }
-
-const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
-  if (a === b) {
-    return true;
-  }
-  if (Array.isArray(a) || Array.isArray(b)) {
-    return (
-      Array.isArray(a) &&
-      Array.isArray(b) &&
-      a.length === b.length &&
-      a.every((value, index) => jsonDeepEqual(value, b[index]))
-    );
-  }
-  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {
-    return false;
-  }
-  const left = a as Record<string, unknown>;
-  const right = b as Record<string, unknown>;
-  const leftKeys = Object.keys(left);
-  return (
-    leftKeys.length === Object.keys(right).length &&
-    leftKeys.every(
-      (key) => Object.hasOwn(right, key) && jsonDeepEqual(left[key], right[key])
-    )
-  );
-};
 
 /**
  * Whether two native check config JSON strings describe the same config
