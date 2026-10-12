@@ -25,6 +25,7 @@ namespace {
 using pushy::delta::ApplyPatchFromFileSource;
 using pushy::delta::BundleRebuilder;
 using pushy::delta::CleanupOldEntries;
+using pushy::delta::MoveOldEntriesToTrash;
 using pushy::delta::CopyOperation;
 using pushy::delta::FileSourcePatchOptions;
 using pushy::delta::PatchManifest;
@@ -617,6 +618,46 @@ void TestCleanupOldEntriesRemovesOnlyExpiredPaths() {
   Expect(Exists(JoinPath(root, ".hidden")), "hidden entry should be kept");
 }
 
+void TestMoveOldEntriesToTrashKeepsEveryLiveVersion() {
+  TempDir temp;
+  const std::string root = JoinPath(temp.path, "trash-root");
+  const std::string trash = JoinPath(root, ".trash");
+  EnsureDirectory(root);
+
+  WriteFile(JoinPath(root, "current/index.bundlejs"), "current");
+  WriteFile(JoinPath(root, "previous/index.bundlejs"), "previous");
+  WriteFile(JoinPath(root, "running/index.bundlejs"), "running");
+  WriteFile(JoinPath(root, "stale/index.bundlejs"), "stale");
+  WriteFile(JoinPath(root, "recent/index.bundlejs"), "recent");
+  // Leftover of an interrupted earlier delete with the same name.
+  WriteFile(JoinPath(trash, "stale/index.bundlejs"), "older stale");
+
+  const std::time_t now = 1'700'000'000;
+  const std::time_t old_time = now - (9 * 24 * 60 * 60);
+  for (const char* name : {"current", "previous", "running", "stale"}) {
+    SetMtime(JoinPath(root, name), old_time);
+  }
+  SetMtime(JoinPath(root, "recent"), now - (2 * 24 * 60 * 60));
+
+  Status status = MoveOldEntriesToTrash(
+      root, std::vector<std::string>{"current", "previous", "running"}, 7,
+      trash, now);
+  Expect(status.ok, status.message);
+  Expect(Exists(JoinPath(root, "current")), "current is kept");
+  Expect(Exists(JoinPath(root, "previous")), "previous is kept");
+  Expect(Exists(JoinPath(root, "running")), "running is kept");
+  Expect(Exists(JoinPath(root, "recent")), "recent is kept");
+  Expect(!Exists(JoinPath(root, "stale")), "stale leaves the root");
+  Expect(Exists(JoinPath(trash, "stale.1/index.bundlejs")),
+         "stale lands in trash next to the leftover");
+  Expect(Exists(JoinPath(trash, "stale/index.bundlejs")), "leftover untouched");
+
+  Status purge = CleanupOldEntries(trash, std::vector<std::string>{}, 0);
+  Expect(purge.ok, purge.message);
+  Expect(!Exists(JoinPath(trash, "stale")), "trash is purged");
+  Expect(!Exists(JoinPath(trash, "stale.1")), "trash is purged");
+}
+
 void TestStateCoreSyncBinaryVersionResetsUpdates() {
   State state;
   state.package_version = "1.0.0";
@@ -1097,6 +1138,7 @@ int main(int argc, char** argv) {
       {"DirectoryWalkersBoundNestingDepth", TestDirectoryWalkersBoundNestingDepth},
       {"HpatchRejectsOversizedLzmaDictionary", TestHpatchRejectsOversizedLzmaDictionary},
       {"CleanupOldEntriesRemovesOnlyExpiredPaths", TestCleanupOldEntriesRemovesOnlyExpiredPaths},
+      {"MoveOldEntriesToTrashKeepsEveryLiveVersion", TestMoveOldEntriesToTrashKeepsEveryLiveVersion},
       {"StateCoreSyncBinaryVersionResetsUpdates", TestStateCoreSyncBinaryVersionResetsUpdates},
       {"StateCoreSwitchVersionAndMarkSuccess", TestStateCoreSwitchVersionAndMarkSuccess},
       {"StateCoreResolveLaunchStateAndRollback", TestStateCoreResolveLaunchStateAndRollback},

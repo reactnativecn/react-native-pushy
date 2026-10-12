@@ -43,16 +43,27 @@ public final class PushyRuntime {
         }
     });
 
+    // Set once the host called configure() in this process. JS config writes
+    // (syncNativeConfig) are then rejected with NATIVE_CONFIG_CONFLICT.
+    private static volatile boolean hostConfigured;
+
+    static boolean isHostConfigured() {
+        return hostConfigured;
+    }
+
     /**
      * Validate and persist a complete configuration, even before JS or bundle
      * resolution. This starts no network work and never resolves a bundle.
-     * Await the callback before continuing startup/prepareBundle. Unless JS
-     * uses nativeConfigSource: 'native', later JS config writes can replace it.
+     * Await the callback before continuing startup/prepareBundle. The host
+     * then owns the configuration for this process: the JS client must use
+     * nativeConfigSource: 'native', a JS config write is rejected with
+     * NATIVE_CONFIG_CONFLICT.
      */
     public static void configure(Context context, JSONObject options, final ConfigurationCallback callback) {
         if (context == null || options == null || callback == null) {
             throw new IllegalArgumentException("context, options and callback are required");
         }
+        hostConfigured = true;
         final Context applicationContext = context.getApplicationContext();
         // Snapshot caller-owned JSON before dispatch, not minutes later on a worker.
         final String snapshot = options.toString();

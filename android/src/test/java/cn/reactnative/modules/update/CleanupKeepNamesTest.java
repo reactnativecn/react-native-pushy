@@ -1,22 +1,23 @@
 package cn.reactnative.modules.update;
 
 import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertNull;
 import org.junit.Test;
 
 public class CleanupKeepNamesTest {
     @Test
-    public void fillsAvailableSlotsAndDeduplicates() {
+    public void keepsDistinctNonEmptyNamesInOrder() {
         assertArrayEquals(new String[] {"current", "running"},
             CleanupKeepNames.select("current", null, "running"));
         assertArrayEquals(new String[] {"same", "running"},
             CleanupKeepNames.select("same", "same", "running"));
-        assertArrayEquals(new String[] {"running", null},
-            CleanupKeepNames.select(null, null, "running"));
+        assertArrayEquals(new String[] {"running"},
+            CleanupKeepNames.select(null, "", "running"));
+        assertArrayEquals(new String[0], CleanupKeepNames.select(null, null, null));
     }
 
     @Test
-    public void defersWhenThreeDistinctVersionsNeedProtection() {
-        assertNull(CleanupKeepNames.select("current", "previous", "running"));
+    public void protectsThreeDistinctLiveVersions() {
+        assertArrayEquals(new String[] {"current", "previous", "running"},
+            CleanupKeepNames.select("current", "previous", "running"));
     }
 }

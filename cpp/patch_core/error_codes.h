@@ -50,6 +50,10 @@ constexpr const char* kApkInstallPermissionRequired =
     "APK_INSTALL_PERMISSION_REQUIRED";
 // PackageInstaller could not create, write, commit, or continue an APK session.
 constexpr const char* kApkInstallFailed = "APK_INSTALL_FAILED";
+// JS tried to write the native-check configuration (syncNativeConfig) in a
+// process whose host already configured it natively; JS must declare
+// nativeConfigSource: 'native' instead of competing for the config.
+constexpr const char* kNativeConfigConflict = "NATIVE_CONFIG_CONFLICT";
 
 }  // namespace error_codes
 }  // namespace pushy
