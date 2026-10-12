@@ -11,7 +11,7 @@
 // (scripts/check-constant-parity.js, part of `bun lint`, asserts they do):
 //   - android/.../ArchiveLimits.java
 //   - harmony/pushy/src/main/ets/ArchiveLimits.ts
-// iOS (RCTPushy.mm) includes this header directly.
+// iOS (RCTPushyInstaller.mm, RCTPushyDownloader.mm) includes this header directly.
 
 // Keep the core internal to whichever binary links it (see podspec Core).
 #pragma GCC visibility push(hidden)

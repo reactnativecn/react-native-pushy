@@ -11,7 +11,7 @@
 //   - src/error.ts                      (UpdateErrorCode, JS layer)
 //   - android/.../ErrorCodes.java      (Java constants)
 //   - harmony/pushy/src/main/ets/ErrorCodes.ts
-// iOS (RCTPushy.mm) includes this header directly.
+// iOS (ios/RCTPushy/*.mm) includes this header directly.
 //
 // Human-readable messages are NOT part of this contract: they may differ per
 // platform and locale. Only the codes are stable.

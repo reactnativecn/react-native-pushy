@@ -199,7 +199,7 @@ export const cInfo = {
   rnu: require('../package.json').version,
   rn: RNVersion,
   // tvOS reports Platform.OS 'ios'; label it apart so the server can bucket
-  // tvOS devices separately. Must match PushyOsName in RCTPushy.mm.
+  // tvOS devices separately. Must match PushyOsName in RCTPushyOrchestrator.mm.
   os: `${Platform.OS === 'ios' && Platform.isTV ? 'tvos' : Platform.OS} ${Platform.Version}`,
   uuid,
 };
