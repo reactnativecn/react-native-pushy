@@ -781,8 +781,14 @@ class DownloadTask implements Runnable {
         );
         // Phase 2, lock released: nothing in the trash is reachable as a
         // version any more. Also purges leftovers of an interrupted run.
+        // Best effort: phase 1 already succeeded, and a leftover the native
+        // delete cannot remove must not fail every later cleanup task.
         if (trash.isDirectory()) {
-            cleanupOldEntries(trash.getAbsolutePath(), new String[0], 0, null);
+            try {
+                cleanupOldEntries(trash.getAbsolutePath(), new String[0], 0, null);
+            } catch (RuntimeException e) {
+                Log.w(Texts.LOG_TAG, "Failed to purge cleanup trash", e);
+            }
         }
     }
 

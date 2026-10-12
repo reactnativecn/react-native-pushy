@@ -161,7 +161,9 @@ export const sharedState: {
 // The native cold-start check writes its response cache at most once per
 // launch (and skips it once JS has checked), so once this process has seen it
 // absent or expired, later reads are near-certain misses: skip the bridge
-// call from then on. The rare miss costs one network check.
+// call from then on. The rare miss costs one network check. A fresh entry
+// that only mismatches the request or config does not set this: a later check
+// with the original options (e.g. after `extra` reverts) can still reuse it.
 let nativeCheckCacheExhausted = false;
 const NATIVE_CHECK_CACHE_MAX_AGE_S = 120;
 

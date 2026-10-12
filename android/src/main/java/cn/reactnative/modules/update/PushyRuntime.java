@@ -46,7 +46,8 @@ public final class PushyRuntime {
     /**
      * Validate and persist a complete configuration, even before JS or bundle
      * resolution. This starts no network work and never resolves a bundle.
-     * Await the callback before continuing startup/prepareBundle.
+     * Await the callback before continuing startup/prepareBundle. Unless JS
+     * uses nativeConfigSource: 'native', later JS config writes can replace it.
      */
     public static void configure(Context context, JSONObject options, final ConfigurationCallback callback) {
         if (context == null || options == null || callback == null) {

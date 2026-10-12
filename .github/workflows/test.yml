@@ -40,6 +40,9 @@ jobs:
               - 'cpp/**'
               - 'android/jni/**'
               - 'scripts/test-*'
+              # TS reference the C++ golden vectors are generated from.
+              - 'src/updateFlowCore.ts'
+              - 'scripts/generate-flow-vectors.ts'
             ios:
               - '.github/workflows/test.yml'
               - 'ios/**'

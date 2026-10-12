@@ -830,14 +830,18 @@ PUSHY_HIDDEN NSString *PushyBundleHashSync(BOOL computeIfMissing) {
     }
 }
 
-// Host preparation runs off the caller's thread, one at a time; the
-// completion is delivered on the main queue.
+// Host preparation runs off the caller's thread; the completion is delivered
+// on the main queue. Calls run concurrently so each timeout counts from its
+// own call: a serial queue would hold a later prepareBundle(timeout:) behind an
+// earlier call's whole wait. Nothing here needs serializing — claimRound is an
+// atomic compare-exchange and the round group (entered once at setup) releases
+// every waiter when the round ends.
 static void PushyRunHostPreparation(NSDictionary *(^work)(void),
                                     RCTPushyBundlePreparationCompletion completion) {
     static dispatch_queue_t hostQueue;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        hostQueue = dispatch_queue_create("cn.reactnative.pushy.host-sync", DISPATCH_QUEUE_SERIAL);
+        hostQueue = dispatch_queue_create("cn.reactnative.pushy.host-sync", DISPATCH_QUEUE_CONCURRENT);
     });
     dispatch_async(hostQueue, ^{
         NSDictionary *result;
