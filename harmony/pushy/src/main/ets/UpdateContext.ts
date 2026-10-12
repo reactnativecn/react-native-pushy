@@ -1,6 +1,7 @@
 import preferences from '@ohos.data.preferences';
 import fileIo from '@ohos.file.fs';
 import {
+  HARMONY_BUNDLE_FILE_NAME,
   INSTALL_RECORD_FILE_NAME,
   isInstallComplete,
   readInstallRecord,
@@ -404,7 +405,7 @@ export class UpdateContext {
   }
 
   private getBundlePath(hash: string): string {
-    return `${this.rootDir}/${hash}/bundle.harmony.js`;
+    return `${this.rootDir}/${hash}/${HARMONY_BUNDLE_FILE_NAME}`;
   }
 
   private getStateSnapshot(): StateCoreResult {
@@ -1075,7 +1076,7 @@ export class UpdateContext {
       // fd 在 promise 落定后才关闭(withRawFd)。
       hash = await withRawFd(
         this.context.resourceManager,
-        'bundle.harmony.js',
+        HARMONY_BUNDLE_FILE_NAME,
         descriptor =>
           NativePatchCore.sha256HexRawFdAsync(
             descriptor.fd,

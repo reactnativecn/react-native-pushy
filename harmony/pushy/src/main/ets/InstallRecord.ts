@@ -1,6 +1,7 @@
 import fileIo from '@ohos.file.fs';
 import { util } from '@kit.ArkTS';
 import NativePatchCore from './NativePatchCore';
+import { unlinkIfExists } from './SaveFile';
 import {
   ERROR_DELTA_FAILED,
   ERROR_SWITCH_VERSION_FAILED,
@@ -65,9 +66,7 @@ export async function writeInstallRecord(
   recordJson: string,
 ): Promise<void> {
   const path = `${versionDir}/${INSTALL_RECORD_FILE_NAME}`;
-  if (fileIo.accessSync(path)) {
-    await fileIo.unlink(path);
-  }
+  await unlinkIfExists(path);
   const file = await fileIo.open(
     path,
     fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,

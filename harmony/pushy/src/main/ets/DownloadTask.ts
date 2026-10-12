@@ -4,7 +4,12 @@ import common from '@ohos.app.ability.common';
 import { zlib } from '@kit.BasicServicesKit';
 import { EventHub } from './EventHub';
 import { DownloadTaskParams } from './DownloadTaskParams';
-import { saveFileToSandbox, withRawFd } from './SaveFile';
+import {
+  saveFileToSandbox,
+  unlinkIfExists,
+  withRawFd,
+  writeFully,
+} from './SaveFile';
 import { util } from '@kit.ArkTS';
 import NativePatchCore, {
   ARCHIVE_PATCH_TYPE_FROM_PACKAGE,
@@ -115,21 +120,8 @@ interface DeltaInputs {
   manifestArrays: PatchManifestArrays;
 }
 
-function toArrayBufferSlice(
-  payload: Uint8Array,
-  offset: number,
-  length: number,
-): ArrayBuffer {
-  return (payload.buffer as ArrayBuffer).slice(
-    payload.byteOffset + offset,
-    payload.byteOffset + offset + length,
-  );
-}
-
 const DIFF_MANIFEST_ENTRY = '__diff.json';
-const TEMP_ORIGIN_BUNDLE_ENTRY = '.origin.bundle.harmony.js';
-const EMBEDDED_BUNDLE_RAWFILE = 'bundle.harmony.js';
-const FILE_COPY_BUFFER_SIZE = 64 * 1024;
+const TEMP_ORIGIN_BUNDLE_ENTRY = `.origin.${HARMONY_BUNDLE_FILE_NAME}`;
 const DOWNLOAD_CALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 // 断点续传 sidecar(NATIVE_CHECKUPDATE_DESIGN §11.4):记录 partial 属于
@@ -260,10 +252,7 @@ export class DownloadTask {
 
   private async deleteResumeSidecar(targetFile: string): Promise<void> {
     try {
-      const sidecar = this.resumeSidecarPath(targetFile);
-      if (fileIo.accessSync(sidecar)) {
-        await fileIo.unlink(sidecar);
-      }
+      await unlinkIfExists(this.resumeSidecarPath(targetFile));
     } catch (e) {
       logger.error(TAG, `Failed to delete resume sidecar: ${getErrorMessage(e)}`);
     }
@@ -272,9 +261,7 @@ export class DownloadTask {
   // 归档连同 sidecar 一起删除(被消费或被判定有毒)。
   private async deleteArchiveAndSidecar(targetFile: string): Promise<void> {
     try {
-      if (fileIo.accessSync(targetFile)) {
-        await fileIo.unlink(targetFile);
-      }
+      await unlinkIfExists(targetFile);
     } catch (e) {
       logger.error(TAG, `Failed to delete archive: ${getErrorMessage(e)}`);
     }
@@ -418,33 +405,26 @@ export class DownloadTask {
   ): Promise<void> {
     const payload =
       content instanceof Uint8Array ? content : new Uint8Array(content);
+    // writeFully writes from the start of its buffer: a view into a larger
+    // buffer at a non-zero offset needs its own copy.
+    const bytes =
+      payload.byteOffset === 0
+        ? (payload.buffer as ArrayBuffer)
+        : (payload.buffer as ArrayBuffer).slice(
+            payload.byteOffset,
+            payload.byteOffset + payload.byteLength,
+          );
     await this.ensureParentDirectory(targetFile);
-    if (fileIo.accessSync(targetFile)) {
-      await fileIo.unlink(targetFile);
-    }
+    await unlinkIfExists(targetFile);
 
-    let writer: fileIo.File | null = null;
+    const writer = await fileIo.open(
+      targetFile,
+      fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,
+    );
     try {
-      writer = await fileIo.open(
-        targetFile,
-        fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,
-      );
-      const chunkSize = FILE_COPY_BUFFER_SIZE;
-      let bytesWritten = 0;
-
-      while (bytesWritten < payload.byteLength) {
-        const chunkLength = Math.min(
-          chunkSize,
-          payload.byteLength - bytesWritten,
-        );
-        const chunk = toArrayBufferSlice(payload, bytesWritten, chunkLength);
-        await fileIo.write(writer.fd, chunk);
-        bytesWritten += chunkLength;
-      }
+      await writeFully(writer.fd, bytes, payload.byteLength);
     } finally {
-      if (writer) {
-        await fileIo.close(writer);
-      }
+      await fileIo.close(writer);
     }
   }
 
@@ -498,7 +478,7 @@ export class DownloadTask {
     try {
       await withRawFd(
         this.context.resourceManager,
-        EMBEDDED_BUNDLE_RAWFILE,
+        HARMONY_BUNDLE_FILE_NAME,
         descriptor => saveFileToSandbox(descriptor, originBundlePath),
       );
       await NativePatchCore.applyDeltaFromSource({
@@ -519,9 +499,7 @@ export class DownloadTask {
         `Failed to process bundle delta: ${getErrorMessage(error)}`,
       );
     } finally {
-      if (fileIo.accessSync(originBundlePath)) {
-        await fileIo.unlink(originBundlePath);
-      }
+      await unlinkIfExists(originBundlePath);
     }
   }
 
@@ -625,6 +603,24 @@ export class DownloadTask {
     const authorization = new Promise<void>(resolve => {
       authorize = resolve;
     });
+
+    // 本 url 的 sidecar 内容:验证器优先取本次响应头,缺失时沿用上次的;
+    // 总长未知(0)时不写。
+    const buildResumeMeta = (total: number): ResumeMeta => {
+      const meta: ResumeMeta = { url: params.url };
+      const etag = etagHeader || resumeMeta?.etag;
+      const lastModified = lastModifiedHeader || resumeMeta?.lastModified;
+      if (etag) {
+        meta.etag = etag;
+      }
+      if (lastModified) {
+        meta.lastModified = lastModified;
+      }
+      if (total > 0) {
+        meta.total = total;
+      }
+      return meta;
+    };
 
     const reportProgress = () => {
       const overall = baseOffset + received;
@@ -907,9 +903,7 @@ export class DownloadTask {
         );
       } else {
         // 服务端忽略了 Range(或本就没发):从零开始。
-        if (fileIo.accessSync(params.targetFile)) {
-          await fileIo.unlink(params.targetFile);
-        }
+        await unlinkIfExists(params.targetFile);
         baseOffset = 0;
         totalAll = contentLength > 0 ? contentLength : 0;
         writer = await fileIo.open(
@@ -929,19 +923,7 @@ export class DownloadTask {
         totalAll > 0 ? totalAll - baseOffset : 0,
       );
       // 先落 sidecar 再放行写入,流中崩溃才有得续。
-      const meta: ResumeMeta = { url: params.url };
-      const etag = etagHeader || resumeMeta?.etag;
-      const lastModified = lastModifiedHeader || resumeMeta?.lastModified;
-      if (etag) {
-        meta.etag = etag;
-      }
-      if (lastModified) {
-        meta.lastModified = lastModified;
-      }
-      if (totalAll > 0) {
-        meta.total = totalAll;
-      }
-      await this.writeResumeMeta(params.targetFile, meta);
+      await this.writeResumeMeta(params.targetFile, buildResumeMeta(totalAll));
 
       // 鉴权通过:回放缓冲,之后的数据直写。
       const buffered = pendingChunks ?? [];
@@ -983,15 +965,10 @@ export class DownloadTask {
         }
         // 用最终观测值刷新 sidecar:首次写入可能因头部竞态缺 total/验证器,
         // 补齐后“下载完、解压前死”的窗口才能被 complete 检测覆盖。
-        const finalMeta: ResumeMeta = { url: params.url, total: stats.size };
-        if (etagHeader || resumeMeta?.etag) {
-          finalMeta.etag = etagHeader || resumeMeta?.etag;
-        }
-        if (lastModifiedHeader || resumeMeta?.lastModified) {
-          finalMeta.lastModified =
-            lastModifiedHeader || resumeMeta?.lastModified;
-        }
-        await this.writeResumeMeta(params.targetFile, finalMeta);
+        await this.writeResumeMeta(
+          params.targetFile,
+          buildResumeMeta(stats.size),
+        );
       } else {
         // 编码传输不可续传:盘上是解码后的字节,编码域的长度与偏移都失效。
         await this.deleteResumeSidecar(params.targetFile);
@@ -1127,7 +1104,7 @@ export class DownloadTask {
       deletes: manifestArrays.deletes,
       sourceRoot: params.originDirectory,
       targetRoot: work,
-      originBundlePath: `${params.originDirectory}/bundle.harmony.js`,
+      originBundlePath: `${params.originDirectory}/${HARMONY_BUNDLE_FILE_NAME}`,
       bundleDeltaPath: `${work}/${BUNDLE_DELTA_ENTRY}`,
       bundleOutputPath: `${work}/${HARMONY_BUNDLE_FILE_NAME}`,
       mergeSourceSubdir: plan.mergeSourceSubdir,
