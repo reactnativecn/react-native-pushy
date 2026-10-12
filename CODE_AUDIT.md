@@ -78,7 +78,7 @@
 剩余：两份 `UpdateModule.java`（oldarch/newarch，均已是薄转发层，只差基类与注解）；`buildToolsVersion` 仍设置。
 
 **单测建议**（部分）
-已有 `android/src/test` 5 个 JVM 测试类（CleanupKeepNames、HttpUtils、InstallRecord、SafeZipFile、UpdateFileUtils；CI 不跑，本地 `gradle testReleaseUnitTest`）。未覆盖：`ArchiveLimits.ensureFreeSpace`、`runCheckRequest` 次数上限、`BundledResourceCopier` 的路径/密度解析。
+已有 `android/src/test` 5 个 JVM 测试类（CleanupKeepNames、HttpUtils、InstallRecord、SafeZipFile、UpdateFileUtils；CI 不跑，本地 `gradle testReleaseUnitTest`）。归档计数规则不在 JVM 测（`cpp/patch_core/tests/archive-limits-vectors.json`）。未覆盖：`ArchiveLimits.ensureFreeSpace`、`runCheckRequest` 次数上限、`BundledResourceCopier` 的路径/密度解析。
 
 ---
 
@@ -108,8 +108,8 @@
 剩余：`RCTPushy.mm` 仍约 2150 行（目标约 900）；`PushyInstallRecord` / `PushyArchiveGuard` / `PushyDownloadRegistry` / `PushyState` / `PushyCrashRescue` 未拆。
 
 **3.14（P3，可测试性）纯决策下沉 C++ + XCTest**（部分）
-已做：`__diff.json` → `PatchManifest` 解析含类型校验下沉 `cpp/patch_core/patch_manifest.h`（`ParsePatchManifest`，向量 `cpp/patch_core/tests/patch-manifest-vectors.json` + fuzz），三端经 `archive_patch::ApplyArchivePatch` 直接传 manifest 原文，`PushyPatchManifestFromJson`、Java `appendManifestEntries`、Harmony `parseManifestToArrays` 已删。
-剩余应下沉到 `cpp/` 的纯决策：安装记录校验 `install_record::Validate(json, hash)` 三端共用（目前 `install_record.h` 只有常量）；归档限额累加器；下载注册表 join/defer 规则与 `Content-Range` 解析（Java/ObjC 各一份）；crash-rescue 门控与检查端点尝试策略；`PushyIsSafePathComponent` 放到 `IsSafeRelativePath` 旁边。另建 `ios/Tests` XCTest target：`RCTPushyDownloader` 对 `NSURLProtocol` stub（416/206/redirect/encoded）、`unzipFileAtPath` 对夹具 zip（symlink、保留名、比值炸弹）。
+已做：`__diff.json` → `PatchManifest` 解析含类型校验下沉 `cpp/patch_core/patch_manifest.h`（`ParsePatchManifest`，向量 `cpp/patch_core/tests/patch-manifest-vectors.json` + fuzz），三端经 `archive_patch::ApplyArchivePatch` 直接传 manifest 原文，`PushyPatchManifestFromJson`、Java `appendManifestEntries`、Harmony `parseManifestToArrays` 已删。完成记录的解析/写入/激活校验在 `cpp/patch_core/install_record.cpp`（三端共用）。归档限额计数在 `cpp/patch_core/archive_limits.cpp`（`EntryAccumulator`、`CheckUncompressedSize`、`CheckExtractedDirectory`、`PlanUnknownLengthFreeSpaceProbe`，向量 `archive-limits-vectors.json`）：iOS unzip guard 直接调用，Android `SafeZipFile.inspect` 每归档一次 JNI，鸿蒙解压前整包校验 + 解压后遍历经 NAPI；三端规则漂移取最严（精确比值、整包比值、任意层 `.pushy-` 保留名、拒绝 symlink 与未知大小条目）。
+剩余应下沉到 `cpp/` 的纯决策：下载注册表 join/defer 规则与 `Content-Range` 解析（Java/ObjC 各一份）；crash-rescue 门控与检查端点尝试策略；`PushyIsSafePathComponent` 放到 `IsSafeRelativePath` 旁边。另建 `ios/Tests` XCTest target：`RCTPushyDownloader` 对 `NSURLProtocol` stub（416/206/redirect/encoded）、`unzipFileAtPath` 对夹具 zip（symlink、保留名、比值炸弹）。
 
 ---
 
@@ -171,7 +171,7 @@ Android 已兜住：`Application.mk` 改 `-fexceptions`，每个 JNI 入口经 `
 剩余：`e2e_harmony.yml` 仅手动，不在门内（无托管鸿蒙 runner）。
 
 **5.15（P3）测试**（部分修复）
-已覆盖：ContentRange、InstallRecord、ErrorCodes、ArchiveLimits、NativeConfig、EventHub、原生轮次（请求体、端点查询、响应缓存：`native-round-vectors.json`）；C++ 头文件 ↔ ArkTS/Java/JS 镜像的常量对等由 `scripts/check-constant-parity.js`（`bun lint`）断言。
+已覆盖：ContentRange、InstallRecord、ErrorCodes、ArchiveLimits（`getOriginalSize` 门与 NAPI 绑定；计数规则见 `archive-limits-vectors.json`）、NativeConfig、EventHub、原生轮次（请求体、端点查询、响应缓存：`native-round-vectors.json`）；C++ 头文件 ↔ ArkTS/Java/JS 镜像的常量对等由 `scripts/check-constant-parity.js`（`bun lint`）断言。
 未覆盖：`readString/readBoolean`、flush-batch 深度语义。
 
 **§5 P4 余项**
