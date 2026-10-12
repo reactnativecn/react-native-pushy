@@ -6,7 +6,9 @@
 -keep class cn.reactnative.modules.update.ArchivePatchPlanResult { <init>(); <fields>; }
 -keep class cn.reactnative.modules.update.CopyGroupResult { <init>(); <fields>; }
 
-# JNI entry points are bound by their mangled Java names.
+# Native methods are bound from JNI_OnLoad by class/method name (the encoded
+# table in cpp/patch_core/jni_registration.cpp), not by exported symbols, so
+# their classes and names must still survive shrinking unchanged.
 -keepclasseswithmembernames class cn.reactnative.modules.update.** {
     native <methods>;
 }

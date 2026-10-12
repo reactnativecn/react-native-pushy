@@ -15,10 +15,11 @@ namespace digest {
 // (IO-6). Streaming because Android/Harmony read the bundle from the package
 // (AssetManager / rawfile) rather than from a plain file.
 //
-// Android intentionally does NOT use this implementation: librnpushy.so is a
-// prebuilt artifact, so the Java layer hashes with java.security.MessageDigest
-// instead. The NIST vectors in the tests anchor both implementations to the
-// same standard.
+// Android hashes in Java with java.security.MessageDigest instead (backed by
+// the platform's native crypto provider): the bytes come from AssetManager
+// streams and download sinks on the Java side, so a JNI round trip per chunk
+// would buy nothing. The NIST vectors in the tests anchor both
+// implementations to the same standard.
 class Sha256 {
  public:
   Sha256();

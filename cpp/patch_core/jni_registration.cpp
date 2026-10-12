@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "jni_log.h"
 #include "jni_natives.h"
 #include "obscured_text.h"
 
@@ -47,7 +48,7 @@ const std::vector<NativeClass>& NativeClasses() {
         reinterpret_cast<void*>(&pushy::jni_natives::BuildCopyGroups)},
        {"3b07e4ddb7af6d49363e3aebd9bea3625f3507e4", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43d9d8ae9a68092f0113fd9887857c422602b9d3d6b880721f210be9c3ee8d8f6a5c3c08b7e5ac82767c153b15ffc9e4bb715056321eade98ba16046320051f7d9bb95207f3d14eacedae1ac585b2f1de98aaebe927e190004ffc3a9833a45773214e4cee385674d277229e3c6b8806c1309081eead8f99f71432d48d7d5ccb2967209663a",
         reinterpret_cast<void*>(&pushy::jni_natives::ApplyDeltaFromSource)},
-       {"391bf1d0a09e786a2e3b39f7c2a1996859", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43dc9b99",
+       {"391bf1d0a09e786a2e3b39f7c2a1996859", "723bfed0b88a274923311bb6e5a7826444205fdad2d1b98373002008e8c4ef8e8e655d3f09b0e189889e6a58791ff1c3adc857554c3216f289e6ba",
         reinterpret_cast<void*>(&pushy::jni_natives::CleanupOldEntries)},
    }},
   {"3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c86b19560762307efcfa0",  // FlowBridge
@@ -66,13 +67,17 @@ const std::vector<NativeClass>& NativeClasses() {
 }
 
 // Registers each method on its own: a host's R8 build may drop an unused
-// class or native method, which must not prevent the rest from binding.
+// class or native method, which must not prevent the rest from binding. A
+// failure is still logged (release builds too): otherwise the first call of
+// the unbound method surfaces as an UnsatisfiedLinkError with no hint why.
 void RegisterAll(JNIEnv* env) {
   for (const NativeClass& native_class : NativeClasses()) {
     const std::string class_name = pushy::text::Reveal(native_class.name);
     jclass clazz = env->FindClass(class_name.c_str());
     if (clazz == nullptr) {
       env->ExceptionClear();
+      PUSHY_JNI_LOGE("JNI binding: class %s not found, %zu native methods unbound",
+                     class_name.c_str(), native_class.methods.size());
       continue;
     }
     for (const NativeMethod& method : native_class.methods) {
@@ -85,6 +90,8 @@ void RegisterAll(JNIEnv* env) {
       };
       if (env->RegisterNatives(clazz, &entry, 1) != JNI_OK) {
         env->ExceptionClear();
+        PUSHY_JNI_LOGE("JNI binding: %s.%s%s could not be registered",
+                       class_name.c_str(), name.c_str(), signature.c_str());
       }
     }
     env->DeleteLocalRef(clazz);
@@ -99,5 +106,8 @@ extern "C" JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void*) {
     return JNI_ERR;
   }
   RegisterAll(env);
+  // Result classes and their field IDs are resolved once here; a failure is
+  // logged inside and makes the affected natives throw instead of guessing.
+  pushy::jni_natives::InitResultClassCache(env);
   return JNI_VERSION_1_6;
 }

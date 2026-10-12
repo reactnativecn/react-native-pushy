@@ -37,7 +37,8 @@ final class SyncCoordinator {
 
     static final String KEY_CONFIG = "nativeConfig";
     // Raw response cache for the JS side to reuse (§10.3), scoped to the
-    // exact logical request and native config that produced it.
+    // exact logical request and native config that produced it. Stored in
+    // its own SharedPreferences file (UpdateContext.getNativeCheckCache).
     static final String KEY_RESP_CACHE = "nativeCheckResp";
     // Set when a round starts, cleared when it ends (§11.4). Residue on the
     // next launch means the previous process died mid-round (a crash rescue
@@ -91,28 +92,19 @@ final class SyncCoordinator {
         if (!nativeReady || sContext != context || !context.getIsUsingBundleUrl()) {
             return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "not_initialized");
         }
-        String configJson = context.getKv(KEY_CONFIG);
-        if (configJson == null || configJson.isEmpty()) {
-            return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "not_configured");
+        RunnableConfig parsed = parseRunnableConfig(context.getKv(KEY_CONFIG));
+        if (parsed.rejection != null) {
+            return parsed.rejection;
         }
-        try {
-            JSONObject config = new JSONObject(configJson);
-            if (config.optBoolean("disabled", false)) {
-                return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "disabled");
-            }
-            if (config.optString("appKey", "").isEmpty()) {
-                return BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_config");
-            }
-        } catch (JSONException e) {
-            return BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_config");
-        }
+        String configJson = parsed.json;
         startRound(0);
         if (!roundStarted.get()) {
             return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "config_changed");
         }
         roundDone.await();
         if (roundConfigGeneration != UpdateContext.getNativeConfigGeneration()
-            || !configJson.equals(roundConfigJson) || !configJson.equals(context.getKv(KEY_CONFIG))) {
+            || !ConfigEquivalence.equivalent(configJson, roundConfigJson)
+            || !ConfigEquivalence.equivalent(configJson, context.getKv(KEY_CONFIG))) {
             return BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "config_changed");
         }
         if (roundGeneration != UpdateContext.getResetGeneration()) {
@@ -127,14 +119,66 @@ final class SyncCoordinator {
     }
 
     /**
-     * True when JS already obtained a valid response in this process for the
-     * exact config the native round would use: the delayed round is then a
-     * duplicate request. Only the scheduled round consults this — the
-     * crash-rescue path still runs, JS is dead by then.
+     * True when JS already obtained a valid response in this process for a
+     * config equivalent (ConfigEquivalence, the cross-platform contract) to
+     * the one the native round would use: the delayed round is then a
+     * duplicate request. JS and a host may serialize the same config
+     * differently, so exact string equality would almost never match. Only
+     * the scheduled round consults this — the crash-rescue path still runs,
+     * JS is dead by then.
      */
     private static boolean hasJsRound(UpdateContext context) {
         String jsConfig = sJsCompletedConfig;
-        return jsConfig != null && jsConfig.equals(context.getKv(KEY_CONFIG));
+        return jsConfig != null
+            && ConfigEquivalence.equivalent(jsConfig, context.getKv(KEY_CONFIG));
+    }
+
+    /**
+     * The persisted config, parsed and checked once for every entry point
+     * (prepareBundle, the automatic round's gate, the round itself), so they
+     * cannot disagree on what is runnable. Exactly one of {config, rejection}
+     * is set.
+     */
+    static final class RunnableConfig {
+        @Nullable final String json;
+        @Nullable final JSONObject config;
+        // Trimmed, non-empty.
+        @Nullable final String appKey;
+        @Nullable final BundlePreparationResult rejection;
+
+        private RunnableConfig(String json, JSONObject config, String appKey,
+                               BundlePreparationResult rejection) {
+            this.json = json;
+            this.config = config;
+            this.appKey = appKey;
+            this.rejection = rejection;
+        }
+
+        static RunnableConfig rejected(String status, String reason) {
+            return new RunnableConfig(
+                null, null, null, BundlePreparationResult.of(status, reason));
+        }
+    }
+
+    static RunnableConfig parseRunnableConfig(@Nullable String json) {
+        if (json == null || json.isEmpty()) {
+            return RunnableConfig.rejected(BundlePreparationResult.SKIPPED, "not_configured");
+        }
+        JSONObject config;
+        try {
+            config = new JSONObject(json);
+        } catch (JSONException e) {
+            return RunnableConfig.rejected(BundlePreparationResult.FAILED, "invalid_config");
+        }
+        if (config.optBoolean("disabled", false)) {
+            return RunnableConfig.rejected(BundlePreparationResult.SKIPPED, "disabled");
+        }
+        Object appKey = config.opt("appKey");
+        String trimmed = appKey instanceof String ? ((String) appKey).trim() : "";
+        if (trimmed.isEmpty()) {
+            return RunnableConfig.rejected(BundlePreparationResult.FAILED, "invalid_config");
+        }
+        return new RunnableConfig(json, config, trimmed, null);
     }
 
     private SyncCoordinator() {
@@ -194,21 +238,8 @@ final class SyncCoordinator {
      * and download phase to the remaining budget.
      */
     private static boolean hasRunnableConfig(UpdateContext context) {
-        if (context == null) {
-            return false;
-        }
-        try {
-            String json = context.getKv(KEY_CONFIG);
-            if (json == null) {
-                return false;
-            }
-            JSONObject config = new JSONObject(json);
-            return !config.optBoolean("disabled", false)
-                && config.opt("appKey") instanceof String
-                && !config.getString("appKey").trim().isEmpty();
-        } catch (JSONException e) {
-            return false;
-        }
+        return context != null
+            && parseRunnableConfig(context.getKv(KEY_CONFIG)).rejection == null;
     }
 
     static void onConfigured(UpdateContext context) {
@@ -310,26 +341,13 @@ final class SyncCoordinator {
         roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "check_failed");
         String configJson = context.getKv(KEY_CONFIG);
         roundConfigJson = configJson;
-        if (configJson == null || configJson.isEmpty()) {
-            roundResult = BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "not_configured");
+        RunnableConfig parsed = parseRunnableConfig(configJson);
+        if (parsed.rejection != null) {
+            roundResult = parsed.rejection;
             return;
         }
-        JSONObject config;
-        try {
-            config = new JSONObject(configJson);
-        } catch (JSONException e) {
-            roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_config");
-            return;
-        }
-        if (config.optBoolean("disabled", false)) {
-            roundResult = BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "disabled");
-            return;
-        }
-        String appKey = config.optString("appKey", "");
-        if (appKey.isEmpty()) {
-            roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_config");
-            return;
-        }
+        JSONObject config = parsed.config;
+        String appKey = parsed.appKey;
         // Keep the existing interrupted-round breadcrumb and reset generation.
         try {
             context.setKv(KEY_ROUND_INCOMPLETE, "1");
@@ -340,8 +358,13 @@ final class SyncCoordinator {
                 context, launchRolledBackVersion, deadlineNanos,
                 resetGeneration, configJson, config, appKey);
         } finally {
+            // A committed round already cleared the breadcrumb in its own
+            // commit (UpdateContext.commitSyncResult); only rounds that ended
+            // without committing need the extra write.
             try {
-                context.removeKv(KEY_ROUND_INCOMPLETE);
+                if (context.getKv(KEY_ROUND_INCOMPLETE) != null) {
+                    context.removeKv(KEY_ROUND_INCOMPLETE);
+                }
             } catch (IllegalStateException ignored) {
             }
         }
@@ -539,7 +562,7 @@ final class SyncCoordinator {
         return cacheEntry.toString();
     }
 
-    private static final OkHttpClient httpClient = new OkHttpClient.Builder()
+    private static final OkHttpClient httpClient = HttpClients.base().newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(10, TimeUnit.SECONDS)
         .callTimeout(15, TimeUnit.SECONDS)

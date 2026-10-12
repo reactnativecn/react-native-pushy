@@ -1,25 +1,24 @@
 package cn.reactnative.modules.update;
 
-/** Selects the at-most-two distinct version names supported by cleanup JNI. */
+import java.util.LinkedHashSet;
+
+/**
+ * The distinct version names cleanup must never touch: the persisted current
+ * and last versions AND the version this process booted from (two switches
+ * without a restart otherwise evict the running bundle while its on-demand
+ * assets are still being served).
+ */
 final class CleanupKeepNames {
     private CleanupKeepNames() {
     }
 
     static String[] select(String current, String previous, String running) {
-        String[] keep = new String[2];
+        LinkedHashSet<String> keep = new LinkedHashSet<>();
         for (String candidate : new String[] {current, previous, running}) {
-            if (candidate == null || candidate.isEmpty()
-                || candidate.equals(keep[0]) || candidate.equals(keep[1])) {
-                continue;
-            }
-            if (keep[0] == null) {
-                keep[0] = candidate;
-            } else if (keep[1] == null) {
-                keep[1] = candidate;
-            } else {
-                return null;
+            if (candidate != null && !candidate.isEmpty()) {
+                keep.add(candidate);
             }
         }
-        return keep;
+        return keep.toArray(new String[0]);
     }
 }

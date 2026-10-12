@@ -727,11 +727,16 @@ Status CleanupOldEntries(
       max_age_days, now);
 }
 
-Status CleanupOldEntries(
+namespace {
+
+// Lists the non-dot entries of root_dir that are not kept and are at least
+// max_age_days old: the one selection rule shared by delete and trash.
+Status SelectOldEntries(
     const std::string& root_dir,
     const std::vector<std::string>& keep_names,
     int max_age_days,
-    std::time_t now) {
+    std::time_t now,
+    std::vector<std::string>* out) {
   DIR* dir = opendir(root_dir.c_str());
   if (!dir) {
     if (errno == ENOENT) {
@@ -765,15 +770,61 @@ Status CleanupOldEntries(
     if (effective_now - st.st_mtime < max_age_seconds) {
       continue;
     }
-
-    Status remove_status = RemovePathRecursively(entry_path);
-    if (!remove_status) {
-      closedir(dir);
-      return remove_status;
-    }
+    out->push_back(name);
   }
 
   closedir(dir);
+  return Status::Ok();
+}
+
+}  // namespace
+
+Status CleanupOldEntries(
+    const std::string& root_dir,
+    const std::vector<std::string>& keep_names,
+    int max_age_days,
+    std::time_t now) {
+  std::vector<std::string> doomed;
+  Status select_status =
+      SelectOldEntries(root_dir, keep_names, max_age_days, now, &doomed);
+  if (!select_status) {
+    return select_status;
+  }
+  for (const std::string& name : doomed) {
+    Status remove_status = RemovePathRecursively(JoinPath(root_dir, name));
+    if (!remove_status) {
+      return remove_status;
+    }
+  }
+  return Status::Ok();
+}
+
+Status MoveOldEntriesToTrash(
+    const std::string& root_dir,
+    const std::vector<std::string>& keep_names,
+    int max_age_days,
+    const std::string& trash_dir,
+    std::time_t now) {
+  std::vector<std::string> doomed;
+  Status select_status =
+      SelectOldEntries(root_dir, keep_names, max_age_days, now, &doomed);
+  if (!select_status || doomed.empty()) {
+    return select_status;
+  }
+  Status dir_status = EnsureDirectory(trash_dir);
+  if (!dir_status) {
+    return dir_status;
+  }
+  for (const std::string& name : doomed) {
+    std::string target = JoinPath(trash_dir, name);
+    for (int suffix = 1; PathExists(target); ++suffix) {
+      target = JoinPath(trash_dir, name + "." + IntToString(suffix));
+    }
+    const std::string source = JoinPath(root_dir, name);
+    if (rename(source.c_str(), target.c_str()) != 0) {
+      return MakeErrnoStatus("Failed to move " + source + " to trash");
+    }
+  }
   return Status::Ok();
 }
 
