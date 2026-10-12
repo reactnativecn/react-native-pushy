@@ -310,6 +310,31 @@ static NSString *PushyNormalizeEndpointBase(NSString *base) {
     return base;
 }
 
+// Same rule as Harmony (SyncCoordinator.ts isHttpsOnly, SR-1): when every
+// configured endpoint is https, endpoints from a fetched remote list must be
+// https and artifact URLs from the decision may not be plaintext http, so the
+// network cannot downgrade the round. Redirects are guarded separately
+// (RCTPushyIsHttpsDowngrade).
+static BOOL PushyIsHttpsUrl(NSString *url) {
+    return [[url lowercaseString] hasPrefix:@"https://"];
+}
+
+static BOOL PushyIsCleartextUrl(NSString *url) {
+    return [[url lowercaseString] hasPrefix:@"http://"];
+}
+
+static BOOL PushyIsHttpsOnly(const flowjson::Value &endpoints) {
+    if (endpoints.elements().empty()) {
+        return NO;
+    }
+    for (const auto &endpoint : endpoints.elements()) {
+        if (!endpoint.IsString() || !PushyIsHttpsUrl(PushyFromStdString(endpoint.AsString()))) {
+            return NO;
+        }
+    }
+    return YES;
+}
+
 static BOOL PushyIsValidResponse(NSString *responseText) {
     if (responseText == nil) {
         return NO;
@@ -415,7 +440,8 @@ static BOOL PushyConfigsEquivalent(NSString *a, NSString *b) {
 // The persisted config a round may run with. Every gate (crash-hold handler
 // install, round start, prepareBundle, the round itself) reads it through
 // PushyLoadRunnableConfig, so they agree on what "configured" and "disabled"
-// mean. disabled follows JS truthiness, like the flow core.
+// mean. disabled follows JS truthiness, like the flow core; appKey is trimmed
+// like Android and Harmony do.
 struct PushyRunnableConfig {
     NSString *json;
     flowjson::Value value;
@@ -434,7 +460,9 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSString **reas
         bool ok = false;
         flowjson::Value value = flowjson::Parse(PushyToStdString(json), &ok);
         NSString *appKey = ok && value.IsObject()
-            ? PushyFromStdString(value.Get("appKey").AsString()) : nil;
+            ? [PushyFromStdString(value.Get("appKey").AsString())
+                  stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]
+            : nil;
         if (!ok || !value.IsObject()) {
             failure = @"invalid_config";
         } else if (value.Get("disabled").Truthy()) {
@@ -888,9 +916,11 @@ static NSDictionary *PushyUnrunnableConfigResult(NSString *reason) {
         return;
     }
 
+    BOOL httpsOnly = PushyIsHttpsOnly(config.Get("endpoints"));
     NSString *responseText = [self runQueryRequest:config
                                             appKey:appKey
                                               body:body
+                                         httpsOnly:httpsOnly
                                           deadline:deadlineUptime];
     if (responseText == nil) {
         RCTLogInfo(@"RCTPushy -- native sync: no endpoint reachable, giving up until next launch");
@@ -930,6 +960,7 @@ static NSDictionary *PushyUnrunnableConfigResult(NSString *reason) {
         downloaded = [self performAttempts:decision.Get("attempts")
                                       hash:hash
                                 originHash:currentVersion
+                                 httpsOnly:httpsOnly
                                   deadline:deadlineUptime];
     }
     if (!downloaded) {
@@ -1089,10 +1120,6 @@ static NSDictionary *PushyUnrunnableConfigResult(NSString *reason) {
     return committed;
 }
 
-// Sequential fallback over the ordered candidates (§5.1): one request at a
-// time with its own timeout; after the configured round fails, queryUrls
-// discovery merges remote candidates (excluding the already-tried) for one
-// more round. No hedged race on purpose — this path is latency-insensitive.
 // Per-request timeout, capped to the crash-rescue budget when one is active.
 // <= 0 means the budget is gone and the round must stop issuing requests.
 static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
@@ -1102,9 +1129,14 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
     return MIN(10, deadlineUptime - PushyMonotonicNow());
 }
 
+// Sequential fallback over the ordered candidates (§5.1): one request at a
+// time with its own timeout; after the configured round fails, queryUrls
+// discovery merges remote candidates (excluding the already-tried) for one
+// more round. No hedged race on purpose — this path is latency-insensitive.
 + (NSString *)runQueryRequest:(const flowjson::Value &)config
                        appKey:(NSString *)appKey
                          body:(NSString *)body
+                    httpsOnly:(BOOL)httpsOnly
                      deadline:(NSTimeInterval)deadlineUptime {
     NSMutableSet<NSString *> *tried = [NSMutableSet set];
     const NSUInteger maxHttpAttempts = 8;
@@ -1120,13 +1152,18 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
         return *timeout > 0;
     };
     // Tries each not-yet-tried endpoint base in order and returns the first
-    // valid response; *stop is set when the budget ran out.
-    NSString *(^queryEndpoints)(const flowjson::Value &, BOOL *) =
-        ^NSString *(const flowjson::Value &endpoints, BOOL *stop) {
+    // valid response; *stop is set when the budget ran out. A remote list
+    // (fetched from queryUrls) may not downgrade an https-only config.
+    NSString *(^queryEndpoints)(const flowjson::Value &, BOOL, BOOL *) =
+        ^NSString *(const flowjson::Value &endpoints, BOOL remote, BOOL *stop) {
         for (const auto &endpoint : endpoints.elements()) {
             NSString *base = PushyNormalizeEndpointBase(
                 PushyFromStdString(endpoint.AsString()));
             if (base.length == 0 || [tried containsObject:base]) {
+                continue;
+            }
+            if (remote && httpsOnly && !PushyIsHttpsUrl(base)) {
+                RCTLogWarn(@"RCTPushy -- native sync: ignoring non-https remote endpoint %@", base);
                 continue;
             }
             NSTimeInterval timeout = 0;
@@ -1148,7 +1185,7 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
     BOOL stop = NO;
     double sample = arc4random() / 4294967296.0;
     NSString *response = queryEndpoints(
-        flowcore::OrderEndpointCandidates(config.Get("endpoints"), sample), &stop);
+        flowcore::OrderEndpointCandidates(config.Get("endpoints"), sample), NO, &stop);
     if (response != nil || stop) {
         return response;
     }
@@ -1171,14 +1208,19 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
             continue;
         }
         // One successfully fetched remote list is enough.
-        return queryEndpoints(remote, &stop);
+        return queryEndpoints(remote, YES, &stop);
     }
     return nil;
 }
 
+// Strategies in order (diff, pdiff, full), each over its mirrors. A failure
+// that is not mirror-retryable (PATCH_FAILED: the bytes arrived but could not
+// be applied, and every mirror serves the same bytes) moves on to the next
+// strategy instead of downloading the same artifact again, like the JS side.
 + (BOOL)performAttempts:(const flowjson::Value &)attempts
                    hash:(NSString *)hash
              originHash:(NSString *)originHash
+              httpsOnly:(BOOL)httpsOnly
                deadline:(NSTimeInterval)holdDeadline {
     RCTPushy *engine = [self engine];
     // Crash-rescue budget caps every phase; 0 keeps the normal 10min windows.
@@ -1207,6 +1249,10 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
         for (const auto &urlValue : attempt.Get("urls").elements()) {
             NSString *url = PushyFromStdString(urlValue.AsString());
             if (url == nil) {
+                continue;
+            }
+            if (httpsOnly && PushyIsCleartextUrl(url)) {
+                RCTLogWarn(@"RCTPushy -- native sync: ignoring cleartext %s url %@", type.c_str(), url);
                 continue;
             }
             NSTimeInterval remaining = deadline - PushyMonotonicNow();
@@ -1244,6 +1290,10 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
             }
             RCTLogInfo(@"RCTPushy -- native sync: %s attempt failed: %@",
                        type.c_str(), resultError.localizedDescription);
+            if (!flowcore::IsMirrorRetryableCode(
+                    PushyToStdString(resultError.userInfo[RCTPushyErrorCodeKey]))) {
+                break;
+            }
         }
     }
     return NO;
