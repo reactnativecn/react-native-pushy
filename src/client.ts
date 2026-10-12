@@ -79,6 +79,14 @@ import {
  * The UpdateProvider subscribes to surface errors as lastError/Alert; user
  * code can subscribe too. Listeners run before any throwError rethrow.
  */
+/** One report() event: the logger payload and the source of server telemetry. */
+interface ReportEvent {
+  type: EventType;
+  message?: string;
+  code?: UpdateErrorCode;
+  data?: Record<string, string | number>;
+}
+
 export type UpdateErrorListener = (
   error: UpdateError,
   eventType: EventType
@@ -584,7 +592,8 @@ export class Pushy {
       if (
         __DEV__ ||
         this.options.disableTelemetry ||
-        this.options.disableErrorReporting
+        this.options.disableErrorReporting ||
+        !currentVersion
       ) {
         return;
       }
@@ -598,7 +607,11 @@ export class Pushy {
         }
         this.reportedExceptions.add(object);
       }
-      this.reportExceptionToServer(serializeException(error, context));
+      this.postReport({
+        type: 'js_exception',
+        hash: currentVersion,
+        error: serializeException(error, context),
+      });
     } catch (e: any) {
       log('exception telemetry error:', e?.message || e);
     }
@@ -642,55 +655,7 @@ export class Pushy {
     return cleanup;
   };
 
-  private reportExceptionToServer = (error: SerializedException): void => {
-    try {
-      if (
-        __DEV__ ||
-        this.options.disableTelemetry ||
-        this.options.disableErrorReporting ||
-        !currentVersion
-      ) {
-        return;
-      }
-      const { appKey } = this.options;
-      const endpoint =
-        this.lastWorkingEndpoint || this.options.server?.main?.[0];
-      if (!appKey || !endpoint) {
-        return;
-      }
-      fetchWithTimeout(
-        `${endpoint}/report/${appKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            type: 'js_exception',
-            hash: currentVersion,
-            packageVersion: this.getEffectivePackageVersion(),
-            cInfo,
-            error,
-          }),
-        },
-        DEFAULT_FETCH_TIMEOUT_MS
-      ).catch((e: any) => {
-        log('exception telemetry report failed:', e?.message || e);
-      });
-    } catch (e: any) {
-      log('exception telemetry error:', e?.message || e);
-    }
-  };
-
-  report = async ({
-    type,
-    message = '',
-    code,
-    data = {},
-  }: {
-    type: EventType;
-    message?: string;
-    code?: UpdateErrorCode;
-    data?: Record<string, string | number>;
-  }) => {
+  report = async ({ type, message = '', code, data = {} }: ReportEvent) => {
     log(`${type} ${code ? `[${code}] ` : ''}${message}`);
     // Fire-and-forget server telemetry; must not wait for the logger below.
     this.reportToServer({ type, message, code, data });
@@ -742,15 +707,10 @@ export class Pushy {
    */
   private reportToServer = ({
     type,
-    message = '',
+    message,
     code,
     data = {},
-  }: {
-    type: EventType;
-    message?: string;
-    code?: UpdateErrorCode;
-    data?: Record<string, string | number>;
-  }) => {
+  }: ReportEvent) => {
     try {
       if (__DEV__ || this.options.disableTelemetry) {
         return;
@@ -759,42 +719,55 @@ export class Pushy {
       if (!serverType) {
         return;
       }
-      const { appKey } = this.options;
-      const endpoint =
-        this.lastWorkingEndpoint || this.options.server?.main?.[0];
-      if (!appKey || !endpoint) {
-        return;
-      }
       const hash = resolveServerEventHash({ serverType, data, currentVersion });
       if (!hash) {
         return;
       }
-      const send = (payloadType: typeof serverType, detail?: string) =>
-        fetchWithTimeout(
-          `${endpoint}/report/${appKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              type: payloadType,
-              hash,
-              packageVersion: this.getEffectivePackageVersion(),
-              cInfo,
-              detail: truncateDetail(detail),
-            }),
-          },
-          DEFAULT_FETCH_TIMEOUT_MS
-        ).catch((e: any) => {
-          log('telemetry report failed:', e?.message || e);
-        });
       // A download rescued by a later strategy reports its patch-health
       // signal through downloadFallback, which only counts patch-apply
       // failures; downloadSuccess's data.error (any earlier failure, network
       // errors included) stays local.
-      send(serverType, message || undefined);
+      this.postReport({
+        type: serverType,
+        hash,
+        detail: truncateDetail(message),
+      });
     } catch (e: any) {
       log('telemetry error:', e?.message || e);
     }
+  };
+  /**
+   * The single telemetry POST ({endpoint}/report/{appKey}) to the last known
+   * working endpoint; no retry, failures only logged.
+   */
+  private postReport = ({
+    type,
+    hash,
+    ...payload
+  }: {
+    type: string;
+    hash: string;
+    detail?: string;
+    error?: SerializedException;
+  }) => {
+    const { appKey } = this.options;
+    const endpoint = this.lastWorkingEndpoint || this.options.server?.main?.[0];
+    if (!appKey || !endpoint) {
+      return;
+    }
+    fetchWithTimeout(`${endpoint}/report/${appKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type,
+        hash,
+        packageVersion: this.getEffectivePackageVersion(),
+        cInfo,
+        ...payload,
+      }),
+    }).catch((e: any) => {
+      log('telemetry report failed:', e?.message || e);
+    });
   };
   throwIfEnabled = (e: Error) => {
     if (this.options.throwError) {
