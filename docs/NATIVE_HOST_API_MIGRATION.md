@@ -31,7 +31,13 @@ just to call this API: resolution consumes first-load and rollback markers.
 The call starts, joins or reuses the process's existing native round. It does not
 reload the running React Native instance or display UI. A successful selection is
 for the **next launch**; preparation can also download without selecting a bundle,
-according to the existing `afterDownload` policy. Callback threading, cancellation,
+according to the existing `afterDownload` policy.
+
+**Config ownership.** Once the host calls `configure` in a process, the host owns
+the configuration for that process. The JavaScript client must then be created
+with `nativeConfigSource: 'native'`; in the default `'javascript'` mode its config
+write is rejected with `NATIVE_CONFIG_CONFLICT` (reported through `onError` and
+`console.error`). Apps that never call `configure` are unaffected. Callback threading, cancellation,
 request deduplication, configuration invalidation and rescue behavior are unchanged.
 
 Result fields (`status`, `reason`, `hash`, `activated`) and existing status strings,
@@ -60,6 +66,10 @@ the API names that existed in the versions they document.
 这是原生源码接口的破坏性重命名，不改变下载、下次启动选包、回滚或救援行为。
 配置完成后，先走宿主正常的 bundle 解析流程，再调用 `prepareBundle`；
 不要为调用接口再次解析 bundle，也不要新建另一个 Harmony provider。
+宿主一旦调用 `configure`，本进程的配置即归宿主所有：JS 端必须设置
+`nativeConfigSource: 'native'`，否则默认 `'javascript'` 模式下的配置写入会以
+`NATIVE_CONFIG_CONFLICT` 被拒绝（经 `onError` 与 `console.error` 报出）。
+从不调用 `configure` 的应用不受影响。
 `activated` 仍表示已为下次启动选定，而不是当前实例已经重载。
 
 JS SDK、JS 原生桥接接口、服务端路径、配置值、结果字段/状态值和持久化键不变。
