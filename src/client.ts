@@ -11,6 +11,7 @@ import {
   getBundleHash,
   isFirstTime,
   isRolledBack,
+  nativeMethod,
   PushyModule,
   packageVersion,
   pushyNativeEventEmitter,
@@ -379,12 +380,8 @@ export class Pushy {
 
   /** Build the subset of options used by the native cold-start check. */
   private getNativeConfig = (): Record<string, unknown> | undefined => {
-    if (
-      Platform.OS === 'web' ||
-      typeof PushyModule.syncNativeConfig !== 'function'
-    ) {
-      // Older natives lack the method; on web PushyModule is a noop Proxy
-      // and the feature-detect would false-positive.
+    if (!nativeMethod('syncNativeConfig')) {
+      // Web, or an older native without the native check.
       return undefined;
     }
     const {
@@ -442,7 +439,8 @@ export class Pushy {
       this.syncedNativeConfigJson = undefined;
       return;
     }
-    if (this.nativeConfigSyncInFlight) {
+    const sync = nativeMethod('syncNativeConfig');
+    if (!sync || this.nativeConfigSyncInFlight) {
       return;
     }
     const configJson = this.pendingNativeConfigJson;
@@ -451,15 +449,7 @@ export class Pushy {
       return;
     }
     this.nativeConfigSyncInFlight = true;
-    let syncResult: Promise<void>;
-    try {
-      syncResult = Promise.resolve(PushyModule.syncNativeConfig(configJson));
-    } catch (e: any) {
-      this.nativeConfigSyncInFlight = false;
-      log('syncNativeConfig failed:', e?.message || e);
-      return;
-    }
-    syncResult
+    sync(configJson)
       .then(() => {
         // A switch to 'native' while this write was in flight hands storage
         // to the host; remembering the write would skip it after switching
@@ -485,28 +475,22 @@ export class Pushy {
    * rescue must keep running when JS could not reach the server.
    */
   private markJsCheckCompleted = () => {
-    if (
-      Platform.OS === 'web' ||
-      typeof PushyModule.markJsCheckCompleted !== 'function'
-    ) {
+    const markCompleted = nativeMethod('markJsCheckCompleted');
+    if (!markCompleted) {
       return;
     }
     const configJson = this.getNativeConfigJson();
     if (!configJson || configJson === this.jsCheckCompletedConfigJson) {
       return;
     }
-    try {
-      Promise.resolve(PushyModule.markJsCheckCompleted(configJson)).then(
-        () => {
-          this.jsCheckCompletedConfigJson = configJson;
-        },
-        (e: any) => {
-          log('markJsCheckCompleted failed:', e?.message || e);
-        }
-      );
-    } catch (e: any) {
-      log('markJsCheckCompleted failed:', e?.message || e);
-    }
+    markCompleted(configJson).then(
+      () => {
+        this.jsCheckCompletedConfigJson = configJson;
+      },
+      (e: any) => {
+        log('markJsCheckCompleted failed:', e?.message || e);
+      }
+    );
   };
 
   private syncNativeConfig = () => {
@@ -518,10 +502,7 @@ export class Pushy {
       this.syncedNativeConfigJson = undefined;
       return;
     }
-    if (
-      Platform.OS === 'web' ||
-      typeof PushyModule.syncNativeConfig !== 'function'
-    ) {
+    if (!nativeMethod('syncNativeConfig')) {
       return;
     }
     const configJson = this.getNativeConfigJson();
@@ -1030,14 +1011,11 @@ export class Pushy {
     requestBody: Record<string, any>
   ): Promise<CheckResult | undefined> => {
     try {
-      if (
-        __DEV__ ||
-        nativeCheckCacheExhausted ||
-        typeof PushyModule.getNativeCheckCache !== 'function'
-      ) {
+      const getCache = nativeMethod('getNativeCheckCache');
+      if (__DEV__ || nativeCheckCacheExhausted || !getCache) {
         return undefined;
       }
-      const raw = await Promise.resolve(PushyModule.getNativeCheckCache());
+      const raw = await getCache();
       if (!raw || typeof raw !== 'string') {
         nativeCheckCacheExhausted = true;
         return undefined;
@@ -1794,13 +1772,10 @@ export class Pushy {
     restart?: boolean;
   }): Promise<boolean> => {
     if (!assertWeb()) {
-      // On web PushyModule is a Proxy of noops, so the feature-detect below
-      // would report a false success.
       return false;
     }
-    if (typeof PushyModule.resetToPackagedBundle !== 'function') {
-      // The JS layer can arrive via hot update onto an older binary whose
-      // native module predates this method.
+    const reset = nativeMethod('resetToPackagedBundle');
+    if (!reset) {
       const err = new UpdateError(
         this.t('error_reset_not_supported'),
         'RESET_FAILED'
@@ -1810,7 +1785,7 @@ export class Pushy {
       return false;
     }
     try {
-      await PushyModule.resetToPackagedBundle();
+      await reset();
     } catch (e) {
       const err = toUpdateError(e, 'RESET_FAILED');
       this.emitError(err, 'errorReset');

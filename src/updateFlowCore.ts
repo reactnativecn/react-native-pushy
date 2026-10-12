@@ -156,7 +156,7 @@ export const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
     leftKeys.length === definedKeys(right).length &&
     leftKeys.every(
       (key) =>
-        // Not Object.hasOwn: it is missing from JSC before iOS 15.4.
+        // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is missing from JSC before iOS 15.4
         Object.prototype.hasOwnProperty.call(right, key) &&
         jsonDeepEqual(left[key], right[key])
     )

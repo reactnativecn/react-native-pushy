@@ -82,41 +82,32 @@ export const emptyModule = new Proxy(emptyModuleTarget, {
   },
 });
 
-// Web never probes (assertWeb gates every flow); the identity keeps the
-// signature. Not the bare `Promise.resolve`: called unbound through map() it
-// throws.
-const ping = isWeb
-  ? (url: string) => Promise.resolve(url)
-  : async (url: string) => {
-      try {
-        const {
-          status,
-          statusText,
-          url: finalUrl,
-        } = await fetchWithTimeout(
-          url,
-          {
-            method: 'HEAD',
-          },
-          DEFAULT_FETCH_TIMEOUT_MS
-        );
-        if (status === 200) {
-          if (isProtocolDowngrade(url, finalUrl)) {
-            // The probe was redirected from https to plaintext http. Never
-            // let a downgraded final URL win the race: the winner is what
-            // the real artifact download uses.
-            log('ping rejected: https redirected to http', url, finalUrl);
-            throw Error(i18n.t('error_ping_failed'));
-          }
-          return finalUrl;
-        }
-        log('ping failed', url, status, statusText);
+const ping = async (url: string) => {
+  try {
+    const {
+      status,
+      statusText,
+      url: finalUrl,
+    } = await fetchWithTimeout(url, {
+      method: 'HEAD',
+    });
+    if (status === 200) {
+      if (isProtocolDowngrade(url, finalUrl)) {
+        // The probe was redirected from https to plaintext http. Never let a
+        // downgraded final URL win the race: the winner is what the real
+        // artifact download uses.
+        log('ping rejected: https redirected to http', url, finalUrl);
         throw Error(i18n.t('error_ping_failed'));
-      } catch (e) {
-        log('ping error', url, e);
-        throw e;
       }
-    };
+      return finalUrl;
+    }
+    log('ping failed', url, status, statusText);
+    throw Error(i18n.t('error_ping_failed'));
+  } catch (e) {
+    log('ping error', url, e);
+    throw e;
+  }
+};
 
 export { joinUrls } from './updateFlowCore';
 

@@ -454,26 +454,3 @@ describe('createNonSecureId', () => {
     expect(createNonSecureId(8)).toHaveLength(8);
   });
 });
-
-describe('testUrls on web', () => {
-  test('resolves the first url without probing or throwing', async () => {
-    mock.module('react-native', () => ({ Platform: { OS: 'web' } }));
-    const fetchMock = mock(async () => {
-      throw new Error('must not probe on web');
-    });
-    (globalThis as any).fetch = fetchMock;
-    const cacheKey = 'web-ping';
-    const webUtils: typeof import('../utils') = await import(
-      `../utils?${cacheKey}`
-    );
-
-    expect(webUtils.isWeb).toBe(true);
-    expect(
-      await webUtils.testUrls([
-        'https://a.example.com',
-        'https://b.example.com',
-      ])
-    ).toBe('https://a.example.com');
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-});

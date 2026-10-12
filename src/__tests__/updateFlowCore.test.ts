@@ -424,8 +424,7 @@ describe('native config canonical equality (C1)', () => {
 
   test('does not depend on Object.hasOwn (missing before iOS 15.4)', () => {
     const hasOwn = Object.hasOwn;
-    // biome-ignore lint/performance/noDelete: simulate the old JSC runtime
-    delete (Object as any).hasOwn;
+    Reflect.deleteProperty(Object, 'hasOwn');
     try {
       expect(nativeConfigsEquivalent(json(base), json(base))).toBe(true);
     } finally {

@@ -2274,6 +2274,22 @@ describe('syncNativeConfig', () => {
     );
   });
 
+  test('native ownership suppresses constructor and setOptions writes until handed back', async () => {
+    const syncNativeConfig = mock(() => Promise.resolve());
+    setupClientMocks({ syncNativeConfig });
+    const { Pushy } = await importFreshClient('sync-config-native-owner');
+    const client = new Pushy({
+      appKey: 'demo-app',
+      nativeConfigSource: 'native',
+    });
+    client.setOptions({ updateStrategy: 'silentAndLater' });
+    await Promise.resolve();
+    expect(syncNativeConfig).not.toHaveBeenCalled();
+
+    client.setOptions({ nativeConfigSource: 'javascript' });
+    expect(syncNativeConfig).toHaveBeenCalledTimes(1);
+  });
+
   test('an older native module without the method is skipped silently', async () => {
     setupClientMocks();
     const { Pushy } = await importFreshClient('sync-config-4');
