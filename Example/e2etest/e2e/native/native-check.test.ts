@@ -97,6 +97,10 @@ describe('Native cold-start check', () => {
     await waitForReady();
     await waitForBundleLabel(LOCAL_UPDATE_LABELS.base);
     await waitForHash('');
+    // This launch runs its own delayed round (5s after start). Let it finish
+    // before flipping the directive: a round still in flight would read the
+    // flipped server and activate one launch early.
+    await new Promise((resolve) => setTimeout(resolve, NATIVE_CHECK_SETTLE_MS));
 
     // Flip the directive before the launch whose round should honor it.
     await setForceBoot(true);

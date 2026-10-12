@@ -6,22 +6,11 @@ const { spawnSync } = require('child_process');
 
 const projectRoot = path.resolve(__dirname, '..');
 const androidJniDir = path.join(projectRoot, 'android', 'jni');
+const hpatchDir = path.join(projectRoot, 'cpp', 'hpatch');
 const patchCoreDir = path.join(projectRoot, 'cpp', 'patch_core');
 const updateFlowCoreDir = path.join(projectRoot, 'cpp', 'update_flow_core');
 const harmonyModuleDir = path.join(projectRoot, 'harmony', 'pushy');
 const harmonyBuildDir = path.join(harmonyModuleDir, 'build');
-const harmonyNativeStageDir = path.join(
-  harmonyModuleDir,
-  'src',
-  'main',
-  'cpp',
-  'android-generated'
-);
-const harmonyNativeStageJniDir = path.join(harmonyNativeStageDir, 'jni');
-const harmonyNativeStagePatchCoreDir = path.join(
-  harmonyNativeStageDir,
-  'patch_core'
-);
 const wrapperProjectDir = path.join(projectRoot, 'harmony', 'har-wrapper');
 const defaultOutputPath = path.join(projectRoot, 'harmony', 'pushy.har');
 const wrapperProjectFiles = [
@@ -30,6 +19,19 @@ const wrapperProjectFiles = [
   'oh-package.json5',
   path.join('AppScope', 'app.json5'),
   'build-profile.json5',
+];
+// The shared native sources harmony/pushy/src/main/cpp/CMakeLists.txt
+// compiles in place from the repository root (submodules included).
+const requiredNativeSources = [
+  [path.join(hpatchDir, 'hpatch.c'), 'shared hpatch source'],
+  [path.join(hpatchDir, 'hpatch.h'), 'shared hpatch source'],
+  [path.join(androidJniDir, 'HDiffPatch'), 'HDiffPatch submodule'],
+  [path.join(androidJniDir, 'lzma', 'C'), 'lzma submodule'],
+  [path.join(patchCoreDir, 'patch_core.cpp'), 'shared patch core source'],
+  [
+    path.join(updateFlowCoreDir, 'update_flow_core.cpp'),
+    'shared update flow core source',
+  ],
 ];
 
 const args = parseArgs(process.argv.slice(2));
@@ -59,36 +61,9 @@ try {
 }
 
 function main() {
-  let buildError = null;
-
-  // Setup runs inside the guard too: a failed version sync or staging copy
-  // must still clean the android-generated staging directory (its own or a
-  // stale one from an earlier build) instead of leaving it behind.
-  try {
-    syncOhPackageVersion();
-    syncHarmonyNativeSources();
-    buildHar();
-  } catch (error) {
-    buildError = error;
-  }
-
-  try {
-    cleanupHarmonyNativeSources();
-  } catch (error) {
-    if (!buildError) {
-      buildError = error;
-    } else {
-      console.warn(
-        `Warning: failed to clean staged Harmony native sources: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-    }
-  }
-
-  if (buildError) {
-    throw buildError;
-  }
+  syncOhPackageVersion();
+  ensureNativeSources();
+  buildHar();
 }
 
 function buildHar() {
@@ -136,22 +111,14 @@ function buildHar() {
     }
   }
 
+  // The wrapper project declares no dependencies of its own; only the
+  // module (RNOH) needs installing.
   if (!skipInstall) {
-    if (hasDependencies(harmonyModuleDir)) {
-      runCommand(ohpmPath, ['install'], {
-        cwd: harmonyModuleDir,
-        env,
-        label: 'Install Harmony dependencies',
-      });
-    }
-
-    if (hasDependencies(wrapperProjectDir)) {
-      runCommand(ohpmPath, ['install'], {
-        cwd: wrapperProjectDir,
-        env,
-        label: 'Install wrapper project dependencies',
-      });
-    }
+    runCommand(ohpmPath, ['install'], {
+      cwd: harmonyModuleDir,
+      env,
+      label: 'Install Harmony dependencies',
+    });
   }
 
   const hvigorArgs = ['assembleHar'];
@@ -222,89 +189,14 @@ function syncOhPackageVersion() {
   );
 }
 
-function syncHarmonyNativeSources() {
-  ensureFileExists(
-    path.join(androidJniDir, 'hpatch.c'),
-    `Missing Android native source: ${relativeToProject(
-      path.join(androidJniDir, 'hpatch.c')
-    )}`
-  );
-  ensureFileExists(
-    path.join(androidJniDir, 'hpatch.h'),
-    `Missing Android native source: ${relativeToProject(
-      path.join(androidJniDir, 'hpatch.h')
-    )}`
-  );
-  ensureFileExists(
-    path.join(androidJniDir, 'HDiffPatch'),
-    `Missing Android native source directory: ${relativeToProject(
-      path.join(androidJniDir, 'HDiffPatch')
-    )}`
-  );
-  ensureFileExists(
-    path.join(androidJniDir, 'lzma', 'C'),
-    `Missing Android native source directory: ${relativeToProject(
-      path.join(androidJniDir, 'lzma', 'C')
-    )}`
-  );
-  ensureFileExists(
-    path.join(patchCoreDir, 'patch_core.cpp'),
-    `Missing shared patch core source: ${relativeToProject(
-      path.join(patchCoreDir, 'patch_core.cpp')
-    )}`
-  );
-  ensureFileExists(
-    path.join(updateFlowCoreDir, 'update_flow_core.cpp'),
-    `Missing shared update flow core source: ${relativeToProject(
-      path.join(updateFlowCoreDir, 'update_flow_core.cpp')
-    )}`
-  );
-
-  fs.rmSync(harmonyNativeStageDir, { recursive: true, force: true });
-  fs.mkdirSync(path.join(harmonyNativeStageJniDir, 'lzma'), {
-    recursive: true,
-  });
-
-  copyPath(
-    path.join(androidJniDir, 'hpatch.c'),
-    path.join(harmonyNativeStageJniDir, 'hpatch.c')
-  );
-  copyPath(
-    path.join(androidJniDir, 'hpatch.h'),
-    path.join(harmonyNativeStageJniDir, 'hpatch.h')
-  );
-  copyPath(
-    path.join(androidJniDir, 'HDiffPatch'),
-    path.join(harmonyNativeStageJniDir, 'HDiffPatch')
-  );
-  copyPath(
-    path.join(androidJniDir, 'lzma', 'C'),
-    path.join(harmonyNativeStageJniDir, 'lzma', 'C')
-  );
-  copyPath(patchCoreDir, harmonyNativeStagePatchCoreDir);
-  copyPath(
-    updateFlowCoreDir,
-    path.join(harmonyNativeStageDir, 'update_flow_core')
-  );
-}
-
-function cleanupHarmonyNativeSources() {
-  fs.rmSync(harmonyNativeStageDir, { recursive: true, force: true });
-}
-
-function copyPath(sourcePath, targetPath) {
-  const stats = fs.statSync(sourcePath);
-  if (stats.isDirectory()) {
-    fs.cpSync(sourcePath, targetPath, {
-      recursive: true,
-      force: true,
-      filter: (entry) => path.basename(entry) !== '.git',
-    });
-    return;
+function ensureNativeSources() {
+  for (const [sourcePath, label] of requiredNativeSources) {
+    ensureFileExists(
+      sourcePath,
+      `Missing ${label}: ${relativeToProject(sourcePath)} ` +
+        '(run `git submodule update --init --recursive`)'
+    );
   }
-
-  fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-  fs.copyFileSync(sourcePath, targetPath);
 }
 
 function ensureWrapperProject() {
@@ -491,26 +383,4 @@ function relativeToProject(filePath) {
 
 function fail(message) {
   throw new Error(message);
-}
-
-function hasDependencies(dir) {
-  try {
-    const pkgPath = path.join(dir, 'oh-package.json5');
-    if (!fs.existsSync(pkgPath)) {
-      return false;
-    }
-    const pkgContent = fs.readFileSync(pkgPath, 'utf8');
-    const cleanJson = pkgContent.replace(
-      /\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm,
-      ''
-    );
-    const pkg = eval('(' + cleanJson + ')');
-    const hasDeps =
-      pkg.dependencies && Object.keys(pkg.dependencies).length > 0;
-    const hasDevDeps =
-      pkg.devDependencies && Object.keys(pkg.devDependencies).length > 0;
-    return !!(hasDeps || hasDevDeps);
-  } catch (e) {
-    return true;
-  }
 }

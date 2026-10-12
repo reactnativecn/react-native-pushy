@@ -1,0 +1,1765 @@
+{
+  "description": "The native cold-start round (cpp/update_flow_core/native_round.h), shared by the Android, iOS and Harmony orchestrators and replayed by scripts/test-update-flow-core.sh. `prepare`: config text + env + sample -> PrepareRound ({body (compared as an object), query}; no `expected` = Undefined). `query`: the requests a NextQueryStep walk issues against the scripted `responses` (url -> text; a missing url is a failed request) and the response it settles on. `respond`: HandleRoundResponse. `before` records what each platform's own orchestrator did where they disagreed before this core replaced them; the expected value is the JS-equivalent or strictest of them. Hand-maintained.",
+  "prepare": [
+    {
+      "name": "typical round",
+      "config": "{\"appKey\":\" key \",\"endpoints\":[\"https://a.example/\",\"HTTPS://b.example\"],\"queryUrls\":[\"https://l.example/list.json\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\",\"packageVersion\":\"2.0.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "2.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example/",
+            "HTTPS://b.example"
+          ],
+          "queryUrls": [
+            "https://l.example/list.json"
+          ],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "the sample picks the first endpoint",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\",\"https://b.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0.6,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://b.example",
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "no packageVersion override uses the binary's",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "an empty packageVersion uses the binary's",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\",\"packageVersion\":\"\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "a non-string packageVersion uses the binary's",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\",\"packageVersion\":2}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "before": {
+        "android": "\"2\" (optString coerces)",
+        "ios": "\"1.0.0\" (the binary's)",
+        "harmony": "2 (the number, as sent)"
+      },
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "no running version, Android form (null) is sent as null",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": null,
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": null,
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "no running version, iOS form (absent) is left out",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "no running version, Harmony form (\"\") is sent as \"\"",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "absent rnu/rn are sent as \"\"",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "before": {
+        "android": "\"\" and \"\"",
+        "ios": "both left out of cInfo",
+        "harmony": "\"\" and \"\""
+      },
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "",
+            "rn": "",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "non-string rnu/rn are sent as \"\"",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":null,\"rn\":1}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "before": {
+        "android": "\"null\" and \"1\" (optString coerces)",
+        "ios": "null and 1",
+        "harmony": "\"\" and 1"
+      },
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "",
+            "rn": "",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "no uuid is sent as \"\"",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": ""
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "no bundleHash is left out",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "an empty bundleHash is left out",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": ""
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "no buildTime is left out",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": true,
+          "endpoints": [
+            "https://a.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "one http endpoint turns https-only off",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\",\"http://b.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": false,
+          "endpoints": [
+            "https://a.example",
+            "http://b.example"
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "a non-string endpoint turns https-only off and is kept for the walk",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\",42],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": false,
+          "endpoints": [
+            "https://a.example",
+            42
+          ],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "non-array endpoints and queryUrls read as empty",
+      "config": "{\"appKey\":\"key\",\"endpoints\":\"https://a.example\",\"queryUrls\":\"https://l.example\",\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "before": {
+        "android": "no endpoints, no list discovery",
+        "ios": "no endpoints, no list discovery",
+        "harmony": "no request at all (the ordering binding rejected a non-array); a string queryUrls was walked per character"
+      },
+      "expected": {
+        "body": {
+          "packageVersion": "1.0.0",
+          "hash": "cur",
+          "buildTime": "1700000000",
+          "cInfo": {
+            "rnu": "10.0.0",
+            "rn": "0.80.0",
+            "os": "android 34",
+            "uuid": "u-1"
+          },
+          "diffV": 2,
+          "bundleHash": "bh"
+        },
+        "query": {
+          "appKey": "key",
+          "httpsOnly": false,
+          "endpoints": [],
+          "queryUrls": [],
+          "list": "endpoints",
+          "next": 0,
+          "tried": [],
+          "spent": 0
+        }
+      }
+    },
+    {
+      "name": "a disabled config prepares nothing",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\",\"disabled\":true}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0
+    },
+    {
+      "name": "an invalid config prepares nothing",
+      "config": "{",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0
+    },
+    {
+      "name": "an env that is not an object prepares nothing",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": [],
+      "sample": 0
+    }
+  ],
+  "query": [
+    {
+      "name": "falls back through configured endpoints, deduped by normalized base",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a/\",\"https://a\",\"\",\"https://b\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://b/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST https://a/checkUpdate/key",
+          "POST https://b/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      }
+    },
+    {
+      "name": "an invalid response does not stop the fallback",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a\",\"https://b\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://a/checkUpdate/key": "{\"error\":\"x\"}",
+        "https://b/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST https://a/checkUpdate/key",
+          "POST https://b/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      }
+    },
+    {
+      "name": "the appKey is trimmed in the URL",
+      "config": "{\"appKey\":\"  key\\t\",\"endpoints\":[\"https://a\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://a/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST https://a/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      }
+    },
+    {
+      "name": "the sample decides which endpoint goes first",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a\",\"https://b\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0.9,
+      "responses": {
+        "https://a/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST https://b/checkUpdate/key",
+          "POST https://a/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      }
+    },
+    {
+      "name": "discovers remote endpoints, skipping tried, non-string and cleartext ones",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a\"],\"queryUrls\":[\"\",\"https://list\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://list": "[\"https://a/\",42,\"http://plain\",\"https://c\"]",
+        "https://c/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST https://a/checkUpdate/key",
+          "GET https://list",
+          "POST https://c/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      },
+      "before": {
+        "android": "42 was coerced to \"42\" and dropped as non-https",
+        "ios": "same requests",
+        "harmony": "same requests"
+      }
+    },
+    {
+      "name": "cleartext remote endpoints are allowed without an https-only config",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"http://a\"],\"queryUrls\":[\"https://list\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://list": "[\"http://plain\"]",
+        "http://plain/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST http://a/checkUpdate/key",
+          "GET https://list",
+          "POST http://plain/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      }
+    },
+    {
+      "name": "only the first parsable remote list is used",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[],\"queryUrls\":[\"https://bad\",\"https://l1\",\"https://l2\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://bad": "{\"not\":\"array\"}",
+        "https://l1": "[\"https://x\"]",
+        "https://l2": "[\"https://y\"]"
+      },
+      "expected": {
+        "requests": [
+          "GET https://bad",
+          "GET https://l1",
+          "POST https://x/checkUpdate/key"
+        ],
+        "result": null
+      }
+    },
+    {
+      "name": "a failed list fetch moves on to the next list",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a\"],\"queryUrls\":[\"https://down\",\"https://l1\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://l1": "[\"https://x\"]",
+        "https://x/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST https://a/checkUpdate/key",
+          "GET https://down",
+          "GET https://l1",
+          "POST https://x/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      }
+    },
+    {
+      "name": "a remote list must be strict JSON",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[],\"queryUrls\":[\"https://lenient\",\"https://strict\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://lenient": "['https://x']",
+        "https://strict": "[\"https://y\"]",
+        "https://y/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "GET https://lenient",
+          "GET https://strict",
+          "POST https://y/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      },
+      "before": {
+        "android": "org.json accepted the single-quoted list and queried https://x",
+        "ios": "same requests",
+        "harmony": "same requests"
+      }
+    },
+    {
+      "name": "stops after 8 HTTP requests, list fetches included",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://e0\",\"https://e1\",\"https://e2\",\"https://e3\",\"https://e4\",\"https://e5\"],\"queryUrls\":[\"https://list\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://list": "[\"https://r0\",\"https://r1\",\"https://r2\"]",
+        "https://r2/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST https://e0/checkUpdate/key",
+          "POST https://e1/checkUpdate/key",
+          "POST https://e2/checkUpdate/key",
+          "POST https://e3/checkUpdate/key",
+          "POST https://e4/checkUpdate/key",
+          "POST https://e5/checkUpdate/key",
+          "GET https://list",
+          "POST https://r0/checkUpdate/key"
+        ],
+        "result": null
+      }
+    },
+    {
+      "name": "non-string configured endpoints are skipped without spending a request",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[42,\"https://a\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://a/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "POST https://a/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      },
+      "before": {
+        "android": "requested \"42/checkUpdate/key\" first (optString coerces)",
+        "ios": "same requests",
+        "harmony": "the round threw (normalizeEndpointBase on a number) and failed internal_error"
+      }
+    },
+    {
+      "name": "non-string and empty queryUrls entries are skipped without spending a request",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[],\"queryUrls\":[7,\"\",\"https://l\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://l": "[\"https://x\"]",
+        "https://x/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "GET https://l",
+          "POST https://x/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      },
+      "before": {
+        "android": "fetched \"7\" first (optString coerces), spending a request",
+        "ios": "same requests",
+        "harmony": "spent a request on 7 (the fetch failed), then the same"
+      }
+    },
+    {
+      "name": "non-array endpoints still try the list discovery",
+      "config": "{\"appKey\":\"key\",\"endpoints\":\"https://a\",\"queryUrls\":[\"https://l\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {
+        "https://l": "[\"https://x\"]",
+        "https://x/checkUpdate/key": "{\"upToDate\":true}"
+      },
+      "expected": {
+        "requests": [
+          "GET https://l",
+          "POST https://x/checkUpdate/key"
+        ],
+        "result": "{\"upToDate\":true}"
+      },
+      "before": {
+        "android": "same requests",
+        "ios": "same requests",
+        "harmony": "no request at all"
+      }
+    },
+    {
+      "name": "nothing reachable",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a\",\"https://b\"],\"queryUrls\":[\"https://l\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {},
+      "expected": {
+        "requests": [
+          "POST https://a/checkUpdate/key",
+          "POST https://b/checkUpdate/key",
+          "GET https://l"
+        ],
+        "result": null
+      }
+    },
+    {
+      "name": "no endpoints and no lists issue no request",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "sample": 0,
+      "responses": {},
+      "expected": {
+        "requests": [],
+        "result": null
+      }
+    }
+  ],
+  "respond": [
+    {
+      "name": "up to date",
+      "response": "{\"upToDate\":true}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "none",
+        "reason": "noUpdate",
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"upToDate\\\":true}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "a download drops cleartext artifact URLs under an https-only config",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "diff",
+            "urls": [
+              "https://cdn.x.com/d.hdiff"
+            ]
+          },
+          {
+            "type": "pdiff",
+            "urls": [
+              "https://cdn.x.com/p.hdiff"
+            ]
+          },
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "cleartext artifact URLs are kept without an https-only config",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"http://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "diff",
+            "urls": [
+              "https://cdn.x.com/d.hdiff",
+              "http://plain.x.com/d.hdiff"
+            ]
+          },
+          {
+            "type": "pdiff",
+            "urls": [
+              "https://cdn.x.com/p.hdiff",
+              "http://plain.x.com/p.hdiff"
+            ]
+          },
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk",
+              "http://plain.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"http://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "no running version (null) drops the diff attempt",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": null,
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "pdiff",
+            "urls": [
+              "https://cdn.x.com/p.hdiff"
+            ]
+          },
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "no running version (absent) drops the diff attempt",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "pdiff",
+            "urls": [
+              "https://cdn.x.com/p.hdiff"
+            ]
+          },
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "no running version (\"\") drops the diff attempt",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "pdiff",
+            "urls": [
+              "https://cdn.x.com/p.hdiff"
+            ]
+          },
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "only cleartext mirrors under https-only leave no attempt",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [],
+        "activate": false,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "forceBoot activates and marks the rescue",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"],\"config\":{\"forceBoot\":true}}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "diff",
+            "urls": [
+              "https://cdn.x.com/d.hdiff"
+            ]
+          },
+          {
+            "type": "pdiff",
+            "urls": [
+              "https://cdn.x.com/p.hdiff"
+            ]
+          },
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": true,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}",
+          "forceBootRescue": true
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"],\\\"config\\\":{\\\"forceBoot\\\":true}}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "a truthy forceBoot 1 marks the rescue it activates",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"],\"config\":{\"forceBoot\":1}}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "before": {
+        "android": "activated without the marker (optBoolean(1) is false)",
+        "ios": "marked",
+        "harmony": "marked"
+      },
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": true,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}",
+          "forceBootRescue": true
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"],\\\"config\\\":{\\\"forceBoot\\\":1}}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "a truthy forceBoot \"false\" marks the rescue it activates",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"],\"config\":{\"forceBoot\":\"false\"}}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "before": {
+        "android": "activated without the marker (optBoolean(\"false\") is false)",
+        "ios": "marked",
+        "harmony": "marked"
+      },
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": true,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}",
+          "forceBootRescue": true
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"],\\\"config\\\":{\\\"forceBoot\\\":\\\"false\\\"}}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "a falsy forceBoot neither activates nor marks",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"],\"config\":{\"forceBoot\":0}}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"],\\\"config\\\":{\\\"forceBoot\\\":0}}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "the silent strategy activates without marking a rescue",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"setNeedUpdate\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": true,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"setNeedUpdate\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "a non-string afterDownload never activates",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":1,\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "before": {
+        "android": "same decision",
+        "ios": "same decision",
+        "harmony": "the binding rejected the number: failed invalid_response, no cache"
+      },
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "name": "v2",
+          "description": "notes",
+          "metaInfo": "{\"k\":1}"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":1,\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "only string name/description/metaInfo are kept",
+      "response": "{\"update\":true,\"hash\":\"h2\",\"name\":2,\"description\":null,\"metaInfo\":\"m\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "h2",
+        "attempts": [
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/f.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "metaInfo": "m"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":2,\\\"description\\\":null,\\\"metaInfo\\\":\\\"m\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "the launch's rolled-back version is never downloaded again",
+      "response": "{\"update\":true,\"hash\":\"bad\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh",
+        "rolledBackVersion": "bad"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "none",
+        "reason": "rolledBack",
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"bad\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "the running version is already current",
+      "response": "{\"update\":true,\"hash\":\"cur\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"{\\\"k\\\":1}\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"cdn.x.com\",\"http://plain.x.com\"]}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "none",
+        "reason": "noUpdate",
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"cur\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"{\\\\\\\"k\\\\\\\":1}\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\",\\\"http://plain.x.com\\\"]}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}"
+      }
+    },
+    {
+      "name": "the packageVersion override keys the gray release",
+      "response": "{\"update\":true,\"hash\":\"root\",\"full\":\"root.ppk\",\"paths\":[\"cdn.x.com\"],\"expVersion\":{\"name\":\"g\",\"hash\":\"gray\",\"full\":\"gray.ppk\",\"config\":{\"rollout\":{\"2.3.4\":63}}}}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\",\"packageVersion\":\"2.3.4\"}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "test1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "download",
+        "hash": "gray",
+        "attempts": [
+          {
+            "type": "full",
+            "urls": [
+              "https://cdn.x.com/gray.ppk"
+            ]
+          }
+        ],
+        "activate": false,
+        "hashInfo": {
+          "name": "g"
+        },
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"root\\\",\\\"full\\\":\\\"root.ppk\\\",\\\"paths\\\":[\\\"cdn.x.com\\\"],\\\"expVersion\\\":{\\\"name\\\":\\\"g\\\",\\\"hash\\\":\\\"gray\\\",\\\"full\\\":\\\"gray.ppk\\\",\\\"config\\\":{\\\"rollout\\\":{\\\"2.3.4\\\":63}}}}\",\"request\":\"{\\\"r\\\":1}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"packageVersion\\\":\\\"2.3.4\\\"}\"}"
+      }
+    },
+    {
+      "name": "the cache keeps every text verbatim",
+      "response": "{\"upToDate\":true,\"s\":\"a/b \\u00e9 \\\"q\\\"\"}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example/\"]}",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"hash\":\"x/y\"}",
+      "ts": 1700000000,
+      "expected": {
+        "action": "none",
+        "reason": "noUpdate",
+        "cache": "{\"ts\":1700000000,\"body\":\"{\\\"upToDate\\\":true,\\\"s\\\":\\\"a/b \\\\u00e9 \\\\\\\"q\\\\\\\"\\\"}\",\"request\":\"{\\\"hash\\\":\\\"x/y\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example/\\\"]}\"}"
+      }
+    },
+    {
+      "name": "an invalid config handles nothing",
+      "response": "{\"upToDate\":true}",
+      "config": "{",
+      "env": {
+        "packageVersion": "1.0.0",
+        "currentVersion": "cur",
+        "uuid": "u-1",
+        "buildTime": "1700000000",
+        "os": "android 34",
+        "bundleHash": "bh"
+      },
+      "request": "{\"r\":1}",
+      "ts": 1700000000
+    },
+    {
+      "name": "an env that is not an object handles nothing",
+      "response": "{\"upToDate\":true}",
+      "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+      "env": "env",
+      "request": "{\"r\":1}",
+      "ts": 1700000000
+    }
+  ]
+}

@@ -1,11 +1,16 @@
+#include "../archive_limits.h"
 #include "../archive_patch_core.h"
 #include "../digest.h"
+#include "../install_record.h"
 #include "../patch_core.h"
+#include "../patch_manifest.h"
 #include "../state_core.h"
+#include "../../update_flow_core/flow_json.h"
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dirent.h>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
@@ -163,7 +168,7 @@ void TestApplyPatchWithHbcTransform() {
   options.bundle_patch_path = patch;
   options.bundle_output_path = JoinPath(temp.path, "out/index.bundlejs");
   options.enable_merge = false;
-  options.bundle_hbc_transform_meta = meta;
+  options.manifest.bundle_hbc_transform_meta = meta;
 
   Status status = ApplyPatchFromFileSource(options);
   Expect(status.ok, "hbc transform patch should succeed: " + status.message);
@@ -195,7 +200,7 @@ void TestApplyPatchWithHbcTransformRejectsBadMeta() {
   options.enable_merge = false;
 
   // 不可解析的元数据 → 失败(绝不能忽略元数据直接 hpatch)
-  options.bundle_hbc_transform_meta = "not json";
+  options.manifest.bundle_hbc_transform_meta = "not json";
   Expect(
       !ApplyPatchFromFileSource(options).ok,
       "malformed hbcTransform metadata must fail");
@@ -207,7 +212,7 @@ void TestApplyPatchWithHbcTransformRejectsBadMeta() {
   const size_t pos = meta.find(needle);
   Expect(pos != std::string::npos, "meta fixture must contain v:1");
   meta.replace(pos, needle.size(), "\"v\":9");
-  options.bundle_hbc_transform_meta = meta;
+  options.manifest.bundle_hbc_transform_meta = meta;
   Status status = ApplyPatchFromFileSource(options);
   Expect(!status.ok, "unsupported hbcTransform version must fail");
   Expect(
@@ -246,7 +251,7 @@ void TestApplyStreamFormatWithHbcTransform() {
   options.bundle_patch_path = JoinPath(g_fixtures_dir, "v96.tstreampatch.bin");
   options.bundle_output_path = JoinPath(temp.path, "out/index.bundlejs");
   options.enable_merge = false;
-  options.bundle_hbc_transform_meta =
+  options.manifest.bundle_hbc_transform_meta =
       ReadFile(JoinPath(g_fixtures_dir, "v96.meta.json"));
 
   Status status = ApplyPatchFromFileSource(options);
@@ -570,7 +575,7 @@ void TestHpatchRejectsOversizedLzmaDictionary() {
   options.bundle_patch_path = tampered;
   options.bundle_output_path = JoinPath(temp.path, "out/index.bundlejs");
   options.enable_merge = false;
-  options.bundle_hbc_transform_meta = ReadFile(JoinPath(g_fixtures_dir, "v96.meta.json"));
+  options.manifest.bundle_hbc_transform_meta = ReadFile(JoinPath(g_fixtures_dir, "v96.meta.json"));
 
   Status status = ApplyPatchFromFileSource(options);
   Expect(!status.ok, "a patch declaring a 4 GB LZMA dictionary must be refused");
@@ -775,6 +780,16 @@ void TestArchivePatchCoreBuildPlanAndCopyGroups() {
   Expect(groups.size() == 1, "copy groups should merge identical sources");
   ExpectEq(groups[0].from, "assets/a.png", "copy group source mismatch");
   Expect(groups[0].to_paths.size() == 2, "copy group target count mismatch");
+  Expect(!groups[0].has_expected_crc, "no CRC declared, none grouped");
+
+  // A CRC declared on a later copy of the source still lands on its group.
+  manifest.copies[1].has_expected_crc = true;
+  manifest.copies[1].expected_crc = 7;
+  status = pushy::archive_patch::BuildCopyGroups(manifest, &groups);
+  Expect(status.ok, status.message);
+  Expect(groups.size() == 1 && groups[0].has_expected_crc &&
+             groups[0].expected_crc == 7,
+         "group CRC comes from whichever copy declared it");
 
   FileSourcePatchOptions options;
   status = pushy::archive_patch::BuildFileSourcePatchOptions(
@@ -1116,7 +1131,762 @@ void TestApplyPatchCopiesVerifyExpectedCrc() {
       "drifted content must not be copied");
 }
 
+// ---- __diff.json (patch_manifest.h) ----
+
+std::string DescribeManifest(const PatchManifest& manifest) {
+  std::string out = "copies=";
+  for (const CopyOperation& copy : manifest.copies) {
+    out += "[" + copy.from + "," + copy.to + "," +
+           (copy.has_expected_crc ? std::to_string(copy.expected_crc)
+                                  : std::string("null")) +
+           "]";
+  }
+  out += " deletes=";
+  for (const std::string& path : manifest.deletes) {
+    out += "[" + path + "]";
+  }
+  out += " meta=" + manifest.bundle_hbc_transform_meta;
+  return out;
+}
+
+// The shared vectors (tests/patch-manifest-vectors.json): server shapes, the
+// cases the platforms used to disagree on, and hostile paths.
+void TestPatchManifestVectors() {
+  const std::string path =
+      JoinPath(g_fixtures_dir, "../patch-manifest-vectors.json");
+  bool ok = false;
+  const flowjson::Value doc = flowjson::Parse(ReadFile(path), &ok);
+  Expect(ok && doc.Get("vectors").IsArray(), "vectors file must parse: " + path);
+  Expect(doc.Get("vectors").Size() >= 40, "vectors file lost its cases");
+  for (const flowjson::Value& vector : doc.Get("vectors").elements()) {
+    const std::string name = vector.Get("name").AsString();
+    const std::string text = vector.Get("text").IsString()
+        ? vector.Get("text").AsString()
+        : flowjson::Stringify(vector.Get("manifest"));
+    pushy::delta::PatchManifestOptions options;
+    options.bundle_patch_entry_name = "index.bundlejs.patch";
+    const flowjson::Value& given = vector.Get("options");
+    if (given.Get("bundlePatchEntryName").IsString()) {
+      options.bundle_patch_entry_name =
+          given.Get("bundlePatchEntryName").AsString();
+    }
+    if (given.Get("copySourcePrefix").IsString()) {
+      options.copy_source_prefix = given.Get("copySourcePrefix").AsString();
+    }
+
+    PatchManifest manifest;
+    manifest.deletes.push_back("sentinel");
+    const Status status =
+        pushy::delta::ParsePatchManifest(text, options, &manifest);
+    if (vector.Get("error").IsString()) {
+      const std::string expected = vector.Get("error").AsString();
+      Expect(!status.ok, name + ": expected an error, got " +
+                             DescribeManifest(manifest));
+      Expect(status.message.find(expected) != std::string::npos,
+             name + ": error [" + status.message + "] lacks [" + expected + "]");
+      Expect(manifest.deletes.size() == 1 && manifest.copies.empty(),
+             name + ": a failed parse must leave the output untouched");
+      continue;
+    }
+    Expect(status.ok, name + ": " + status.message);
+
+    PatchManifest expected;
+    for (const flowjson::Value& copy : vector.Get("copies").elements()) {
+      CopyOperation operation;
+      operation.from = copy.At(0).AsString();
+      operation.to = copy.At(1).AsString();
+      if (copy.At(2).IsNumber()) {
+        operation.has_expected_crc = true;
+        operation.expected_crc = static_cast<uint32_t>(copy.At(2).AsNumber());
+      }
+      expected.copies.push_back(operation);
+    }
+    for (const flowjson::Value& deleted : vector.Get("deletes").elements()) {
+      expected.deletes.push_back(deleted.AsString());
+    }
+    if (vector.Get("hbcTransformMeta").IsString()) {
+      expected.bundle_hbc_transform_meta =
+          vector.Get("hbcTransformMeta").AsString();
+    }
+    ExpectEq(DescribeManifest(manifest), DescribeManifest(expected), name);
+  }
+}
+
+void TestPatchManifestSizeCaps() {
+  pushy::delta::PatchManifestOptions options;
+  options.bundle_patch_entry_name = "index.bundlejs.patch";
+  PatchManifest manifest;
+
+  // Over kMaxManifestBytes: rejected before parsing.
+  std::string big = "{\"pad\":\"";
+  big.append(static_cast<size_t>(pushy::archive_limits::kMaxManifestBytes), 'x');
+  big += "\"}";
+  Status status = pushy::delta::ParsePatchManifest(big, options, &manifest);
+  Expect(!status.ok, "a manifest over kMaxManifestBytes must be rejected");
+
+  // A real-sized manifest well over flowjson's 1 MB response cap still parses.
+  std::string large = "{\"copies\":{";
+  std::string large_crc = "\"copiesCrc\":{";
+  const int copies = 20000;
+  for (int i = 0; i < copies; ++i) {
+    const std::string to = "assets/node_modules/some-package/images/icon_" +
+                           std::to_string(i) + "@3x.png";
+    large += (i ? ",\"" : "\"") + to + "\":\"\"";
+    large_crc += (i ? ",\"" : "\"") + to + "\":" + std::to_string(i);
+  }
+  large += "}," + large_crc + "}}";
+  Expect(large.size() > 2 * 1024 * 1024, "the large manifest must exceed 2 MB");
+  status = pushy::delta::ParsePatchManifest(large, options, &manifest);
+  Expect(status.ok, "a 20000-copy manifest must parse: " + status.message);
+  Expect(manifest.copies.size() == static_cast<size_t>(copies) &&
+             manifest.copies.back().has_expected_crc &&
+             manifest.copies.back().expected_crc == copies - 1,
+         "every copy keeps its CRC");
+
+  // Over kMaxManifestNodes values: rejected.
+  std::string nodes = "{\"deletes\":[";
+  for (size_t i = 0; i < pushy::delta::kMaxManifestNodes; ++i) {
+    nodes += i ? ",\"a\"" : "\"a\"";
+  }
+  nodes += "]}";
+  status = pushy::delta::ParsePatchManifest(nodes, options, &manifest);
+  Expect(!status.ok, "a manifest over kMaxManifestNodes values must be rejected");
+
+  Expect(!pushy::delta::ParsePatchManifest("{}", options, nullptr).ok,
+         "a null output must be rejected");
+}
+
+pushy::archive_patch::ArchivePatchInput PpkInput(const std::string& manifest_json) {
+  pushy::archive_patch::ArchivePatchInput input;
+  input.type = pushy::archive_patch::ArchivePatchType::kPatchFromPpk;
+  input.entry_names = {"__diff.json", "index.bundlejs.patch"};
+  input.manifest_json = manifest_json;
+  return input;
+}
+
+void TestPlanArchivePatch() {
+  pushy::archive_patch::ArchivePatchPlan plan;
+
+  pushy::archive_patch::ArchivePatchInput input = PpkInput("not json");
+  input.entry_names = {"index.bundlejs.patch"};
+  Status status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  ExpectEq(status.message, "diff.json not found",
+           "a missing manifest entry is reported before the text is parsed");
+  input.entry_names = {"__diff.json"};
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  ExpectEq(status.message, "bundle delta not found", "missing bundle patch");
+
+  input = PpkInput("{\"copies\":{\"../x\":\"\"}}");
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  Expect(!status.ok && status.message.find("Unsafe copy") != std::string::npos,
+         "the plan validates the parsed paths: " + status.message);
+
+  input = PpkInput(
+      "{\"copies\":{\"assets/b.png\":\"assets/a.png\"},"
+      "\"deletes\":{\"assets/old.png\":1},"
+      "\"hbcTransform\":{\"index.bundlejs.patch\":{\"v\":1}}}");
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  Expect(status.ok, status.message);
+  Expect(plan.enable_merge && plan.merge_source_subdir.empty(), "ppk merge plan");
+  Expect(plan.manifest.copies.size() == 1 &&
+             plan.manifest.copies[0].from == "assets/a.png" &&
+             plan.manifest.deletes.size() == 1,
+         "the plan carries the parsed manifest");
+  ExpectEq(plan.manifest.bundle_hbc_transform_meta, "{\"v\":1}",
+           "the plan carries the hbcTransform metadata");
+
+  // HarmonyOS: its own bundle patch name keys both the entry check and the
+  // metadata; the rawfile prefix is stripped.
+  input.type = pushy::archive_patch::ArchivePatchType::kPatchFromPackage;
+  input.entry_names = {"__diff.json", "bundle.harmony.js.patch"};
+  input.bundle_patch_entry_name = "bundle.harmony.js.patch";
+  input.copy_source_prefix = "resources/rawfile/";
+  input.manifest_json =
+      "{\"copies\":{\"assets/a.png\":\"resources/rawfile/assets/a.png\"},"
+      "\"hbcTransform\":{\"bundle.harmony.js.patch\":{\"v\":1}}}";
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  Expect(status.ok, status.message);
+  ExpectEq(plan.merge_source_subdir, "assets", "package merge subdir");
+  ExpectEq(plan.manifest.copies[0].from, "assets/a.png", "prefix stripped");
+  ExpectEq(plan.manifest.bundle_hbc_transform_meta, "{\"v\":1}",
+           "metadata under the platform's bundle patch name");
+
+  // A full package plans nothing and never looks at the text.
+  input = PpkInput("not json");
+  input.type = pushy::archive_patch::ArchivePatchType::kFull;
+  input.entry_names.clear();
+  status = pushy::archive_patch::PlanArchivePatch(input, &plan);
+  Expect(status.ok && !plan.enable_merge && plan.manifest.copies.empty(),
+         "full package plan: " + status.message);
+  Expect(!pushy::archive_patch::PlanArchivePatch(input, nullptr).ok,
+         "a null plan output must be rejected");
+}
+
+void TestApplyArchivePatchFromPpk() {
+  TempDir temp;
+  const std::string source = JoinPath(temp.path, "origin");
+  const std::string target = JoinPath(temp.path, "target");
+
+  WriteFile(JoinPath(source, "index.bundlejs"), "old bundle");
+  WriteFile(JoinPath(source, "assets/keep.txt"), "keep");
+  WriteFile(JoinPath(source, "assets/delete.txt"), "delete");
+  WriteFile(JoinPath(source, "assets/from.txt"), "123456789");
+  WriteFile(JoinPath(target, "index.bundlejs.patch"), "unused patch");
+
+  pushy::archive_patch::ArchivePatchRequest request;
+  request.archive = PpkInput(
+      "{\"copies\":{\"assets/renamed.txt\":\"assets/from.txt\"},"
+      "\"copiesCrc\":{\"assets/renamed.txt\":3421780262},"
+      "\"deletes\":{\"assets/delete.txt\":1}}");
+  request.source_root = source;
+  request.target_root = target;
+  request.origin_bundle_path = JoinPath(source, "index.bundlejs");
+  request.bundle_patch_path = JoinPath(target, "index.bundlejs.patch");
+  request.bundle_output_path = JoinPath(target, "index.bundlejs");
+
+  FakeBundlePatcher patcher("patched bundle");
+  std::vector<pushy::archive_patch::CopyGroup> host_copies(1);
+  Status status =
+      pushy::archive_patch::ApplyArchivePatch(request, &host_copies, patcher);
+  Expect(status.ok, status.message);
+  Expect(host_copies.empty(), "nothing is left to the host");
+  ExpectEq(ReadFile(JoinPath(target, "index.bundlejs")), "patched bundle", "bundle");
+  ExpectEq(ReadFile(JoinPath(target, "assets/renamed.txt")), "123456789", "copy");
+  ExpectEq(ReadFile(JoinPath(target, "assets/keep.txt")), "keep", "merge");
+  Expect(!Exists(JoinPath(target, "assets/delete.txt")), "delete honoured");
+
+  // The declared CRC is checked against the source: drift fails the patch.
+  WriteFile(JoinPath(source, "assets/from.txt"), "drifted");
+  const std::string target2 = JoinPath(temp.path, "target2");
+  request.target_root = target2;
+  request.bundle_output_path = JoinPath(target2, "index.bundlejs");
+  status = pushy::archive_patch::ApplyArchivePatch(request, nullptr, patcher);
+  Expect(!status.ok && status.message.find("crc32") != std::string::npos,
+         "a drifted copy source must fail: " + status.message);
+
+  // A manifest error stops before the bundle is touched.
+  FakeBundlePatcher untouched("x");
+  request.archive.manifest_json = "{\"deletes\":[\"../../x\"]}";
+  status = pushy::archive_patch::ApplyArchivePatch(request, nullptr, untouched);
+  Expect(!status.ok && untouched.calls == 0,
+         "an unsafe manifest must fail before patching");
+
+  request.archive.type = pushy::archive_patch::ArchivePatchType::kFull;
+  Expect(!pushy::archive_patch::ApplyArchivePatch(request, nullptr, untouched).ok,
+         "a full package has no patch to apply");
+}
+
+// Android APK / HarmonyOS rawfile packages: only the bundle is rebuilt; the
+// copies come back grouped by source, with the CRC each group must match.
+void TestApplyArchivePatchHostCopies() {
+  TempDir temp;
+  const std::string work = JoinPath(temp.path, "work");
+  WriteFile(JoinPath(work, ".origin.bundle"), "old bundle");
+  WriteFile(JoinPath(work, "index.bundlejs.patch"), "unused patch");
+  WriteFile(JoinPath(work, "assets/new.png"), "new");
+
+  pushy::archive_patch::ArchivePatchRequest request;
+  request.archive = PpkInput(
+      "{\"copies\":{\"res/a.png\":\"\",\"res/b.png\":\"res/a.png\","
+      "\"res/c.png\":\"res/c_old.png\"},"
+      "\"copiesCrc\":{\"res/b.png\":42}}");
+  request.archive.type = pushy::archive_patch::ArchivePatchType::kPatchFromPackage;
+  request.source_root = work;
+  request.target_root = work;
+  request.origin_bundle_path = JoinPath(work, ".origin.bundle");
+  request.bundle_patch_path = JoinPath(work, "index.bundlejs.patch");
+  request.bundle_output_path = JoinPath(work, "index.bundlejs");
+  request.host_copies_resources = true;
+
+  FakeBundlePatcher patcher("patched bundle");
+  Expect(!pushy::archive_patch::ApplyArchivePatch(request, nullptr, patcher).ok,
+         "host copies need an output");
+  Expect(patcher.calls == 0, "nothing runs without the output");
+
+  std::vector<pushy::archive_patch::CopyGroup> groups;
+  Status status = pushy::archive_patch::ApplyArchivePatch(request, &groups, patcher);
+  Expect(status.ok, status.message);
+  ExpectEq(ReadFile(JoinPath(work, "index.bundlejs")), "patched bundle", "bundle");
+  Expect(!Exists(JoinPath(work, "res")), "the core copies nothing itself");
+  ExpectEq(ReadFile(JoinPath(work, "assets/new.png")), "new", "no merge into work");
+  Expect(groups.size() == 2, "two sources");
+  ExpectEq(groups[0].from, "res/a.png", "first group source");
+  Expect(groups[0].to_paths.size() == 2 && groups[0].to_paths[1] == "res/b.png",
+         "targets of one source are grouped in order");
+  Expect(groups[0].has_expected_crc && groups[0].expected_crc == 42,
+         "a CRC declared for any target covers the group");
+  Expect(!groups[1].has_expected_crc, "no CRC declared for the second source");
+}
+
+void TestApplyArchivePatchWithHbcTransform() {
+  TempDir temp;
+  const std::string meta = ReadFile(JoinPath(g_fixtures_dir, "v96.meta.json"));
+  pushy::archive_patch::ArchivePatchRequest request;
+  request.archive = PpkInput(
+      "{\"copies\":{},\"hbcTransform\":{\"index.bundlejs.patch\":" + meta + "}}");
+  request.source_root = JoinPath(temp.path, "src");
+  request.target_root = JoinPath(temp.path, "dst");
+  request.origin_bundle_path = JoinPath(g_fixtures_dir, "v96.hbc");
+  request.bundle_patch_path = JoinPath(g_fixtures_dir, "v96.tpatch.bin");
+  request.bundle_output_path = JoinPath(temp.path, "dst/index.bundlejs");
+  Status status = pushy::archive_patch::ApplyArchivePatch(request, nullptr);
+  Expect(status.ok, "transform-domain patch through the manifest: " + status.message);
+  Expect(ReadFile(request.bundle_output_path) ==
+             ReadFile(JoinPath(g_fixtures_dir, "v96b.hbc")),
+         "restored bundle must equal the new bundle byte-for-byte");
+
+  // Without the metadata the same patch must not silently produce a bundle
+  // that matches: the transform is part of the manifest contract.
+  request.archive.manifest_json = "{}";
+  request.bundle_output_path = JoinPath(temp.path, "dst2/index.bundlejs");
+  status = pushy::archive_patch::ApplyArchivePatch(request, nullptr);
+  Expect(!status.ok || ReadFile(request.bundle_output_path) !=
+                           ReadFile(JoinPath(g_fixtures_dir, "v96b.hbc")),
+         "the metadata is what makes the transform-domain patch apply");
+}
+
 }  // namespace
+
+// ---- Completion records (install_record.h) ----
+
+namespace ir = pushy::install_record;
+
+const char kRecordBundle[] = "index.bundlejs";
+
+std::string ReplaceAll(std::string text, const std::string& from, const std::string& to) {
+  for (size_t at = text.find(from); at != std::string::npos;
+       at = text.find(from, at + to.size())) {
+    text.replace(at, from.size(), to);
+  }
+  return text;
+}
+
+std::string Upper(std::string text) {
+  for (char& c : text) {
+    if (c >= 'a' && c <= 'z') {
+      c = static_cast<char>(c - 'a' + 'A');
+    }
+  }
+  return text;
+}
+
+std::vector<std::string> ListDirectory(const std::string& path) {
+  std::vector<std::string> names;
+  DIR* dir = opendir(path.c_str());
+  if (dir == nullptr) {
+    return names;
+  }
+  while (struct dirent* entry = readdir(dir)) {
+    const std::string name = entry->d_name;
+    if (name != "." && name != "..") {
+      names.push_back(name);
+    }
+  }
+  closedir(dir);
+  return names;
+}
+
+// The shared vectors (tests/install-record-vectors.json): what each record
+// shape means for launch/dedup, activation and crash attribution, including
+// the cases the platforms used to disagree on.
+void TestInstallRecordVectors() {
+  const std::string path =
+      JoinPath(g_fixtures_dir, "../install-record-vectors.json");
+  bool ok = false;
+  const flowjson::Value doc = flowjson::Parse(ReadFile(path), &ok);
+  Expect(ok && doc.Get("vectors").IsArray(), "vectors file must parse: " + path);
+  Expect(doc.Get("vectors").Size() >= 30, "vectors file lost its cases");
+  const std::string bundle = "var a = 1;";
+  pushy::digest::Sha256 hasher;
+  hasher.Update(reinterpret_cast<const uint8_t*>(bundle.data()), bundle.size());
+  const std::string bundle_sha = hasher.HexDigest();
+  pushy::digest::Sha256 other;
+  other.Update(reinterpret_cast<const uint8_t*>("var a = 2;"), 10);
+  const std::string other_sha = other.HexDigest();
+  auto expand = [&](const std::string& text) {
+    return ReplaceAll(ReplaceAll(ReplaceAll(text, "@SHA_UPPER@", Upper(bundle_sha)),
+                                 "@OTHER_SHA@", other_sha),
+                      "@SHA@", bundle_sha);
+  };
+
+  for (const flowjson::Value& vector : doc.Get("vectors").elements()) {
+    const std::string name = vector.Get("name").AsString();
+    const std::string hash =
+        vector.Get("hash").IsString() ? vector.Get("hash").AsString() : "abc";
+    TempDir temp;
+    const std::string dir = temp.path + "/" + hash;
+    EnsureDirectory(dir);
+    if (!vector.Get("bundle").IsBool() || vector.Get("bundle").AsBool()) {
+      WriteFile(dir + "/" + kRecordBundle, bundle);
+    }
+    const bool has_record = vector.Get("record").IsString();
+    if (has_record) {
+      WriteFile(dir + "/" + ir::kFileName, expand(vector.Get("record").AsString()));
+    }
+    Expect(ir::HasRecordFile(dir) == has_record, name + ": HasRecordFile");
+    Expect(ir::IsComplete(dir, hash, kRecordBundle) ==
+               vector.Get("complete").AsBool(),
+           name + ": IsComplete");
+    const std::string recorded = vector.Get("recorded").IsString()
+        ? expand(vector.Get("recorded").AsString())
+        : "";
+    ExpectEq(ir::RecordedBundleSha256(dir), recorded, name + ": RecordedBundleSha256");
+
+    const bool grandfathered =
+        vector.Get("grandfathered").IsBool() && vector.Get("grandfathered").AsBool();
+    ir::Activation activation;
+    activation.record_text = "sentinel";
+    const Status status =
+        ir::CheckActivation(dir, hash, kRecordBundle, grandfathered, &activation);
+    const std::string expected = vector.Get("activation").AsString();
+    if (expected == "ok") {
+      Expect(status.ok, name + ": " + status.message);
+      Expect(ir::Unchanged(dir, kRecordBundle, grandfathered, activation),
+             name + ": an untouched directory is unchanged");
+      Expect(!has_record || activation.basis != ir::Activation::Basis::kGrandfathered,
+             name + ": a recorded directory is never grandfathered");
+    } else {
+      Expect(!status.ok, name + ": expected [" + expected + "], activated");
+      Expect(status.message.find(expected) != std::string::npos,
+             name + ": rejection [" + status.message + "] lacks [" + expected + "]");
+      Expect(status.message.find("Bundle version " + hash + " ") == 0,
+             name + ": rejection names the version: " + status.message);
+      ExpectEq(activation.record_text, "sentinel",
+               name + ": a rejection leaves the output untouched");
+    }
+  }
+}
+
+void TestInstallRecordParse() {
+  Expect(ir::Parse("").state == ir::Record::State::kLegacy, "empty text is legacy");
+  const ir::Record record = ir::Parse(
+      "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"b\",\"artifactSha256\":\"a\"}");
+  Expect(record.state == ir::Record::State::kPresent && record.current_schema,
+         "schema-1 record parses");
+  ExpectEq(record.version_hash, "abc", "versionHash");
+  ExpectEq(record.bundle_sha256, "b", "bundleSha256");
+  ExpectEq(record.artifact_sha256, "a", "artifactSha256");
+  Expect(ir::Names(record, "abc") && !ir::Names(record, "def") && !ir::Names(record, ""),
+         "Names matches the version only");
+  Expect(!ir::Names(ir::Parse(""), "abc"), "the legacy marker names no version");
+
+  // The size cap: a padded record of exactly kMaxRecordBytes still parses
+  // (on disk as well), one byte more does not.
+  const std::string body = "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"b\"}";
+  const std::string at_cap =
+      body + std::string(static_cast<size_t>(ir::kMaxRecordBytes) - body.size(), ' ');
+  Expect(ir::Parse(at_cap).state == ir::Record::State::kPresent, "record at the cap");
+  Expect(ir::Parse(at_cap + " ").state == ir::Record::State::kInvalid,
+         "record over the cap");
+  TempDir temp;
+  WriteFile(temp.path + "/" + kRecordBundle, "x");
+  WriteFile(temp.path + "/" + ir::kFileName, at_cap);
+  Expect(ir::IsComplete(temp.path, "abc", kRecordBundle), "on-disk record at the cap");
+  WriteFile(temp.path + "/" + ir::kFileName, at_cap + " ");
+  Expect(ir::Read(temp.path).state == ir::Record::State::kInvalid,
+         "on-disk record over the cap");
+  Expect(!ir::IsComplete(temp.path, "abc", kRecordBundle), "oversized record is not complete");
+
+  // A directory where the record belongs is a record file, but not a record.
+  unlink((temp.path + "/" + ir::kFileName).c_str());
+  EnsureDirectory(temp.path + "/" + ir::kFileName);
+  Expect(ir::HasRecordFile(temp.path), "a directory counts as a record file");
+  Expect(ir::Read(temp.path).state == ir::Record::State::kInvalid,
+         "a directory is not a record");
+  ir::Activation activation;
+  const Status status =
+      ir::CheckActivation(temp.path, "abc", kRecordBundle, true, &activation);
+  Expect(!status.ok && status.message.find("no valid completion record") != std::string::npos,
+         "a directory record is never grandfathered: " + status.message);
+
+  // A directory where the bundle belongs is no bundle.
+  TempDir other;
+  EnsureDirectory(other.path + "/" + kRecordBundle);
+  WriteFile(other.path + "/" + ir::kFileName, "");
+  Expect(!ir::IsComplete(other.path, "abc", kRecordBundle), "bundle must be a file");
+}
+
+void TestInstallRecordBuild() {
+  std::string text;
+  Expect(ir::Build("abc", "bb", "aa", &text).ok, "build a full record");
+  ExpectEq(text,
+           "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"bb\",\"artifactSha256\":\"aa\"}",
+           "record text");
+  Expect(ir::Build("abc", "bb", "", &text).ok, "artifactSha256 is optional");
+  ExpectEq(text, "{\"schema\":1,\"versionHash\":\"abc\",\"bundleSha256\":\"bb\"}",
+           "record without artifact digest");
+  text = "untouched";
+  const Status refused = ir::Build("abc", "", "aa", &text);
+  Expect(!refused.ok && refused.message.find("no bundle digest") != std::string::npos,
+         "a record without bundleSha256 is never built: " + refused.message);
+  ExpectEq(text, "untouched", "a refused build leaves the output untouched");
+}
+
+void TestInstallRecordWriteIsAtomic() {
+  TempDir temp;
+  std::string text;
+  Expect(ir::Build("abc", "bb", "", &text).ok, "build");
+  Expect(ir::Write(temp.path, text).ok, "write a record");
+  ExpectEq(ReadFile(temp.path + "/" + ir::kFileName), text, "record content");
+  Expect(ListDirectory(temp.path).size() == 1, "no temporary file is left behind");
+
+  // Rewriting replaces the record whole (rename over it).
+  Expect(ir::Write(temp.path, "{\"x\":1}").ok, "rewrite");
+  ExpectEq(ReadFile(temp.path + "/" + ir::kFileName), "{\"x\":1}", "rewritten content");
+  Expect(ListDirectory(temp.path).size() == 1, "still no temporary file");
+
+  // A stale temporary file (crash mid-write) is overwritten, not appended to.
+  WriteFile(temp.path + "/" + ir::kFileName + ".tmp", std::string(100, 'z'));
+  Expect(ir::Write(temp.path, text).ok, "write over a stale temporary file");
+  ExpectEq(ReadFile(temp.path + "/" + ir::kFileName), text, "content after a stale temp");
+  Expect(ListDirectory(temp.path).size() == 1, "the stale temporary file is consumed");
+
+  const Status missing = ir::Write(temp.path + "/missing", text);
+  Expect(!missing.ok && missing.message.find("cannot create completion record") != std::string::npos,
+         "a missing directory fails the write: " + missing.message);
+}
+
+void TestInstallRecordSealAndPromote() {
+  TempDir temp;
+  const std::string staging = temp.path + "/abc" + ir::kStagingSuffix;
+  const std::string version = temp.path + "/abc";
+  EnsureDirectory(staging);
+
+  ir::SealResult sealed = ir::Seal(staging, "abc", kRecordBundle, "ff", "");
+  Expect(!sealed.status.ok && !sealed.file_failure &&
+             sealed.status.message.find("bundle missing after install") != std::string::npos,
+         "no bundle: a bundle failure: " + sealed.status.message);
+  Expect(!ir::HasRecordFile(staging), "no record without a bundle");
+
+  WriteFile(staging + "/" + kRecordBundle, "var a = 1;");
+  sealed = ir::Seal(staging, "abc", kRecordBundle, "ff", "");
+  Expect(sealed.status.ok, "seal hashes the bundle: " + sealed.status.message);
+  const ir::Record record = ir::Read(staging);
+  ExpectEq(record.bundle_sha256, pushy::digest::Sha256File(staging + "/" + kRecordBundle),
+           "sealed digest is the bundle's");
+  ExpectEq(record.artifact_sha256, "ff", "sealed artifact digest");
+  Expect(ir::IsComplete(staging, "abc", kRecordBundle), "sealed staging is complete");
+
+  // A digest computed while extracting is taken as-is.
+  sealed = ir::Seal(staging, "abc", kRecordBundle, "", "0123");
+  Expect(sealed.status.ok, "seal with a known digest");
+  ExpectEq(ir::Read(staging).bundle_sha256, "0123", "known digest recorded");
+  ExpectEq(ir::Read(staging).artifact_sha256, "", "no artifact digest");
+
+  // The version directory must be gone before the rename.
+  EnsureDirectory(version + "/old");
+  const Status blocked = ir::Promote(staging, version);
+  Expect(!blocked.ok && blocked.message.find("cannot move") != std::string::npos,
+         "promote never merges into an existing version directory: " + blocked.message);
+  std::system(("rm -rf \"" + version + "\"").c_str());
+  Expect(ir::Promote(staging, version).ok, "promote");
+  Expect(!Exists(staging) && ir::IsComplete(version, "abc", kRecordBundle),
+         "promoted: installed");
+  ir::Activation activation;
+  const Status wrong = ir::CheckActivation(version, "abc", kRecordBundle, false, &activation);
+  Expect(!wrong.ok && wrong.message.find("bundle digest mismatch") != std::string::npos,
+         "a wrong known digest is caught at activation: " + wrong.message);
+
+  // A record that cannot be written is a file failure. A directory where the
+  // temporary file goes makes the write fail on every platform and user.
+  TempDir blocked_dir;
+  WriteFile(blocked_dir.path + "/" + kRecordBundle, "x");
+  EnsureDirectory(blocked_dir.path + "/" + ir::kFileName + ".tmp");
+  sealed = ir::Seal(blocked_dir.path, "abc", kRecordBundle, "", "");
+  Expect(!sealed.status.ok && sealed.file_failure,
+         "an unwritable record is a file failure: " + sealed.status.message);
+}
+
+void TestInstallRecordUnchanged() {
+  TempDir temp;
+  const std::string dir = temp.path + "/abc";
+  const std::string bundle = dir + "/" + kRecordBundle;
+  WriteFile(bundle, "var a = 1;");
+  Expect(ir::Seal(dir, "abc", kRecordBundle, "", "").status.ok, "seal");
+
+  ir::Activation passed;
+  Expect(ir::CheckActivation(dir, "abc", kRecordBundle, false, &passed).ok, "activate");
+  Expect(passed.basis == ir::Activation::Basis::kDigest, "verified by digest");
+  Expect(ir::Unchanged(dir, kRecordBundle, false, passed), "untouched");
+
+  // Same bytes, new file: a different inode / ctime.
+  unlink(bundle.c_str());
+  WriteFile(bundle, "var a = 1;");
+  Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "a replaced bundle is a change");
+  Expect(ir::CheckActivation(dir, "abc", kRecordBundle, false, &passed).ok, "re-verify");
+  Expect(ir::Unchanged(dir, kRecordBundle, false, passed), "re-verified");
+
+  std::string text;
+  Expect(ir::Build("abc", "00", "", &text).ok, "build");
+  Expect(ir::Write(dir, text).ok, "rewrite record");
+  Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "a rewritten record is a change");
+
+  // Grandfathered: only while there is still no record and the version is
+  // still current/last.
+  unlink((dir + "/" + ir::kFileName).c_str());
+  Expect(ir::CheckActivation(dir, "abc", kRecordBundle, true, &passed).ok, "grandfathered");
+  Expect(passed.basis == ir::Activation::Basis::kGrandfathered, "basis");
+  Expect(ir::Unchanged(dir, kRecordBundle, true, passed), "still grandfathered");
+  Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "no longer current/last");
+  WriteFile(dir + "/" + ir::kFileName, "");
+  Expect(!ir::Unchanged(dir, kRecordBundle, true, passed), "a record appeared");
+
+  // Legacy marker: the marker and the bundle must stay put.
+  Expect(ir::CheckActivation(dir, "abc", kRecordBundle, false, &passed).ok, "legacy");
+  Expect(passed.basis == ir::Activation::Basis::kLegacyMarker, "legacy basis");
+  Expect(ir::Unchanged(dir, kRecordBundle, false, passed), "legacy untouched");
+  unlink(bundle.c_str());
+  Expect(!ir::Unchanged(dir, kRecordBundle, false, passed), "bundle gone");
+}
+
+// ---- Archive extraction limits (archive_limits.h) ----
+
+namespace al = pushy::archive_limits;
+
+long long AsLongLong(const flowjson::Value& value) {
+  return static_cast<long long>(value.AsNumber());
+}
+
+void ExpectVerdict(const Status& status, const std::string& expected, const std::string& name) {
+  if (expected == "ok") {
+    Expect(status.ok, name + ": " + status.message);
+    return;
+  }
+  Expect(!status.ok, name + ": expected [" + expected + "], accepted");
+  Expect(status.message.find(expected) != std::string::npos,
+         name + ": rejection [" + status.message + "] lacks [" + expected + "]");
+}
+
+flowjson::Value ArchiveLimitsVectors() {
+  const std::string path = JoinPath(g_fixtures_dir, "../archive-limits-vectors.json");
+  bool ok = false;
+  flowjson::Value doc = flowjson::Parse(ReadFile(path), &ok);
+  Expect(ok && doc.Get("entries").IsArray(), "vectors file must parse: " + path);
+  return doc;
+}
+
+// The shared vectors (tests/archive-limits-vectors.json), including the
+// cases the platforms used to disagree on.
+void TestArchiveLimitsVectors() {
+  const flowjson::Value doc = ArchiveLimitsVectors();
+  Expect(doc.Get("entries").Size() >= 20, "entry vectors lost their cases");
+  for (const flowjson::Value& vector : doc.Get("entries").elements()) {
+    const std::string name = vector.Get("name").AsString();
+    al::EntryAccumulator accumulator(AsLongLong(vector.Get("archiveBytes")));
+    Status status = Status::Ok();
+    for (const flowjson::Value& entry : vector.Get("entries").elements()) {
+      const long long repeat =
+          entry.Get("repeat").IsNumber() ? AsLongLong(entry.Get("repeat")) : 1;
+      const bool symlink = entry.Get("symlink").IsBool() && entry.Get("symlink").AsBool();
+      for (long long i = 0; i < repeat && status.ok; i++) {
+        status = entry.Get("compressed").IsNumber()
+            ? accumulator.Accept(AsLongLong(entry.Get("size")),
+                                 AsLongLong(entry.Get("compressed")), symlink,
+                                 entry.Get("name").AsString())
+            : accumulator.AcceptExtracted(AsLongLong(entry.Get("size")), symlink,
+                                          entry.Get("name").AsString());
+      }
+      if (!status.ok) {
+        break;
+      }
+    }
+    ExpectVerdict(status, vector.Get("expect").AsString(), name);
+    if (vector.Get("count").IsNumber()) {
+      Expect(accumulator.entries() == AsLongLong(vector.Get("count")), name + ": count");
+    }
+    if (vector.Get("total").IsNumber()) {
+      Expect(accumulator.total_uncompressed() == AsLongLong(vector.Get("total")),
+             name + ": total");
+    }
+  }
+
+  for (const flowjson::Value& vector : doc.Get("uncompressed").elements()) {
+    ExpectVerdict(al::CheckUncompressedSize(AsLongLong(vector.Get("archiveBytes")),
+                                            AsLongLong(vector.Get("uncompressedBytes"))),
+                  vector.Get("expect").AsString(), vector.Get("name").AsString());
+  }
+
+  for (const flowjson::Value& vector : doc.Get("probes").elements()) {
+    const std::string name = vector.Get("name").AsString();
+    const al::FreeSpaceProbe plan = al::PlanUnknownLengthFreeSpaceProbe(
+        AsLongLong(vector.Get("knownTotal")), AsLongLong(vector.Get("writtenBefore")),
+        AsLongLong(vector.Get("chunkBytes")), AsLongLong(vector.Get("reservedUntil")));
+    Expect(plan.probe == vector.Get("probe").AsBool(), name + ": probe");
+    Expect(plan.reserve == AsLongLong(vector.Get("reserve")), name + ": reserve");
+    Expect(plan.reserved_until == AsLongLong(vector.Get("after")), name + ": after");
+  }
+
+  const flowjson::Value& names = doc.Get("reservedNames");
+  Expect(names.members().size() >= 10, "reserved name vectors lost their cases");
+  for (const auto& member : names.members()) {
+    Expect(al::IsReservedEntryName(member.first) == member.second.AsBool(),
+           "IsReservedEntryName(" + member.first + ")");
+  }
+}
+
+// Walking a stream of unknown length: no write ever passes a probed
+// reservation, and most chunks need no probe.
+void TestArchiveLimitsProbeWalk() {
+  long long reserved_until = 0;
+  long long written = 0;
+  int probes = 0;
+  const long long chunk = 300 * 1024;
+  for (int i = 0; i < 100; i++) {
+    const al::FreeSpaceProbe plan =
+        al::PlanUnknownLengthFreeSpaceProbe(0, written, chunk, reserved_until);
+    probes += plan.probe ? 1 : 0;
+    reserved_until = plan.reserved_until;
+    written += chunk;
+    Expect(written <= reserved_until, "a write passed the reservation");
+  }
+  Expect(probes > 1 && probes < 100, "probes once per reservation");
+}
+
+void TestArchiveLimitsExtractedDirectory() {
+  {
+    TempDir temp;
+    WriteFile(temp.path + "/index.bundlejs", std::string(3000, 'a'));
+    WriteFile(temp.path + "/assets/img/logo.png", "png");
+    Status status = al::CheckExtractedDirectory(temp.path, 1000);
+    Expect(status.ok, "a plain tree passes: " + status.message);
+    // 1 MiB + 1 of expansion from a 10 KB archive: past the whole-archive ratio.
+    WriteFile(temp.path + "/assets/zeros.bin", std::string(1024 * 1024, '\0'));
+    ExpectVerdict(al::CheckExtractedDirectory(temp.path, 10240),
+                  "archive compression ratio exceeds 100:1", "whole-archive ratio");
+  }
+  {
+    TempDir temp;
+    WriteFile(temp.path + "/assets/.pushy-x/a.png", "png");
+    ExpectVerdict(al::CheckExtractedDirectory(temp.path, 1000),
+                  "archive contains reserved entry assets/.pushy-x", "reserved directory");
+  }
+  {
+    TempDir temp;
+    WriteFile(temp.path + "/index.bundlejs", "x");
+    Expect(symlink("/tmp", (temp.path + "/assets").c_str()) == 0, "create symlink");
+    ExpectVerdict(al::CheckExtractedDirectory(temp.path, 1000),
+                  "archive entry is a symlink: assets", "symlink is not followed");
+  }
+  {
+    TempDir temp;
+    // 20001 entries: 200 directories of 100 files (directories themselves
+    // are not counted, as iOS/Android count only declared zip entries), plus
+    // one.
+    for (int d = 0; d < 200; d++) {
+      const std::string dir = temp.path + "/d" + std::to_string(d);
+      EnsureDirectory(dir);
+      for (int f = 0; f < 100; f++) {
+        WriteFile(dir + "/f" + std::to_string(f), "");
+      }
+    }
+    Expect(al::CheckExtractedDirectory(temp.path, 1000).ok, "20000 entries pass");
+    WriteFile(temp.path + "/extra", "");
+    ExpectVerdict(al::CheckExtractedDirectory(temp.path, 1000),
+                  "archive has too many entries (> 20000)", "20001 entries");
+  }
+  ExpectVerdict(al::CheckExtractedDirectory("/nonexistent-pushy-dir", 1000),
+                "cannot list extracted directory", "missing directory");
+}
 
 int main(int argc, char** argv) {
   if (argc > 1) {
@@ -1158,6 +1928,21 @@ int main(int argc, char** argv) {
       {"Crc32KnownVectors", TestCrc32KnownVectors},
       {"Crc32File", TestCrc32File},
       {"ApplyPatchCopiesVerifyExpectedCrc", TestApplyPatchCopiesVerifyExpectedCrc},
+      {"PatchManifestVectors", TestPatchManifestVectors},
+      {"PatchManifestSizeCaps", TestPatchManifestSizeCaps},
+      {"PlanArchivePatch", TestPlanArchivePatch},
+      {"ApplyArchivePatchFromPpk", TestApplyArchivePatchFromPpk},
+      {"ApplyArchivePatchHostCopies", TestApplyArchivePatchHostCopies},
+      {"ApplyArchivePatchWithHbcTransform", TestApplyArchivePatchWithHbcTransform},
+      {"InstallRecordVectors", TestInstallRecordVectors},
+      {"InstallRecordParse", TestInstallRecordParse},
+      {"InstallRecordBuild", TestInstallRecordBuild},
+      {"InstallRecordWriteIsAtomic", TestInstallRecordWriteIsAtomic},
+      {"InstallRecordSealAndPromote", TestInstallRecordSealAndPromote},
+      {"InstallRecordUnchanged", TestInstallRecordUnchanged},
+      {"ArchiveLimitsVectors", TestArchiveLimitsVectors},
+      {"ArchiveLimitsProbeWalk", TestArchiveLimitsProbeWalk},
+      {"ArchiveLimitsExtractedDirectory", TestArchiveLimitsExtractedDirectory},
   };
 
   int failures = 0;

@@ -1,13 +1,18 @@
 package cn.reactnative.modules.update;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 
 final class UpdateFileUtils {
-    private static final int BUFFER_SIZE = 64 * 1024;
+    /** The one IO block size: stream copies, digests, downloads, unzip. */
+    static final int BUFFER_SIZE = 64 * 1024;
 
     private UpdateFileUtils() {
     }
@@ -57,22 +62,27 @@ final class UpdateFileUtils {
         }
     }
 
-    static java.security.MessageDigest newSha256() throws IOException {
+    static MessageDigest newSha256() throws IOException {
         try {
-            return java.security.MessageDigest.getInstance("SHA-256");
+            return MessageDigest.getInstance("SHA-256");
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IOException("SHA-256 unavailable", e);
         }
     }
 
     /** Feeds the whole file into digest (streaming, bounded memory). */
-    static void updateDigest(java.security.MessageDigest digest, File file) throws IOException {
+    static void updateDigest(MessageDigest digest, File file) throws IOException {
         try (InputStream in = new FileInputStream(file)) {
-            byte[] buffer = new byte[BUFFER_SIZE];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                digest.update(buffer, 0, read);
-            }
+            updateDigest(digest, in);
+        }
+    }
+
+    /** Feeds the rest of the stream into digest; the caller closes it. */
+    static void updateDigest(MessageDigest digest, InputStream in) throws IOException {
+        byte[] buffer = new byte[BUFFER_SIZE];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            digest.update(buffer, 0, read);
         }
     }
 
@@ -87,8 +97,15 @@ final class UpdateFileUtils {
 
     /** Streaming SHA-256 of a file, lowercase hex. */
     static String sha256Hex(File file) throws IOException {
-        java.security.MessageDigest md = newSha256();
-        updateDigest(md, file);
+        try (InputStream in = new FileInputStream(file)) {
+            return sha256Hex(in);
+        }
+    }
+
+    /** Streaming SHA-256 of the rest of the stream, lowercase hex; the caller closes it. */
+    static String sha256Hex(InputStream in) throws IOException {
+        MessageDigest md = newSha256();
+        updateDigest(md, in);
         return toHex(md.digest());
     }
 
@@ -109,11 +126,38 @@ final class UpdateFileUtils {
         }
     }
 
-    private static void copy(InputStream in, FileOutputStream out) throws IOException {
+    /** Copies the rest of the stream; the caller closes both ends. */
+    static void copy(InputStream in, OutputStream out) throws IOException {
         byte[] buffer = new byte[BUFFER_SIZE];
         int count;
         while ((count = in.read(buffer)) != -1) {
             out.write(buffer, 0, count);
         }
+    }
+
+    /**
+     * Reads the whole stream (and closes it), failing once it exceeds
+     * maxBytes: small server- or archive-provided documents must not be
+     * able to exhaust memory.
+     */
+    static byte[] readBytes(InputStream input, long maxBytes) throws IOException {
+        try (InputStream in = input; ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int count;
+            long total = 0;
+            while ((count = in.read(buffer)) != -1) {
+                total += count;
+                if (total > maxBytes) {
+                    throw new IOException("content exceeds " + maxBytes + " bytes");
+                }
+                out.write(buffer, 0, count);
+            }
+            return out.toByteArray();
+        }
+    }
+
+    /** A small UTF-8 text file (a record, a sidecar), at most maxBytes long. */
+    static String readSmallUtf8(File file, long maxBytes) throws IOException {
+        return new String(readBytes(new FileInputStream(file), maxBytes), StandardCharsets.UTF_8);
     }
 }

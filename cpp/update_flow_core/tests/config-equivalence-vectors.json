@@ -1,5 +1,5 @@
 {
-  "description": "Contract C1: native config JSON equivalence, replayed by the JS (src/updateFlowCore.ts), Harmony (UpdateContext.ts), Android (ConfigEquivalence.java) and iOS (PushyConfigsEquivalent) implementations. Two strings are equivalent iff both parse to JSON objects whose canonical forms deep-equal (key order ignored). Canonical: absent keys take {disabled:false, queryUrls:[], rnu:\"\", rn:\"\", afterDownload:\"none\"}; each string in endpoints/queryUrls (when an array) loses ALL trailing \"/\", then entries are deduplicated keeping the first occurrence. Present values are never coerced (0 is not false, null is not a default). Anything that is not a JSON object is never equivalent, not even to itself. Every case must hold in both argument orders. Hand-maintained: edit this file, then keep every platform green.",
+  "description": "Contract C1: native config JSON equivalence, replayed by the JS (src/updateFlowCore.ts) and the shared native (cpp/update_flow_core/native_config.h ConfigsEquivalent, used by Android, iOS and Harmony) implementations. Two strings are equivalent iff both parse to JSON objects whose canonical forms deep-equal (key order ignored). Canonical: absent keys take {disabled:false, queryUrls:[], rnu:\"\", rn:\"\", afterDownload:\"none\"}; each string in endpoints/queryUrls (when an array) loses ALL trailing \"/\", then entries are deduplicated keeping the first occurrence. Present values are never coerced (0 is not false, null is not a default). Anything that is not a JSON object is never equivalent, not even to itself. Every case must hold in both argument orders. Hand-maintained: edit this file, then keep every platform green.",
   "cases": [
     {
       "name": "identical",
@@ -347,6 +347,30 @@
       "name": "two concatenated objects are invalid JSON",
       "a": "{\"appKey\":\"k\"}{\"appKey\":\"k\"}",
       "b": "{\"appKey\":\"k\"}{\"appKey\":\"k\"}",
+      "equivalent": false
+    },
+    {
+      "name": "exponent notation equals the integer",
+      "a": "{\"appKey\":\"k\",\"n\":1e2}",
+      "b": "{\"appKey\":\"k\",\"n\":100}",
+      "equivalent": true
+    },
+    {
+      "name": "negative zero equals zero",
+      "a": "{\"appKey\":\"k\",\"n\":-0}",
+      "b": "{\"appKey\":\"k\",\"n\":0}",
+      "equivalent": true
+    },
+    {
+      "name": "appKey whitespace is significant (only the run gate trims)",
+      "a": "{\"appKey\":\" k\"}",
+      "b": "{\"appKey\":\"k\"}",
+      "equivalent": false
+    },
+    {
+      "name": "disabled 1 is not true",
+      "a": "{\"appKey\":\"k\",\"disabled\":1}",
+      "b": "{\"appKey\":\"k\",\"disabled\":true}",
       "equivalent": false
     }
   ]

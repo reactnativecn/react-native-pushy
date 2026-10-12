@@ -3,37 +3,28 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_MODULE := rnpushy
-LOCAL_CPPFLAGS += -std=c++17
-LOCAL_LDFLAGS += -Wl,--exclude-libs,ALL
 LOCAL_LDLIBS := -llog
-LOCAL_C_INCLUDES := \
-	$(LOCAL_PATH) \
-	$(LOCAL_PATH)/HDiffPatch \
-	$(LOCAL_PATH)/HDiffPatch/libHDiffPatch/HPatch \
-	$(LOCAL_PATH)/lzma/C \
-	$(LOCAL_PATH)/../../cpp/patch_core \
-	$(LOCAL_PATH)/../../cpp/update_flow_core
 
+# The shared cores (cpp/patch_core, cpp/update_flow_core, cpp/hpatch) and the
+# Android JNI glue (cpp/android_jni) are picked up by directory, so a new
+# source file there needs no edit here; tests/ subdirectories are not matched.
+# Every include is file-relative (as on iOS), so no include path is needed.
+CPP_DIR := $(LOCAL_PATH)/../../cpp
+Shared_Files := \
+	$(sort $(wildcard $(CPP_DIR)/patch_core/*.cpp)) \
+	$(sort $(wildcard $(CPP_DIR)/update_flow_core/*.cpp)) \
+	$(sort $(wildcard $(CPP_DIR)/android_jni/*.cpp)) \
+	$(sort $(wildcard $(CPP_DIR)/hpatch/*.c))
+
+# HDiffPatch / lzma submodules: only the decoder sources hpatch.c uses.
 Hdp_Files := \
-	hpatch.c \
-    HDiffPatch/libHDiffPatch/HPatch/patch.c \
+	HDiffPatch/libHDiffPatch/HPatch/patch.c \
 	HDiffPatch/file_for_patch.c \
 	lzma/C/LzmaDec.c \
-    lzma/C/Lzma2Dec.c
+	lzma/C/Lzma2Dec.c
 
 LOCAL_SRC_FILES := \
-	../../cpp/patch_core/archive_patch_core.cpp \
-	../../cpp/patch_core/digest.cpp \
-	../../cpp/patch_core/hbc_transform.cpp \
-	../../cpp/patch_core/hbc_transform_wire.cpp \
-	../../cpp/patch_core/jni_registration.cpp \
-	../../cpp/patch_core/patch_core.cpp \
-	../../cpp/patch_core/patch_core_android.cpp \
-	../../cpp/patch_core/state_core.cpp \
-	../../cpp/patch_core/update_core_android.cpp \
-	../../cpp/update_flow_core/flow_json.cpp \
-	../../cpp/update_flow_core/update_flow_core.cpp \
-	../../cpp/update_flow_core/update_flow_jni.cpp \
+	$(patsubst $(LOCAL_PATH)/%,%,$(Shared_Files)) \
 	$(Hdp_Files)
 
 include $(BUILD_SHARED_LIBRARY)

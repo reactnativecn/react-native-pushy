@@ -4,7 +4,12 @@ import common from '@ohos.app.ability.common';
 import { zlib } from '@kit.BasicServicesKit';
 import { EventHub } from './EventHub';
 import { DownloadTaskParams } from './DownloadTaskParams';
-import { saveFileToSandbox, withRawFd } from './SaveFile';
+import {
+  saveFileToSandbox,
+  unlinkIfExists,
+  withRawFd,
+  writeFully,
+} from './SaveFile';
 import { util } from '@kit.ArkTS';
 import NativePatchCore, {
   ARCHIVE_PATCH_TYPE_FROM_PACKAGE,
@@ -16,17 +21,16 @@ import logger from './Logger';
 import {
   MAX_ARCHIVE_BYTES,
   MAX_MANIFEST_BYTES,
+  checkExtractedDirectory,
   checkOriginalSize,
   checkUncompressedSize,
   ensureFreeSpace,
-  measureExtractedDirectory,
-  planUnknownLengthFreeSpaceProbe,
 } from './ArchiveLimits';
 import {
   HARMONY_BUNDLE_FILE_NAME,
-  buildInstallRecord,
+  promoteStaging,
+  sealInstallRecord,
   stagingDirectoryFor,
-  writeInstallRecord,
 } from './InstallRecord';
 import {
   ERROR_DOWNLOAD_FAILED,
@@ -41,95 +45,18 @@ import { BUNDLE_DELTA_ENTRY } from './Texts';
 
 const TAG = 'DownloadTask';
 
-export interface PatchManifestArrays {
-  copyFroms: string[];
-  copyTos: string[];
-  // 与 copyFroms/copyTos 逐位对齐的 copiesCrc(CLI >= 2.21.2 的 pdiff
-  // manifest 携带,键是 to);无声明时为 null。拷贝前用它校验包内资源内容,
-  // 不符则整次 patch 失败落 full——重打包二进制不能静默拷出漂移的资源。
-  copyCrcs: (number | null)[];
-  deletes: string[];
-  // __diff.json 中对应 bundle patch 条目的 hbcTransform 元数据(原始 JSON
-  // 字符串);为空时 native 走现状路径
-  hbcTransformMeta: string;
-}
-
-export function parseManifestToArrays(
-  manifest: Record<string, any>,
-  normalizeResourceCopies: boolean,
-): PatchManifestArrays {
-  const copyFroms: string[] = [];
-  const copyTos: string[] = [];
-  const copyCrcs: (number | null)[] = [];
-  const deletesValue = manifest.deletes;
-  const deletes = Array.isArray(deletesValue)
-    ? deletesValue.map(item => String(item))
-    : deletesValue && typeof deletesValue === 'object'
-      ? Object.keys(deletesValue)
-      : [];
-
-  const copies = (manifest.copies || {}) as Record<string, string>;
-  const copiesCrcValue = manifest.copiesCrc;
-  const copiesCrc =
-    copiesCrcValue && typeof copiesCrcValue === 'object'
-      ? (copiesCrcValue as Record<string, number>)
-      : ({} as Record<string, number>);
-  for (const to of Object.keys(copies)) {
-    const rawFrom = copies[to];
-    let from = String(rawFrom || '');
-    if (normalizeResourceCopies) {
-      from = from.replace('resources/rawfile/', '');
-      if (!from) {
-        from = to;
-      }
-    }
-    copyFroms.push(from);
-    copyTos.push(to);
-    const crc = copiesCrc[to];
-    copyCrcs.push(typeof crc === 'number' && Number.isFinite(crc) ? crc : null);
-  }
-
-  const hbcTransform = manifest.hbcTransform as
-    | Record<string, object>
-    | undefined;
-  const hbcTransformEntry =
-    hbcTransform && typeof hbcTransform === 'object'
-      ? hbcTransform[BUNDLE_DELTA_ENTRY]
-      : undefined;
-  const hbcTransformMeta =
-    hbcTransformEntry && typeof hbcTransformEntry === 'object'
-      ? JSON.stringify(hbcTransformEntry)
-      : '';
-
-  return {
-    copyFroms,
-    copyTos,
-    copyCrcs,
-    deletes,
-    hbcTransformMeta,
-  };
-}
-
+// staging 目录里的条目名 + __diff.json 原文:由原生内核统一校验与解析
+// (cpp/patch_core/patch_manifest.h),这里不解析 manifest。
 interface DeltaInputs {
   entryNames: string[];
-  manifestArrays: PatchManifestArrays;
+  manifestJson: string;
 }
 
-function toArrayBufferSlice(
-  payload: Uint8Array,
-  offset: number,
-  length: number,
-): ArrayBuffer {
-  return (payload.buffer as ArrayBuffer).slice(
-    payload.byteOffset + offset,
-    payload.byteOffset + offset + length,
-  );
-}
-
+// 包内 rawfile 在 HAP 中的路径前缀:pdiff 的拷贝源按 HAP 路径命名,
+// resourceManager 按去掉前缀后的路径读取。原生解析时只剥开头一次。
+const RAWFILE_COPY_SOURCE_PREFIX = 'resources/rawfile/';
 const DIFF_MANIFEST_ENTRY = '__diff.json';
-const TEMP_ORIGIN_BUNDLE_ENTRY = '.origin.bundle.harmony.js';
-const EMBEDDED_BUNDLE_RAWFILE = 'bundle.harmony.js';
-const FILE_COPY_BUFFER_SIZE = 64 * 1024;
+const TEMP_ORIGIN_BUNDLE_ENTRY = `.origin.${HARMONY_BUNDLE_FILE_NAME}`;
 const DOWNLOAD_CALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 // 断点续传 sidecar(NATIVE_CHECKUPDATE_DESIGN §11.4):记录 partial 属于
@@ -196,23 +123,12 @@ export class DownloadTask {
 
   private async promoteStaging(params: DownloadTaskParams): Promise<void> {
     const work = this.stagingDirectory(params);
-    const bundlePath = `${work}/${HARMONY_BUNDLE_FILE_NAME}`;
-    if (!fileIo.accessSync(bundlePath)) {
-      throw createPushyError(
-        ERROR_DELTA_FAILED,
-        `bundle missing after install: ${bundlePath}`,
-      );
-    }
-    // 整 bundle 几十 MB:摘要在 native 工作线程算,不冻结 UI 线程。
-    const bundleSha256 = await NativePatchCore.sha256HexFileAsync(bundlePath);
-    await writeInstallRecord(
-      work,
-      buildInstallRecord(params.hash, bundleSha256, this.artifactSha256),
-    );
+    // 整 bundle 几十 MB:摘要与记录写入在 native 工作线程完成,不冻结 UI 线程。
+    await sealInstallRecord(work, params.hash, this.artifactSha256);
     if (fileIo.accessSync(params.unzipDirectory)) {
       await this.removeDirectory(params.unzipDirectory);
     }
-    await fileIo.rename(work, params.unzipDirectory);
+    await promoteStaging(work, params.unzipDirectory);
   }
 
   constructor(context: common.Context) {
@@ -260,10 +176,7 @@ export class DownloadTask {
 
   private async deleteResumeSidecar(targetFile: string): Promise<void> {
     try {
-      const sidecar = this.resumeSidecarPath(targetFile);
-      if (fileIo.accessSync(sidecar)) {
-        await fileIo.unlink(sidecar);
-      }
+      await unlinkIfExists(this.resumeSidecarPath(targetFile));
     } catch (e) {
       logger.error(TAG, `Failed to delete resume sidecar: ${getErrorMessage(e)}`);
     }
@@ -272,9 +185,7 @@ export class DownloadTask {
   // 归档连同 sidecar 一起删除(被消费或被判定有毒)。
   private async deleteArchiveAndSidecar(targetFile: string): Promise<void> {
     try {
-      if (fileIo.accessSync(targetFile)) {
-        await fileIo.unlink(targetFile);
-      }
+      await unlinkIfExists(targetFile);
     } catch (e) {
       logger.error(TAG, `Failed to delete archive: ${getErrorMessage(e)}`);
     }
@@ -332,7 +243,7 @@ export class DownloadTask {
    * 解压前读取归档解压后的总字节数(zlib.getOriginalSize,API 12——RNOH 的
    * 最低 API 已覆盖)。读不到就拒绝归档(checkOriginalSize):zlib.decompressFile
    * 没有逐条钩子,不知道展开量就放行等于允许一个 20MB 的归档在
-   * measureExtractedDirectory 跑到之前先把磁盘写满。拒绝带专属错误细节
+   * checkExtractedDirectory 跑到之前先把磁盘写满。拒绝带专属错误细节
    * (ORIGINAL_SIZE_UNAVAILABLE)并单独记日志,与"超限"拒绝可区分。
    */
   private async readOriginalSize(archiveFile: string): Promise<number> {
@@ -358,8 +269,9 @@ export class DownloadTask {
    * 解压 + 资源上限(cpp/patch_core/archive_limits.h)。zlib.decompressFile
    * 没有逐条钩子:解压前用 getOriginalSize 把总解压量与整包压缩比挡在
    * 上限内(20MB 归档 100:1 的 2GB 载荷不会先解出来再量),按已知解压量查
-   * 磁盘,解压量未知直接拒绝;解压后再统计条目数/单条大小/总字节数并拒绝
-   * 任意深度的 `.pushy-` 保留条目(超限即失败,staging 目录由失败清理删除)。
+   * 磁盘,解压量未知直接拒绝;解压后再逐条核对条目数/单条大小/总字节数,
+   * 拒绝任意深度的 `.pushy-` 保留条目与符号链接(规则见
+   * cpp/patch_core/archive_limits.h;超限即失败,staging 目录由失败清理删除)。
    */
   private async extractArchive(
     archiveFile: string,
@@ -380,7 +292,7 @@ export class DownloadTask {
     } catch (e) {
       throw toPushyError(e, ERROR_DELTA_FAILED);
     }
-    await measureExtractedDirectory(unzipDirectory);
+    await checkExtractedDirectory(unzipDirectory, archiveStat.size);
   }
 
   private async recreateDirectory(path: string): Promise<void> {
@@ -418,33 +330,26 @@ export class DownloadTask {
   ): Promise<void> {
     const payload =
       content instanceof Uint8Array ? content : new Uint8Array(content);
+    // writeFully writes from the start of its buffer: a view into a larger
+    // buffer at a non-zero offset needs its own copy.
+    const bytes =
+      payload.byteOffset === 0
+        ? (payload.buffer as ArrayBuffer)
+        : (payload.buffer as ArrayBuffer).slice(
+            payload.byteOffset,
+            payload.byteOffset + payload.byteLength,
+          );
     await this.ensureParentDirectory(targetFile);
-    if (fileIo.accessSync(targetFile)) {
-      await fileIo.unlink(targetFile);
-    }
+    await unlinkIfExists(targetFile);
 
-    let writer: fileIo.File | null = null;
+    const writer = await fileIo.open(
+      targetFile,
+      fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,
+    );
     try {
-      writer = await fileIo.open(
-        targetFile,
-        fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,
-      );
-      const chunkSize = FILE_COPY_BUFFER_SIZE;
-      let bytesWritten = 0;
-
-      while (bytesWritten < payload.byteLength) {
-        const chunkLength = Math.min(
-          chunkSize,
-          payload.byteLength - bytesWritten,
-        );
-        const chunk = toArrayBufferSlice(payload, bytesWritten, chunkLength);
-        await fileIo.write(writer.fd, chunk);
-        bytesWritten += chunkLength;
-      }
+      await writeFully(writer.fd, bytes, payload.byteLength);
     } finally {
-      if (writer) {
-        await fileIo.close(writer);
-      }
+      await fileIo.close(writer);
     }
   }
 
@@ -454,19 +359,11 @@ export class DownloadTask {
     ) as Record<string, any>;
   }
 
-  private async readManifestArrays(
-    directory: string,
-    normalizeResourceCopies: boolean,
-  ): Promise<PatchManifestArrays> {
+  // __diff.json 原文;归档里没有时为空串(原生内核报 "diff.json not found")。
+  private async readManifestJson(directory: string): Promise<string> {
     const manifestPath = `${directory}/${DIFF_MANIFEST_ENTRY}`;
     if (!fileIo.accessSync(manifestPath)) {
-      return {
-        copyFroms: [],
-        copyTos: [],
-        copyCrcs: [],
-        deletes: [],
-        hbcTransformMeta: '',
-      };
+      return '';
     }
 
     const manifestStat = await fileIo.stat(manifestPath);
@@ -476,42 +373,39 @@ export class DownloadTask {
         `delta manifest too large: ${manifestStat.size} bytes`,
       );
     }
-    return parseManifestToArrays(
-      this.parseJsonEntry(await this.readFileContent(manifestPath)),
-      normalizeResourceCopies,
+    return new util.TextDecoder().decodeToString(
+      new Uint8Array(await this.readFileContent(manifestPath)),
     );
   }
 
-
   /**
-   * pdiff 的 bundle 补丁:hpatch 需要文件源,先把二进制内嵌的 bundle 从
-   * rawfile descriptor 异步流式拷到 staging 里的临时文件(不整包读进内存、
-   * 不在 UI 线程同步 IO),补丁完成后删除。
+   * pdiff:hpatch 需要文件源,先把二进制内嵌的 bundle 从 rawfile descriptor
+   * 异步流式拷到 staging 里的临时文件(不整包读进内存、不在 UI 线程同步
+   * IO),原生内核只重建 bundle,拷贝分组交回由 copyFromResource 完成。
    */
-  private async applyBundlePatchFromEmbeddedBundle(
-    workingDirectory: string,
-    bundleDeltaPath: string,
-    outputFile: string,
-    hbcTransformMeta = '',
-  ): Promise<void> {
-    const originBundlePath = `${workingDirectory}/${TEMP_ORIGIN_BUNDLE_ENTRY}`;
+  private async applyPatchFromEmbeddedBundle(
+    work: string,
+    inputs: DeltaInputs,
+  ): Promise<CopyGroupResult[]> {
+    const originBundlePath = `${work}/${TEMP_ORIGIN_BUNDLE_ENTRY}`;
     try {
       await withRawFd(
         this.context.resourceManager,
-        EMBEDDED_BUNDLE_RAWFILE,
+        HARMONY_BUNDLE_FILE_NAME,
         descriptor => saveFileToSandbox(descriptor, originBundlePath),
       );
-      await NativePatchCore.applyDeltaFromSource({
-        copyFroms: [],
-        copyTos: [],
-        deletes: [],
-        sourceRoot: workingDirectory,
-        targetRoot: workingDirectory,
+      return await NativePatchCore.applyArchiveDelta({
+        archiveType: ARCHIVE_PATCH_TYPE_FROM_PACKAGE,
+        entryNames: inputs.entryNames,
+        manifestJson: inputs.manifestJson,
+        bundleDeltaEntry: BUNDLE_DELTA_ENTRY,
+        copySourcePrefix: RAWFILE_COPY_SOURCE_PREFIX,
+        sourceRoot: work,
+        targetRoot: work,
         originBundlePath,
-        bundleDeltaPath,
-        bundleOutputPath: outputFile,
-        enableMerge: false,
-        bundleHbcTransformMeta: hbcTransformMeta,
+        bundleDeltaPath: `${work}/${BUNDLE_DELTA_ENTRY}`,
+        bundleOutputPath: `${work}/${HARMONY_BUNDLE_FILE_NAME}`,
+        hostCopiesResources: true,
       });
     } catch (error) {
       throw createPushyError(
@@ -519,9 +413,7 @@ export class DownloadTask {
         `Failed to process bundle delta: ${getErrorMessage(error)}`,
       );
     } finally {
-      if (fileIo.accessSync(originBundlePath)) {
-        await fileIo.unlink(originBundlePath);
-      }
+      await unlinkIfExists(originBundlePath);
     }
   }
 
@@ -626,6 +518,24 @@ export class DownloadTask {
       authorize = resolve;
     });
 
+    // 本 url 的 sidecar 内容:验证器优先取本次响应头,缺失时沿用上次的;
+    // 总长未知(0)时不写。
+    const buildResumeMeta = (total: number): ResumeMeta => {
+      const meta: ResumeMeta = { url: params.url };
+      const etag = etagHeader || resumeMeta?.etag;
+      const lastModified = lastModifiedHeader || resumeMeta?.lastModified;
+      if (etag) {
+        meta.etag = etag;
+      }
+      if (lastModified) {
+        meta.lastModified = lastModified;
+      }
+      if (total > 0) {
+        meta.total = total;
+      }
+      return meta;
+    };
+
     const reportProgress = () => {
       const overall = baseOffset + received;
       const overallTotal = totalAll > 0
@@ -664,9 +574,10 @@ export class DownloadTask {
           `archive too large: exceeded ${MAX_ARCHIVE_BYTES}`,
         );
       }
-      // 未知长度:见 planUnknownLengthFreeSpaceProbe。失败保留 partial 供
-      // 下次续传。
-      const plan = planUnknownLengthFreeSpaceProbe(
+      // 未知长度:响应到达时只能预留安全余量,任何会写过已预留位置的写入
+      // 之前都要探测(archive_limits::PlanUnknownLengthFreeSpaceProbe)。
+      // 失败保留 partial 供下次续传。
+      const plan = NativePatchCore.planFreeSpaceProbe(
         totalAll,
         received - data.byteLength,
         data.byteLength,
@@ -907,9 +818,7 @@ export class DownloadTask {
         );
       } else {
         // 服务端忽略了 Range(或本就没发):从零开始。
-        if (fileIo.accessSync(params.targetFile)) {
-          await fileIo.unlink(params.targetFile);
-        }
+        await unlinkIfExists(params.targetFile);
         baseOffset = 0;
         totalAll = contentLength > 0 ? contentLength : 0;
         writer = await fileIo.open(
@@ -929,19 +838,7 @@ export class DownloadTask {
         totalAll > 0 ? totalAll - baseOffset : 0,
       );
       // 先落 sidecar 再放行写入,流中崩溃才有得续。
-      const meta: ResumeMeta = { url: params.url };
-      const etag = etagHeader || resumeMeta?.etag;
-      const lastModified = lastModifiedHeader || resumeMeta?.lastModified;
-      if (etag) {
-        meta.etag = etag;
-      }
-      if (lastModified) {
-        meta.lastModified = lastModified;
-      }
-      if (totalAll > 0) {
-        meta.total = totalAll;
-      }
-      await this.writeResumeMeta(params.targetFile, meta);
+      await this.writeResumeMeta(params.targetFile, buildResumeMeta(totalAll));
 
       // 鉴权通过:回放缓冲,之后的数据直写。
       const buffered = pendingChunks ?? [];
@@ -983,15 +880,10 @@ export class DownloadTask {
         }
         // 用最终观测值刷新 sidecar:首次写入可能因头部竞态缺 total/验证器,
         // 补齐后“下载完、解压前死”的窗口才能被 complete 检测覆盖。
-        const finalMeta: ResumeMeta = { url: params.url, total: stats.size };
-        if (etagHeader || resumeMeta?.etag) {
-          finalMeta.etag = etagHeader || resumeMeta?.etag;
-        }
-        if (lastModifiedHeader || resumeMeta?.lastModified) {
-          finalMeta.lastModified =
-            lastModifiedHeader || resumeMeta?.lastModified;
-        }
-        await this.writeResumeMeta(params.targetFile, finalMeta);
+        await this.writeResumeMeta(
+          params.targetFile,
+          buildResumeMeta(stats.size),
+        );
       } else {
         // 编码传输不可续传:盘上是解码后的字节,编码域的长度与偏移都失效。
         await this.deleteResumeSidecar(params.targetFile);
@@ -1047,16 +939,12 @@ export class DownloadTask {
     return work;
   }
 
-  /** 解压目录里的条目名 + __diff.json 解析结果,供 patch plan 使用。 */
-  private async readDeltaInputs(
-    work: string,
-    normalizeResourceCopies: boolean,
-  ): Promise<DeltaInputs> {
+  private async readDeltaInputs(work: string): Promise<DeltaInputs> {
     const results = await Promise.all([
       this.listEntryNames(work),
-      this.readManifestArrays(work, normalizeResourceCopies),
+      this.readManifestJson(work),
     ]);
-    return { entryNames: results[0], manifestArrays: results[1] };
+    return { entryNames: results[0], manifestJson: results[1] };
   }
 
   private async doFullPatch(params: DownloadTaskParams): Promise<void> {
@@ -1066,73 +954,27 @@ export class DownloadTask {
 
   private async doPatchFromApp(params: DownloadTaskParams): Promise<void> {
     const work = await this.downloadAndExtract(params);
-    const inputs = await this.readDeltaInputs(work, true);
-    const manifestArrays = inputs.manifestArrays;
-
-    NativePatchCore.buildArchivePlan(
-      ARCHIVE_PATCH_TYPE_FROM_PACKAGE,
-      inputs.entryNames,
-      manifestArrays.copyFroms,
-      manifestArrays.copyTos,
-      manifestArrays.deletes,
-      BUNDLE_DELTA_ENTRY,
-    );
-
-    const bundleDeltaPath = `${work}/${BUNDLE_DELTA_ENTRY}`;
-    if (!fileIo.accessSync(bundleDeltaPath)) {
-      throw createPushyError(ERROR_DELTA_FAILED, 'bundle delta not found');
-    }
-    await this.applyBundlePatchFromEmbeddedBundle(
+    const copyGroups = await this.applyPatchFromEmbeddedBundle(
       work,
-      bundleDeltaPath,
-      `${work}/${HARMONY_BUNDLE_FILE_NAME}`,
-      manifestArrays.hbcTransformMeta,
+      await this.readDeltaInputs(work),
     );
-    // 组按 from 聚合;同一 from 的内容必然一致,所以每组一个 CRC 即可
-    // (与 manifest 逐位对齐的 copyCrcs 里取第一个非空值)。
-    const crcByFrom = new Map<string, number>();
-    manifestArrays.copyFroms.forEach((from, index) => {
-      const crc = manifestArrays.copyCrcs[index];
-      if (crc !== null && !crcByFrom.has(from)) {
-        crcByFrom.set(from, crc);
-      }
-    });
-    await this.copyFromResource(
-      NativePatchCore.buildCopyGroups(
-        manifestArrays.copyFroms,
-        manifestArrays.copyTos,
-      ),
-      work,
-      crcByFrom,
-    );
+    await this.copyFromResource(copyGroups, work);
     await this.deleteArchiveAndSidecar(params.targetFile);
   }
 
   private async doPatchFromPpk(params: DownloadTaskParams): Promise<void> {
     const work = await this.downloadAndExtract(params);
-    const inputs = await this.readDeltaInputs(work, false);
-    const manifestArrays = inputs.manifestArrays;
-
-    const plan = NativePatchCore.buildArchivePlan(
-      ARCHIVE_PATCH_TYPE_FROM_PPK,
-      inputs.entryNames,
-      manifestArrays.copyFroms,
-      manifestArrays.copyTos,
-      manifestArrays.deletes,
-      BUNDLE_DELTA_ENTRY,
-    );
-    await NativePatchCore.applyDeltaFromSource({
-      copyFroms: manifestArrays.copyFroms,
-      copyTos: manifestArrays.copyTos,
-      deletes: manifestArrays.deletes,
+    const inputs = await this.readDeltaInputs(work);
+    await NativePatchCore.applyArchiveDelta({
+      archiveType: ARCHIVE_PATCH_TYPE_FROM_PPK,
+      entryNames: inputs.entryNames,
+      manifestJson: inputs.manifestJson,
+      bundleDeltaEntry: BUNDLE_DELTA_ENTRY,
       sourceRoot: params.originDirectory,
       targetRoot: work,
-      originBundlePath: `${params.originDirectory}/bundle.harmony.js`,
+      originBundlePath: `${params.originDirectory}/${HARMONY_BUNDLE_FILE_NAME}`,
       bundleDeltaPath: `${work}/${BUNDLE_DELTA_ENTRY}`,
       bundleOutputPath: `${work}/${HARMONY_BUNDLE_FILE_NAME}`,
-      mergeSourceSubdir: plan.mergeSourceSubdir,
-      enableMerge: plan.enableMerge,
-      bundleHbcTransformMeta: manifestArrays.hbcTransformMeta,
     });
     logger.info(TAG, 'Delta from PPK completed');
     await this.deleteArchiveAndSidecar(params.targetFile);
@@ -1141,7 +983,6 @@ export class DownloadTask {
   private async copyFromResource(
     copyGroups: CopyGroupResult[],
     targetRoot: string,
-    crcByFrom?: Map<string, number>,
   ): Promise<void> {
     let currentFrom = '';
     try {
@@ -1153,7 +994,7 @@ export class DownloadTask {
         if (targets.length === 0) {
           continue;
         }
-        const expectedCrc = crcByFrom?.get(currentFrom);
+        const expectedCrc = group.expectedCrc;
 
         if (currentFrom.startsWith('resources/base/media/')) {
           // Strip only the final extension: 'icon.round.png' -> 'icon.round',
@@ -1237,25 +1078,7 @@ export class DownloadTask {
     }
   }
 
-  private async doCleanUp(params: DownloadTaskParams): Promise<void> {
-    try {
-      await NativePatchCore.cleanupOldEntries(
-        params.unzipDirectory,
-        [params.hash, params.originHash].filter(name => !!name),
-        3,
-      );
-    } catch (error) {
-      const message = `Cleanup failed: ${getErrorMessage(error)}`;
-      logger.error(TAG, message);
-      throw createPushyError(ERROR_FILE_OPERATION_FAILED, message);
-    }
-  }
-
   public async execute(params: DownloadTaskParams): Promise<void> {
-    const isPatchTask =
-      params.type === DownloadTaskParams.TASK_TYPE_PATCH_FULL ||
-      params.type === DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP ||
-      params.type === DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
     try {
       switch (params.type) {
         case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
@@ -1267,24 +1090,13 @@ export class DownloadTask {
         case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
           await this.doPatchFromPpk(params);
           break;
-        case DownloadTaskParams.TASK_TYPE_CLEANUP:
-          await this.doCleanUp(params);
-          break;
-        case DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD:
-          await this.downloadFile(params);
-          // 文件在完成时即是最终产物——残留的 sidecar 会让下次同 URL 的
-          // 下载不发请求直接返回这份旧字节。
-          await this.deleteResumeSidecar(params.targetFile);
-          break;
         default:
           throw createPushyError(
             ERROR_INVALID_OPTIONS,
             `Unknown task type: ${params.type}`,
           );
       }
-      if (isPatchTask) {
-        await this.promoteStaging(params);
-      }
+      await this.promoteStaging(params);
     } catch (rawError) {
       // 稳定错误码:下载阶段的失败是 DOWNLOAD_FAILED;归档收齐之后的失败
       // (解压/hpatch/资源拷贝含 copiesCrc 校验/完成记录)一律 PATCH_FAILED,
@@ -1295,29 +1107,22 @@ export class DownloadTask {
         this.downloadPhaseCompleted ? ERROR_DELTA_FAILED : ERROR_DOWNLOAD_FAILED,
       );
       logger.error(TAG, `Task execution failed: ${error.message}`);
-      if (params.type !== DownloadTaskParams.TASK_TYPE_CLEANUP) {
-        try {
-          if (params.type === DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD) {
-            await fileIo.unlink(params.targetFile);
-            await this.deleteResumeSidecar(params.targetFile);
-          } else {
-            // Only the staging directory is ours to drop: the final version
-            // directory is never touched by a failed install, so a failed
-            // duplicate task cannot remove an earlier task's install.
-            await this.removeDirectory(this.stagingDirectory(params));
-            if (this.downloadPhaseCompleted) {
-              // 收齐后才失败的是解压/patch 失败:归档有毒,续传只会撞上
-              // 同一个失败。下载阶段的失败则保留 partial + sidecar——那
-              // 就是续传状态。
-              await this.deleteArchiveAndSidecar(params.targetFile);
-            }
-          }
-        } catch (cleanupError) {
-          logger.error(
-            TAG,
-            `Cleanup after error failed: ${getErrorMessage(cleanupError)}`,
-          );
+      try {
+        // Only the staging directory is ours to drop: the final version
+        // directory is never touched by a failed install, so a failed
+        // duplicate task cannot remove an earlier task's install.
+        await this.removeDirectory(this.stagingDirectory(params));
+        if (this.downloadPhaseCompleted) {
+          // 收齐后才失败的是解压/patch 失败:归档有毒,续传只会撞上
+          // 同一个失败。下载阶段的失败则保留 partial + sidecar——那
+          // 就是续传状态。
+          await this.deleteArchiveAndSidecar(params.targetFile);
         }
+      } catch (cleanupError) {
+        logger.error(
+          TAG,
+          `Cleanup after error failed: ${getErrorMessage(cleanupError)}`,
+        );
       }
       throw error;
     }

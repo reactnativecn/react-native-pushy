@@ -1,0 +1,118 @@
+name: Publish to npm
+description: >-
+  Shared body of the two publish jobs in publish.yml: toolchains, the CI-built
+  Android native libraries, the Harmony HAR (rebuilt, or reused from the
+  previous published release), the pre-publish checks and npm publish. Runs
+  after the react-native-update checkout (this action lives in it).
+inputs:
+  harmony-har:
+    description: "'build' rebuilds harmony/pushy.har from source; 'previous' reuses the one in the previous-tag release on npm."
+    required: true
+  previous-tag:
+    description: Last release tag published to npm (with harmony-har 'previous').
+    default: ''
+runs:
+  using: composite
+  steps:
+    - name: Check inputs
+      shell: bash
+      env:
+        HARMONY_HAR: ${{ inputs.harmony-har }}
+        PREVIOUS_TAG: ${{ inputs.previous-tag }}
+      run: |
+        case "$HARMONY_HAR" in
+          build) ;;
+          previous)
+            if [ -z "$PREVIOUS_TAG" ]; then
+              echo "::error::harmony-har 'previous' needs previous-tag"
+              exit 1
+            fi
+            ;;
+          *) echo "::error::unknown harmony-har '$HARMONY_HAR'"; exit 1 ;;
+        esac
+
+    - name: Configure git safe.directory
+      shell: bash
+      run: |
+        git config --global --add safe.directory "$GITHUB_WORKSPACE"
+        # $toplevel/$sm_path are expanded by git submodule foreach, not here.
+        # shellcheck disable=SC2016
+        git submodule foreach --recursive 'git config --global --add safe.directory "$toplevel/$sm_path"'
+
+    - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      with:
+        bun-version: 1.4.0
+
+    # Setup .npmrc file to publish to npm
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      with:
+        node-version: 24
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Install dependencies
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    # Drop the committed binaries first: the artifact must fully replace
+    # android/lib, so any layout regression makes the verify step fail loudly
+    # instead of silently passing against stale committed .so files.
+    - name: Remove committed Android native libraries
+      shell: bash
+      run: rm -rf android/lib
+
+    - name: Use CI-built Android native libraries
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: android-so
+        path: android/lib
+
+    - name: Verify Android native libraries
+      shell: bash
+      run: node scripts/verify-android-so.js
+
+    - name: Build Harmony HAR
+      if: inputs.harmony-har == 'build'
+      shell: bash
+      run: npm run build:harmony-har -- --build-mode release
+
+    # Fail closed: the package must always ship harmony/pushy.har
+    # (package.json `files` lists it and check-packlist.js --release
+    # requires it). If the previous release can't be fetched, fix the cause
+    # or re-run — never publish a HAR-less package.
+    - name: Fetch previous Harmony HAR
+      if: inputs.harmony-har == 'previous'
+      shell: bash
+      env:
+        PREVIOUS_TAG: ${{ inputs.previous-tag }}
+      run: |
+        PREV_VERSION="${PREVIOUS_TAG#v}"
+        echo "Fetching harmony/pushy.har from react-native-update@$PREV_VERSION"
+        npm pack "react-native-update@$PREV_VERSION"
+        tar -xzf "react-native-update-${PREV_VERSION}.tgz" package/harmony/pushy.har
+        mkdir -p harmony
+        cp package/harmony/pushy.har harmony/pushy.har
+        # Clean up temporary pack and extraction files to prevent publishing them
+        rm -rf "react-native-update-${PREV_VERSION}.tgz" package
+
+    - name: Verify Harmony HAR artifact
+      shell: bash
+      run: test -f harmony/pushy.har
+
+    - name: Verify release tag matches package version
+      shell: bash
+      run: node scripts/check-release-version.js
+
+    - name: Verify publish file list
+      shell: bash
+      run: node scripts/check-packlist.js --release
+
+    - name: Publish to npm
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ github.event.release.tag_name }}
+      run: |
+        if [[ "$RELEASE_TAG" == *"beta"* ]]; then
+          npm publish --provenance --access public --tag beta
+        else
+          npm publish --provenance --access public
+        fi

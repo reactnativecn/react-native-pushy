@@ -82,43 +82,32 @@ export const emptyModule = new Proxy(emptyModuleTarget, {
   },
 });
 
-// Web never probes (assertWeb gates every flow); the identity keeps the
-// signature. Not the bare `Promise.resolve`: called unbound through map() it
-// throws.
-const ping = isWeb
-  ? (url: string) => Promise.resolve(url)
-  : async (url: string) => {
-      try {
-        const {
-          status,
-          statusText,
-          url: finalUrl,
-        } = await fetchWithTimeout(
-          url,
-          {
-            method: 'HEAD',
-          },
-          DEFAULT_FETCH_TIMEOUT_MS
-        );
-        if (status === 200) {
-          if (isProtocolDowngrade(url, finalUrl)) {
-            // The probe was redirected from https to plaintext http. Never
-            // let a downgraded final URL win the race: the winner is what
-            // the real artifact download uses.
-            log('ping rejected: https redirected to http', url, finalUrl);
-            throw Error(i18n.t('error_ping_failed'));
-          }
-          return finalUrl;
-        }
-        log('ping failed', url, status, statusText);
+const ping = async (url: string) => {
+  try {
+    const {
+      status,
+      statusText,
+      url: finalUrl,
+    } = await fetchWithTimeout(url, {
+      method: 'HEAD',
+    });
+    if (status === 200) {
+      if (isProtocolDowngrade(url, finalUrl)) {
+        // The probe was redirected from https to plaintext http. Never let a
+        // downgraded final URL win the race: the winner is what the real
+        // artifact download uses.
+        log('ping rejected: https redirected to http', url, finalUrl);
         throw Error(i18n.t('error_ping_failed'));
-      } catch (e) {
-        log('ping error', url, e);
-        throw e;
       }
-    };
-
-export { joinUrls } from './updateFlowCore';
+      return finalUrl;
+    }
+    log('ping failed', url, status, statusText);
+    throw Error(i18n.t('error_ping_failed'));
+  } catch (e) {
+    log('ping error', url, e);
+    throw e;
+  }
+};
 
 export const testUrls = async (urls?: string[]): Promise<string | null> => {
   if (!urls?.length) {
@@ -182,16 +171,14 @@ export const fetchWithTimeout = (
   // Promise.race the losing fetch kept running (and kept the connection busy)
   // long after the caller had already moved on.
   const controller = new AbortController();
-  // The timeout controller replaces params.signal on the fetch call, so a
-  // caller-provided signal (e.g. the hedged endpoint race cancelling losers)
-  // must be chained onto it manually.
-  const externalSignal =
-    signal ?? ((params as any)?.signal as AbortSignal | undefined);
+  // The timeout controller is the fetch call's signal, so a caller-provided
+  // signal (e.g. the hedged endpoint race cancelling losers) must be chained
+  // onto it manually.
   const onExternalAbort = () => controller.abort();
-  if (externalSignal?.aborted) {
+  if (signal?.aborted) {
     controller.abort();
-  } else if (externalSignal) {
-    externalSignal.addEventListener('abort', onExternalAbort);
+  } else if (signal) {
+    signal.addEventListener('abort', onExternalAbort);
   }
   const timeoutId = setTimeout(() => {
     log('fetch timeout', url);
@@ -200,7 +187,7 @@ export const fetchWithTimeout = (
 
   return enhancedFetch(url, { ...params, signal: controller.signal as any })
     .catch((e: any) => {
-      if (externalSignal?.aborted) {
+      if (signal?.aborted) {
         // Cancelled by the caller, not timed out; keep the abort semantics.
         throw e;
       }
@@ -213,7 +200,7 @@ export const fetchWithTimeout = (
       clearTimeout(timeoutId);
       // A long-lived caller signal (one per endpoint race) would otherwise
       // keep every finished request's listener — and its controller — alive.
-      externalSignal?.removeEventListener('abort', onExternalAbort);
+      signal?.removeEventListener('abort', onExternalAbort);
     });
 };
 

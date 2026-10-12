@@ -175,7 +175,10 @@ describe('Local Update Merge E2E', () => {
       delete: true,
       ...getDetoxLaunchArgs(),
     });
-  });
+    // simctl uninstall + install alone has taken 5-9 min on slow macOS
+    // runners; the 300s testTimeout default would fail the suite before a
+    // single step of it ran.
+  }, 600000);
 
   beforeEach(async () => {
     await device.launchApp({

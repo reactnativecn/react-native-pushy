@@ -32,29 +32,54 @@ if (methods.length < 10) {
 // Bridge plumbing that RN itself calls; not part of the Pushy surface.
 const plumbing = new Set(['addListener', 'removeListeners']);
 
-const oldarch = read(
-  'android/src/oldarch/cn/reactnative/modules/update/UpdateModule.java'
+// One UpdateModule serves both Android architectures. The old bridge finds
+// its methods through @ReactMethod on UpdateModule itself; under the old
+// architecture it extends the hand-written NativePushySpec stand-in, which
+// must declare every method the codegen spec does.
+const androidModule = read(
+  'android/src/main/java/cn/reactnative/modules/update/UpdateModule.java'
 );
-const newarch = read(
-  'android/src/newarch/cn/reactnative/modules/update/UpdateModule.java'
+const oldarchSpec = read(
+  'android/src/oldarch/cn/reactnative/modules/update/NativePushySpec.java'
 );
 const ios = read('ios/RCTPushy/RCTPushy.mm');
 const harmonyCpp = read('harmony/pushy/src/main/cpp/PushyTurboModule.cpp');
 const harmonyTs = read('harmony/pushy/src/main/ets/PushyTurboModule.ts');
 
-const has = (source, re) => re.test(source);
+// The Harmony method table: `X(name, argCount, SYNC|ASYNC)` rows of the
+// PUSHY_METHODS X-macro in PushyTurboModule.cpp.
+const harmonyTable = new Map();
 const problems = [];
+const tableRe = /\bX\(\s*([A-Za-z]+)\s*,\s*(\d+)\s*,\s*(SYNC|ASYNC)\s*\)/g;
+while ((m = tableRe.exec(harmonyCpp)) !== null) {
+  if (harmonyTable.has(m[1])) {
+    problems.push(`harmony/cpp: ${m[1]} listed twice in PUSHY_METHODS`);
+  }
+  harmonyTable.set(m[1], m[3]);
+}
+if (harmonyTable.size < 10) {
+  console.error(
+    'check-native-spec-parity: failed to parse the PUSHY_METHODS table in ' +
+      'harmony/pushy/src/main/cpp/PushyTurboModule.cpp'
+  );
+  process.exit(1);
+}
+
+const has = (source, re) => re.test(source);
 
 for (const { name, returns } of methods) {
   if (plumbing.has(name)) {
     continue;
   }
-  const javaRe = new RegExp(`public\\s+\\S+\\s+${name}\\s*\\(`);
-  if (!has(oldarch, javaRe)) {
-    problems.push(`android/oldarch: ${name} not exported`);
+  const javaRe = new RegExp(
+    `@ReactMethod\\s+@Override\\s+public\\s+\\S+\\s+${name}\\s*\\(`
+  );
+  if (!has(androidModule, javaRe)) {
+    problems.push(`android: ${name} not exported with @ReactMethod`);
   }
-  if (!has(newarch, javaRe)) {
-    problems.push(`android/newarch: ${name} not exported`);
+  const specRe = new RegExp(`public\\s+abstract\\s+\\S+\\s+${name}\\s*\\(`);
+  if (!has(oldarchSpec, specRe)) {
+    problems.push(`android/oldarch: ${name} missing from NativePushySpec`);
   }
   if (
     !has(ios, new RegExp(`RCT_(EXPORT|REMAP)_METHOD\\(\\s*${name}\\b`)) &&
@@ -62,21 +87,16 @@ for (const { name, returns } of methods) {
   ) {
     problems.push(`ios: ${name} not exported`);
   }
-  const syncReg = new RegExp(`PUSHY_SYNC_METHOD\\(${name}\\)`);
-  const asyncReg = new RegExp(`PUSHY_ASYNC_METHOD\\(${name}\\)`);
-  const registered = new RegExp(`registerMethod\\(\\s*"${name}"`);
-  if (!has(harmonyCpp, registered)) {
-    problems.push(`harmony/cpp: ${name} not in registerMethod table`);
+  const kind = harmonyTable.get(name);
+  if (!kind) {
+    problems.push(`harmony/cpp: ${name} not in the PUSHY_METHODS table`);
   }
   const isPromise = /^Promise</.test(returns);
-  if (isPromise && !has(harmonyCpp, asyncReg)) {
+  if (isPromise && kind === 'SYNC') {
     problems.push(
-      `harmony/cpp: ${name} returns ${returns} in the spec but is not ` +
-        'registered with PUSHY_ASYNC_METHOD'
+      `harmony/cpp: ${name} returns ${returns} in the spec but is ` +
+        'registered SYNC in PUSHY_METHODS'
     );
-  }
-  if (!isPromise && !has(harmonyCpp, syncReg) && !has(harmonyCpp, asyncReg)) {
-    problems.push(`harmony/cpp: ${name} has no PUSHY_*_METHOD host function`);
   }
   const tsRe = new RegExp(`^\\s{2}(?:async\\s+)?${name}\\s*\\(`, 'm');
   if (!has(harmonyTs, tsRe)) {
@@ -84,10 +104,8 @@ for (const { name, returns } of methods) {
   }
   // A sync registration must not wrap an async ArkTS implementation.
   const tsAsync = new RegExp(`^\\s{2}async\\s+${name}\\s*\\(`, 'm');
-  if (has(harmonyCpp, syncReg) && has(harmonyTs, tsAsync)) {
-    problems.push(
-      `harmony: ${name} is async in ArkTS but registered PUSHY_SYNC_METHOD`
-    );
+  if (kind === 'SYNC' && has(harmonyTs, tsAsync)) {
+    problems.push(`harmony: ${name} is async in ArkTS but registered SYNC`);
   }
 }
 

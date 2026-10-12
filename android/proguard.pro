@@ -1,21 +1,23 @@
-# JNI-constructed result classes: cpp/patch_core/update_core_android.cpp
+# JNI-constructed result classes: cpp/android_jni/update_core_android.cpp
 # resolves them by FindClass + GetMethodID("<init>") + GetFieldID, so the
 # no-arg constructor and every field must survive shrinking with their names
 # (a -keepnames rule alone lets R8 strip the unreferenced constructor/fields).
 -keep class cn.reactnative.modules.update.StateCoreResult { <init>(); <fields>; }
--keep class cn.reactnative.modules.update.ArchivePatchPlanResult { <init>(); <fields>; }
 -keep class cn.reactnative.modules.update.CopyGroupResult { <init>(); <fields>; }
 
 # Native methods are bound from JNI_OnLoad by class/method name (the encoded
-# table in cpp/patch_core/jni_registration.cpp), not by exported symbols, so
+# table in cpp/android_jni/jni_registration.cpp), not by exported symbols, so
 # their classes and names must still survive shrinking unchanged.
 -keepclasseswithmembernames class cn.reactnative.modules.update.** {
     native <methods>;
 }
 
-# Instantiated by React Native / Expo / the system by name.
+# Instantiated or called by name: the module's methods by the bridge /
+# TurboModule JNI (not every React Native version ships a consumer rule
+# keeping NativeModule members), the receiver by the system, Expo's package
+# by Expo.
+# UpdatePackage needs no rule: hosts construct it directly.
 -keep class cn.reactnative.modules.update.UpdateModule { *; }
--keep class cn.reactnative.modules.update.UpdatePackage { *; }
 -keep class cn.reactnative.modules.update.PackageInstallerStatusReceiver { *; }
 -keep class expo.modules.pushy.** { *; }
 
@@ -72,5 +74,3 @@
 -keep class **.BuildConfig {
     public static boolean IS_NEW_ARCHITECTURE_ENABLED;
 }
-
--keepnames class expo.modules.ExpoReactHostFactory$ExpoReactHostDelegate { *; }

@@ -1,5 +1,5 @@
 // ArkTS mirror of cpp/patch_core/error_codes.h — keep in sync by hand
-// (harmony/pushy/src/test/check-constant-parity.js asserts the values match).
+// (scripts/check-constant-parity.js asserts the values match).
 // 与 Android/iOS 共用的稳定错误码:JS 层(src/error.ts)按 code 聚合遥测,
 // 消息文案各平台可不同,只有码是契约。
 //
@@ -61,17 +61,4 @@ export function toPushyError(error: unknown, defaultCode: string): PushyError {
     return error;
   }
   return new PushyError(defaultCode, getErrorMessage(error));
-}
-
-/** 从 `[CODE] message` 形式的消息里解析错误码;无前缀返回空串。 */
-export function parseErrorCodePrefix(message: string): string {
-  if (typeof message !== 'string' || !message.startsWith('[')) {
-    return '';
-  }
-  const end = message.indexOf('] ');
-  if (end <= 1) {
-    return '';
-  }
-  const code = message.substring(1, end);
-  return /^[A-Z][A-Z0-9_]*$/.test(code) ? code : '';
 }

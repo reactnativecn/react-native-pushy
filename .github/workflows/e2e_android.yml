@@ -7,6 +7,7 @@ on:
     paths: &e2e-android-paths
       - '.github/workflows/e2e_android.yml'
       - '.github/actions/e2e-android-setup/**'
+      - '.github/actions/e2e-common/**'
       - '.gitmodules'
       # codegenConfig is copied into the linked package and drives codegen
       - 'package.json'
@@ -26,6 +27,12 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Read by .detoxrc.js (detox build/test only): the ABI to build and the AVD
+# the emulator steps below create.
+env:
+  DETOX_ANDROID_ARCHS: x86_64
+  DETOX_AVD_NAME: api34
+
 jobs:
   e2e-android:
     runs-on: ubuntu-latest
@@ -40,9 +47,6 @@ jobs:
         uses: ./.github/actions/e2e-android-setup
 
       - name: Detox build (android.emu.release)
-        env:
-          DETOX_ANDROID_ARCHS: x86_64
-          DETOX_AVD_NAME: api34
         run: cd Example/e2etest && E2E_PLATFORM=android bunx detox build --configuration android.emu.release
 
       - name: Prepare local update artifacts
@@ -54,11 +58,18 @@ jobs:
       - name: Detox test (android.emu.release)
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
-          DETOX_ANDROID_ARCHS: x86_64
           RNU_CLI_ROOT: ${{ github.workspace }}/react-native-update-cli
           RNU_E2E_SKIP_PREPARE: 'true'
-          DETOX_AVD_NAME: api34
-        with:
+          # 每条命令自带 cd:android-emulator-runner 逐行起独立 shell,
+          # 单独一行的 cd 不会保持到下一条(实测 detox 会在仓库根找不到 jest)
+          EMULATOR_SCRIPT: |
+            cd Example/e2etest && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1
+            # 原生冷启动检测有自己的 runner 配置(见 e2e/native/jest.config.js);
+            # Android 这个 job 有预算,不必像 iOS 那样拆成独立 job
+            cd Example/e2etest && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --config e2e/native/jest.config.js
+        # Shared by every emulator step in this workflow; each step supplies
+        # its own commands through the EMULATOR_SCRIPT env var.
+        with: &emulator
           api-level: 34
           target: google_apis
           arch: x86_64
@@ -71,13 +82,7 @@ jobs:
           # worker. Unpin once a run proves 37.x stable.
           emulator-build: 15507667
           emulator-boot-timeout: 900
-          # 每条命令自带 cd:android-emulator-runner 逐行起独立 shell,
-          # 单独一行的 cd 不会保持到下一条(实测 detox 会在仓库根找不到 jest)
-          script: |
-            cd Example/e2etest && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1
-            # 原生冷启动检测有自己的 runner 配置(见 e2e/native/jest.config.js);
-            # Android 这个 job 有预算,不必像 iOS 那样拆成独立 job
-            cd Example/e2etest && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --config e2e/native/jest.config.js
+          script: ${{ env.EMULATOR_SCRIPT }}
 
       - name: Upload Detox artifacts
         # cancelled() 覆盖 job 超时被杀的场景,否则超时时拿不到现场
@@ -108,9 +113,6 @@ jobs:
           checkout-cli: 'false'
 
       - name: Detox build (android.emu.debug)
-        env:
-          DETOX_ANDROID_ARCHS: x86_64
-          DETOX_AVD_NAME: api34
         run: cd Example/e2etest && bunx detox build --configuration android.emu.debug
 
       - name: Start Metro in background
@@ -125,22 +127,13 @@ jobs:
       - name: Detox test (android.emu.debug boot smoke)
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
-          DETOX_ANDROID_ARCHS: x86_64
-          DETOX_AVD_NAME: api34
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          avd-name: api34
-          # Pinned while stabilizing e2e; see the e2e-android job.
-          emulator-build: 15507667
-          emulator-boot-timeout: 900
           # 注意:emulator-runner 把 script 的每一行单独用 sh -c 执行,
           # cd 不会跨行生效,所以每行必须自包含。
-          script: |
+          EMULATOR_SCRIPT: |
             for i in $(seq 1 90); do curl -sf http://localhost:8081/status >/dev/null && break; sleep 2; done
             curl -sf --max-time 420 -o /dev/null "http://localhost:8081/index.bundle?platform=android&dev=true&minify=false" || { echo '::error::Metro dev bundle failed to build'; tail -n 100 Example/e2etest/.e2e-artifacts/metro.log; exit 1; }
             cd Example/e2etest && bunx detox test --configuration android.emu.debug --config e2e/smoke/jest.config.js --no-start --headless --record-logs all --retries 1
+        with: *emulator
 
       - name: Upload Detox artifacts
         # cancelled() 覆盖 job 超时被杀的场景,否则超时时拿不到现场
@@ -183,9 +176,6 @@ jobs:
           frozen-lockfile: 'false'
 
       - name: Detox build (RN 0.77.3 old arch android.emu.release)
-        env:
-          DETOX_ANDROID_ARCHS: x86_64
-          DETOX_AVD_NAME: api34
         run: cd .e2e-rn077-oldarch/AwesomeProject && E2E_PLATFORM=android bunx detox build --configuration android.emu.release
 
       - name: Prepare local update artifacts
@@ -197,22 +187,13 @@ jobs:
       - name: Detox test (RN 0.77.3 old arch android.emu.release)
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         env:
-          DETOX_ANDROID_ARCHS: x86_64
           RNU_CLI_ROOT: ${{ github.workspace }}/react-native-update-cli
           RNU_E2E_SKIP_PREPARE: 'true'
-          DETOX_AVD_NAME: api34
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          avd-name: api34
-          # Pinned while stabilizing e2e; see the e2e-android job.
-          emulator-build: 15507667
-          emulator-boot-timeout: 900
           # 每条命令自带 cd,理由同上
-          script: |
+          EMULATOR_SCRIPT: |
             cd .e2e-rn077-oldarch/AwesomeProject && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1
             cd .e2e-rn077-oldarch/AwesomeProject && E2E_PLATFORM=android bunx detox test --configuration android.emu.release --headless --record-logs all --retries 1 --config e2e/native/jest.config.js
+        with: *emulator
 
       - name: Upload Detox artifacts
         # cancelled() 覆盖 job 超时被杀的场景,否则超时时拿不到现场

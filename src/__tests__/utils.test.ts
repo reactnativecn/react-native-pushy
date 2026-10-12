@@ -1,21 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-
-mock.module('react-native', () => {
-  return {
-    Platform: {
-      OS: 'ios',
-    },
-  };
-});
-
-mock.module('../i18n', () => {
-  return {
-    default: {
-      t: (key: string) => key,
-    },
-  };
-});
-
+import { joinUrls } from '../updateFlowCore';
 import {
   computeProgress,
   createNonSecureId,
@@ -23,7 +7,6 @@ import {
   fetchWithTimeout,
   info,
   isProtocolDowngrade,
-  joinUrls,
   log,
   parseQueryParams,
   promiseAny,
@@ -31,6 +14,7 @@ import {
   testUrls,
   warn,
 } from '../utils';
+import { restoreDevAfterEach } from './helpers';
 
 const originalFetch = globalThis.fetch;
 
@@ -397,9 +381,8 @@ describe('parseQueryParams', () => {
 });
 
 describe('log gating (1.11)', () => {
-  const origDev = (globalThis as any).__DEV__;
+  restoreDevAfterEach();
   afterEach(() => {
-    (globalThis as any).__DEV__ = origDev;
     setDebugLogging(false);
   });
 
@@ -452,28 +435,5 @@ describe('createNonSecureId', () => {
     }
     expect(ids.size).toBe(50);
     expect(createNonSecureId(8)).toHaveLength(8);
-  });
-});
-
-describe('testUrls on web', () => {
-  test('resolves the first url without probing or throwing', async () => {
-    mock.module('react-native', () => ({ Platform: { OS: 'web' } }));
-    const fetchMock = mock(async () => {
-      throw new Error('must not probe on web');
-    });
-    (globalThis as any).fetch = fetchMock;
-    const cacheKey = 'web-ping';
-    const webUtils: typeof import('../utils') = await import(
-      `../utils?${cacheKey}`
-    );
-
-    expect(webUtils.isWeb).toBe(true);
-    expect(
-      await webUtils.testUrls([
-        'https://a.example.com',
-        'https://b.example.com',
-      ])
-    ).toBe('https://a.example.com');
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

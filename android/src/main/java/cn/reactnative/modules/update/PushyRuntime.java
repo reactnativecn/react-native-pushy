@@ -7,8 +7,6 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import org.json.JSONObject;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 
 /** Bridge-free native configuration and update APIs. */
 public final class PushyRuntime {
@@ -19,14 +17,7 @@ public final class PushyRuntime {
 
     // A single waiting worker, not one thread per caller. The actual round is
     // shared with cold start and crash rescue by SyncCoordinator.
-    private static final Executor WORKER = Executors.newSingleThreadExecutor(new ThreadFactory() {
-        @Override
-        public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable, "pushy-host-sync");
-            thread.setDaemon(true);
-            return thread;
-        }
-    });
+    private static final Executor WORKER = Threads.single("pushy-host-sync", true);
 
     public interface ConfigurationCallback {
         /** Main thread; null means configuration was persisted successfully. */
@@ -34,14 +25,7 @@ public final class PushyRuntime {
     }
 
     // Configuration must not wait behind a network round that it invalidates.
-    private static final Executor CONFIG_WORKER = Executors.newSingleThreadExecutor(new ThreadFactory() {
-        @Override
-        public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable, "pushy-host-config");
-            thread.setDaemon(true);
-            return thread;
-        }
-    });
+    private static final Executor CONFIG_WORKER = Threads.single("pushy-host-config", true);
 
     /**
      * Validate and persist a complete configuration, even before JS or bundle
@@ -56,26 +40,22 @@ public final class PushyRuntime {
         final Context applicationContext = context.getApplicationContext();
         // Snapshot caller-owned JSON before dispatch, not minutes later on a worker.
         final String snapshot = options.toString();
-        CONFIG_WORKER.execute(new Runnable() {
-            @Override
-            public void run() {
-                Exception failure = null;
-                try {
-                    String config = PushyConfiguration.normalize(snapshot);
-                    UpdateContext.getInstance(applicationContext).setNativeConfig(config);
-                } catch (Exception e) {
-                    failure = e;
-                } catch (LinkageError e) {
-                    failure = new IllegalStateException("Native configuration failed", e);
+        CONFIG_WORKER.execute(() -> {
+            Exception failure = null;
+            try {
+                NativeCore.ensureLoaded();
+                String config = FlowBridge.normalizeConfiguration(snapshot);
+                if (config == null) {
+                    throw new IllegalStateException("Native configuration failed");
                 }
-                final Exception error = failure;
-                new Handler(Looper.getMainLooper()).post(new Runnable() {
-                    @Override
-                    public void run() {
-                        callback.onComplete(error);
-                    }
-                });
+                UpdateContext.getInstance(applicationContext).setNativeConfig(config);
+            } catch (Exception e) {
+                failure = e;
+            } catch (LinkageError e) {
+                failure = new IllegalStateException("Native configuration failed", e);
             }
+            final Exception error = failure;
+            new Handler(Looper.getMainLooper()).post(() -> callback.onComplete(error));
         });
     }
 
@@ -96,32 +76,24 @@ public final class PushyRuntime {
             throw new IllegalArgumentException("context and callback are required");
         }
         final Context applicationContext = context.getApplicationContext();
-        WORKER.execute(new Runnable() {
-            @Override
-            public void run() {
-                BundlePreparationResult outcome;
-                try {
-                    if (BuildConfig.DEBUG) {
-                        outcome = BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "debug");
-                    } else {
-                        outcome = SyncCoordinator.prepareBundle(
-                            UpdateContext.getInstance(applicationContext));
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    outcome = BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "interrupted");
-                } catch (Exception | LinkageError e) {
-                    Log.w(Texts.LOG_TAG, "native host sync failed", e);
-                    outcome = BundlePreparationResult.of(BundlePreparationResult.FAILED, "internal_error");
+        WORKER.execute(() -> {
+            BundlePreparationResult outcome;
+            try {
+                if (BuildConfig.DEBUG) {
+                    outcome = BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "debug");
+                } else {
+                    outcome = SyncCoordinator.prepareBundle(
+                        UpdateContext.getInstance(applicationContext));
                 }
-                final BundlePreparationResult result = outcome;
-                new Handler(Looper.getMainLooper()).post(new Runnable() {
-                    @Override
-                    public void run() {
-                        callback.onComplete(result);
-                    }
-                });
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                outcome = BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "interrupted");
+            } catch (Exception | LinkageError e) {
+                Log.w(Texts.LOG_TAG, "native host sync failed", e);
+                outcome = BundlePreparationResult.of(BundlePreparationResult.FAILED, "internal_error");
             }
+            final BundlePreparationResult result = outcome;
+            new Handler(Looper.getMainLooper()).post(() -> callback.onComplete(result));
         });
     }
 }

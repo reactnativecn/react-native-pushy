@@ -4,7 +4,7 @@ import { URL } from 'node:url';
 import { decodeNativeText } from '../../scripts/encode-native-text';
 
 // JNI_OnLoad binds Android native methods from an encoded name/signature table
-// (cpp/patch_core/jni_registration.cpp). A drifted entry would silently leave
+// (cpp/android_jni/jni_registration.cpp). A drifted entry would silently leave
 // a method unbound until its first call, so the table must match every Java
 // `native` declaration exactly.
 const root = new URL('../../', import.meta.url);
@@ -16,6 +16,7 @@ const descriptor = (type: string): string => {
   const base = array ? type.slice(0, -2) : type;
   const primitives: Record<string, string> = {
     boolean: 'Z',
+    byte: 'B',
     int: 'I',
     long: 'J',
     double: 'D',
@@ -36,7 +37,9 @@ const javaNatives = () =>
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\/\/.*$/gm, '');
       return [
-        ...source.matchAll(/\bnative\s+([\w[\]]+)\s+(\w+)\s*\(([^)]*)\)\s*;/g),
+        ...source.matchAll(
+          /\bnative\s+([\w[\]]+)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w.,\s]+)?;/g
+        ),
       ].map((match) => {
         const params = match[3]
           .split(',')
@@ -50,7 +53,7 @@ const javaNatives = () =>
 
 const registered = () => {
   const source = readFileSync(
-    new URL('cpp/patch_core/jni_registration.cpp', root),
+    new URL('cpp/android_jni/jni_registration.cpp', root),
     'utf8'
   );
   const entries: string[] = [];
@@ -72,13 +75,13 @@ const registered = () => {
 describe('JNI registration table', () => {
   test('matches every Java native declaration', () => {
     const natives = javaNatives();
-    expect(natives.length).toBe(11);
+    expect(natives.length).toBe(18);
     expect(registered()).toEqual(natives);
   });
 
   test('stores no plain class or method names', () => {
     const source = readFileSync(
-      new URL('cpp/patch_core/jni_registration.cpp', root),
+      new URL('cpp/android_jni/jni_registration.cpp', root),
       'utf8'
     ).replace(/\/\/.*$/gm, '');
     expect(source).not.toContain('cn/reactnative');

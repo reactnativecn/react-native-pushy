@@ -22,6 +22,16 @@ import type { CheckResult, ProgressData, UpdateTestPayload } from './type';
 import { decideDownload, resolveCheckResult } from './updateFlowCore';
 import { assertWeb, isWeb, log, noop, parseQueryParams } from './utils';
 
+// A context action applied to the hash of the given (default: the last
+// checked) update info; a no-op without one.
+const forUpdateHash =
+  <T,>(
+    updateInfoRef: { current?: CheckResult },
+    apply: (hash: string) => Promise<T>
+  ) =>
+  async (info: CheckResult | undefined = updateInfoRef.current) =>
+    info?.hash ? apply(info.hash) : undefined;
+
 export const UpdateProvider = ({
   client,
   children,
@@ -100,22 +110,32 @@ export const UpdateProvider = ({
     [client, alertError]
   );
 
-  const switchVersion = useCallback(
-    async (info: CheckResult | undefined = updateInfoRef.current) => {
-      if (info?.hash) {
-        return client.switchVersion(info.hash);
-      }
-    },
+  const switchVersion = useMemo(
+    () => forUpdateHash(updateInfoRef, client.switchVersion),
     [client]
   );
 
-  const switchVersionLater = useCallback(
-    async (info: CheckResult | undefined = updateInfoRef.current) => {
-      if (info?.hash) {
-        return client.switchVersionLater(info.hash);
+  const switchVersionLater = useMemo(
+    () => forUpdateHash(updateInfoRef, client.switchVersionLater),
+    [client]
+  );
+
+  // Client pipeline errors were already surfaced via the onError
+  // subscription; errors thrown by user hooks (beforeCheckUpdate,
+  // afterDownloadUpdate) bypass the pipeline and are surfaced here. Asking
+  // the client instead of checking `e.code` matters: axios/system errors
+  // carry their own code without ever entering the pipeline.
+  const surfaceCaughtError = useCallback(
+    (e: any, title: string) => {
+      if (!client.wasEmitted(e)) {
+        setLastError(e);
+        alertError(title, e.message);
+      }
+      if (options.throwError) {
+        throw e;
       }
     },
-    [client]
+    [client, options, alertError]
   );
 
   const downloadUpdate = useCallback(
@@ -162,27 +182,17 @@ export const UpdateProvider = ({
         ]);
         return true;
       } catch (e: any) {
-        // Client pipeline errors were already surfaced via the onError
-        // subscription; errors thrown by user hooks (afterDownloadUpdate)
-        // bypass the pipeline and are surfaced here. Asking the client
-        // instead of checking `e.code` matters: axios/system errors carry
-        // their own code without ever entering the pipeline.
-        if (!client.wasEmitted(e)) {
-          setLastError(e);
-          alertError(client.t('update_failed'), e.message);
-        }
-        if (options.throwError) {
-          throw e;
-        }
+        surfaceCaughtError(e, client.t('update_failed'));
         return false;
       }
     },
-    [client, options, alertUpdate, alertError]
+    [client, options, alertUpdate, surfaceCaughtError]
   );
 
   const downloadAndInstallApk = useCallback(
     async (downloadUrl: string) => {
-      if (Platform.OS === 'android' && downloadUrl) {
+      // The client itself is a no-op off Android.
+      if (downloadUrl) {
         await client.downloadAndInstallApk(downloadUrl, setProgress);
       }
     },
@@ -219,16 +229,7 @@ export const UpdateProvider = ({
       try {
         rootInfo = await client.checkUpdate(extra);
       } catch (e: any) {
-        // Client pipeline errors were already surfaced via the onError
-        // subscription; errors thrown by user hooks (beforeCheckUpdate)
-        // bypass the pipeline and are surfaced here (see wasEmitted).
-        if (!client.wasEmitted(e)) {
-          setLastError(e);
-          alertError(client.t('error_update_check_failed'), e.message);
-        }
-        if (options.throwError) {
-          throw e;
-        }
+        surfaceCaughtError(e, client.t('error_update_check_failed'));
         return;
       }
       if (!rootInfo) {
@@ -354,13 +355,14 @@ export const UpdateProvider = ({
       client,
       options,
       alertUpdate,
-      alertError,
+      surfaceCaughtError,
       openExpiredDownload,
       downloadUpdate,
     ]
   );
 
-  const markSuccess = client.markSuccess;
+  // Stable arrow-function properties of the (pinned) client.
+  const { markSuccess, restartApp, resetToPackagedBundle } = client;
 
   // The lifecycle effects below key on the primitive option values they read
   // (re-read on every render, i.e. after every setOptions), so a setOptions
@@ -528,17 +530,6 @@ export const UpdateProvider = ({
     [parseTestPayload]
   );
 
-  const restartApp = useCallback(async () => {
-    return client.restartApp();
-  }, [client]);
-
-  const resetToPackagedBundle = useCallback(
-    async (resetOptions?: { restart?: boolean }) => {
-      return client.resetToPackagedBundle(resetOptions);
-    },
-    [client]
-  );
-
   // parseTestPayload's identity follows checkUpdate (and through it the
   // update strategy callbacks); the Linking subscription reads it through a
   // ref so it is set up once instead of re-running — and replaying the
@@ -579,10 +570,11 @@ export const UpdateProvider = ({
     };
     const linkingListener = Linking.addEventListener('url', linkingHandler);
     return () => {
-      if ('removeEventListener' in Linking) {
-        (Linking as any).removeEventListener('url', linkingHandler);
-      } else {
+      // RN < 0.65 returns no subscription, only removeEventListener.
+      if (typeof linkingListener?.remove === 'function') {
         linkingListener.remove();
+      } else {
+        (Linking as any).removeEventListener('url', linkingHandler);
       }
     };
   }, []);

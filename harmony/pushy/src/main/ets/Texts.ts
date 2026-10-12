@@ -13,12 +13,8 @@ export function revealText(hex: string): string {
   return text;
 }
 
-// Request path appended to an endpoint base.
-export const QUERY_PATH: string = revealText('7514fcd4ad805d55263e08fc99');
-
 // Protocol values, version-info flags and storage names, stored encoded.
 export const STATUS_NONE: string = revealText('3418c1c1aa8a7c40');
-export const POLICY_NEXT_LAUNCH: string = revealText('2912e0ffab8e6c70323b1dedd3');
 export const STORAGE_DIR_NAME: string = revealText('0502e4d5af9f6d');
 export const PREFERENCES_NAME: string = revealText('2f07f0d0ba8e');
 export const PPK_DELTA_SUFFIX: string = revealText('7407e4dae09b69512137');

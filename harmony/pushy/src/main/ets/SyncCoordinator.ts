@@ -6,10 +6,12 @@ import type { UpdateContext } from './UpdateContext';
 import { BundlePreparationRound, bundlePreparationResult } from './BundlePreparationResult';
 import type { BundlePreparationResult } from './BundlePreparationResult';
 import { isSafePathComponent } from './PathUtils';
-import { QUERY_PATH, STATUS_NONE } from './Texts';
+import { STATUS_NONE } from './Texts';
 import { monotonicNowMs } from './MonotonicClock';
 import {
+  ERROR_DELTA_FAILED,
   ERROR_DOWNLOAD_FAILED,
+  PushyError,
   createPushyError,
   getErrorMessage,
 } from './ErrorCodes';
@@ -38,58 +40,31 @@ const DOWNLOAD_PHASE_TIMEOUT_MS = 10 * 60 * 1000;
 const DOWNLOAD_TYPE_DIFF = 'diff';
 const DOWNLOAD_TYPE_PDIFF = 'pdiff';
 
-interface NativeConfig {
-  appKey?: string;
-  packageVersion?: string;
-  endpoints?: string[];
-  queryUrls?: string[];
-  afterDownload?: string;
-  rnu?: string;
-  rn?: string;
-  disabled?: boolean;
-}
-
-interface FlowIdentity {
+// 本次启动的事实,交给共享内核(cpp/update_flow_core/native_round.h)。
+interface RoundEnv {
   packageVersion: string;
-  currentVersion?: string;
+  currentVersion: string;
   uuid: string;
-  rolledBackVersion?: string;
-}
-
-interface FlowCInfo {
-  rnu: string;
-  rn: string;
-  os: string;
-  uuid: string;
-}
-
-interface FlowInput {
-  packageVersion: string;
-  currentVersion?: string;
+  rolledBackVersion: string;
   buildTime: string;
-  cInfo: FlowCInfo;
-  supportedDiffVersion: number;
+  os: string;
   bundleHash: string;
+}
+
+interface PreparedRound {
+  body: string;
+  query: Object;
+}
+
+interface QueryStep {
+  url?: string;
+  post?: boolean;
+  found?: boolean;
 }
 
 interface DecisionAttempt {
   type?: string;
   urls?: string[];
-}
-
-interface DecisionInfoConfig {
-  forceBoot?: boolean;
-}
-
-interface DecisionInfo {
-  name?: string;
-  description?: string;
-  metaInfo?: string;
-  // 服务端按版本下发的配置(forceBoot = 救砖指令)。
-  config?: DecisionInfoConfig;
-  // 写进 hash 信息:这个版本是被救援通道送进来的,JS 在 markSuccess 时据此
-  // 上报 forceBootRescue 回执(与 Android/iOS 一致)。
-  forceBootRescue?: boolean;
 }
 
 interface Decision {
@@ -98,14 +73,10 @@ interface Decision {
   hash?: string;
   attempts?: DecisionAttempt[];
   activate?: boolean;
-  info?: DecisionInfo;
-}
-
-interface RespCacheEntry {
-  ts: number;
-  body: string;
-  request: string;
-  config: string;
+  // 要与版本一起持久化的元信息(JS 侧 setLocalHashInfo;forceBootRescue 由内核标记)。
+  hashInfo?: Object;
+  // 供 JS 复用的响应缓存文本(§10.3)。
+  cache?: string;
 }
 
 let scheduled = false;
@@ -139,54 +110,29 @@ function startNativeRound(
 
 interface ConfigRead {
   json: string;
-  config: NativeConfig;
-  /** Trimmed; the same value gates the round and builds the request URL. */
-  appKey: string;
   /** Set when the persisted configuration cannot start a round. */
   rejection?: BundlePreparationResult;
 }
 
 // The single configuration gate shared by the preflight, the host API and
 // the round itself, so the three can never disagree about what is runnable.
+// The verdict is the shared core's (cpp/update_flow_core ParseRunnableConfig,
+// also used by Android and iOS).
+interface RunnableVerdict {
+  status?: string;
+  reason?: string;
+}
+
 function readNativeConfig(context: UpdateContext): ConfigRead {
   const json = context.getKv(KEY_CONFIG);
-  const empty: NativeConfig = {};
-  if (!json) {
-    return {
-      json: '',
-      config: empty,
-      appKey: '',
-      rejection: bundlePreparationResult('skipped', 'not_configured'),
-    };
-  }
-  const invalid: ConfigRead = {
-    json,
-    config: empty,
-    appKey: '',
-    rejection: bundlePreparationResult('failed', 'invalid_config'),
-  };
-  let config: NativeConfig;
-  try {
-    config = JSON.parse(json) as NativeConfig;
-  } catch (e) {
-    return invalid;
-  }
-  if (!config || typeof config !== 'object' || Array.isArray(config)) {
-    return invalid;
-  }
-  if (config.disabled) {
+  const verdict = JSON.parse(NativePatchCore.runnableConfig(json)) as RunnableVerdict;
+  if (verdict.status !== undefined) {
     return {
       json,
-      config,
-      appKey: '',
-      rejection: bundlePreparationResult('skipped', 'disabled'),
+      rejection: bundlePreparationResult(verdict.status, verdict.reason ?? ''),
     };
   }
-  const appKey = typeof config.appKey === 'string' ? config.appKey.trim() : '';
-  if (!appKey) {
-    return invalid;
-  }
-  return { json, config, appKey };
+  return { json };
 }
 
 // A preflight skip must not consume the process's only round: configuration
@@ -278,8 +224,6 @@ async function runOnce(
     return;
   }
   const configJson = read.json;
-  const config = read.config;
-  const appKey = read.appKey;
   // 从这里起本轮开始做真实工作:留下面包屑,死于轮中时下次启动零延迟续传。
   logger.info(
     TAG,
@@ -297,8 +241,6 @@ async function runOnce(
       launchRolledBackVersion,
       resetGeneration,
       configJson,
-      config,
-      appKey,
     );
   } finally {
     try {
@@ -310,103 +252,84 @@ async function runOnce(
   }
 }
 
-// 配置端点全为 https 时,网络下发的端点列表/制品 URL 一律拒绝明文 http:
-// @ohos.net.http 内部跟随重定向且不暴露最终 URL,这是鸿蒙侧唯一能做的
-// https→http 降级防线(SR-1);其余依赖宿主 network_config.json 的
-// cleartextTrafficPermitted:false(见 harmony/pushy/src/README.md)。
-function isHttpsOnly(config: NativeConfig): boolean {
-  const endpoints = config.endpoints ?? [];
-  return (
-    endpoints.length > 0 &&
-    endpoints.every(endpoint => isHttpsUrl(endpoint))
-  );
-}
-
-function isHttpsUrl(url: string): boolean {
-  return typeof url === 'string' && url.toLowerCase().startsWith('https://');
-}
-
-function isCleartextUrl(url: string): boolean {
-  return typeof url === 'string' && url.toLowerCase().startsWith('http://');
-}
-
 async function runConfiguredRound(
   context: UpdateContext,
   launchRolledBackVersion: string,
   resetGeneration: number,
   configJson: string,
-  config: NativeConfig,
-  appKey: string,
 ): Promise<void> {
   const currentVersion = context.getCurrentVersion();
-  // getConstants consumes the persisted rollback marker during startup; use
-  // the launch-path snapshot captured before that happens.
-  const rolledBackVersion = launchRolledBackVersion;
-  const uuid = context.getKv('uuid') ?? '';
-  const packageVersion = config.packageVersion || context.getPackageVersion();
-
-  const identity: FlowIdentity = {
-    packageVersion,
+  const env: RoundEnv = {
+    packageVersion: context.getPackageVersion(),
+    // 与 JS 常量同形(无版本时为 ''),JS 才能复用这次请求的响应缓存。
     currentVersion,
-    uuid,
-  };
-  if (rolledBackVersion) {
-    identity.rolledBackVersion = rolledBackVersion;
-  }
-
-  const cInfo: FlowCInfo = {
-    rnu: config.rnu ?? '',
-    rn: config.rn ?? '',
+    uuid: context.getKv('uuid') ?? '',
+    // getConstants consumes the persisted rollback marker during startup; use
+    // the launch-path snapshot captured before that happens.
+    rolledBackVersion: launchRolledBackVersion,
+    buildTime: context.getBuildTime(),
     // RNOH's Platform.Version is osFullName; use the same value so JS can
     // reuse the response cache produced by this native request.
     os: `harmony ${deviceInfo.osFullName}`,
-    uuid,
-  };
-
-  const input: FlowInput = {
-    packageVersion: identity.packageVersion,
-    currentVersion,
-    buildTime: context.getBuildTime(),
-    cInfo,
-    supportedDiffVersion: NativePatchCore.getSupportedDiffVersion(),
     bundleHash: await context.getBundleHash(),
   };
-  const body = NativePatchCore.buildRequestBody(JSON.stringify(input));
-  if (!body) {
+  const envJson = JSON.stringify(env);
+  const preparedJson = NativePatchCore.prepareRound(configJson, envJson, Math.random());
+  if (!preparedJson) {
     roundResult = bundlePreparationResult('failed', 'invalid_request');
     return;
   }
-
-  const httpsOnly = isHttpsOnly(config);
-  const responseText = await runQueryRequest(config, appKey, body, httpsOnly);
+  const prepared = JSON.parse(preparedJson) as PreparedRound;
+  const responseText = await runQueryRequest(
+    JSON.stringify(prepared.query),
+    prepared.body,
+  );
   if (!responseText) {
     logger.warn(TAG, 'no endpoint reachable, giving up until next launch');
     return;
   }
-  // Anchor cache freshness to response arrival, before download/patch work.
-  const responseAtSeconds = Math.floor(Date.now() / 1000);
-
+  // 规划好的 attempts、hashInfo 与响应缓存(时间戳取响应到达时)都来自共享内核。
   const decisionJson = NativePatchCore.handleResponse(
     responseText,
-    JSON.stringify(identity),
-    config.afterDownload ?? '',
+    configJson,
+    envJson,
+    prepared.body,
+    Math.floor(Date.now() / 1000),
   );
   if (!decisionJson) {
     roundResult = bundlePreparationResult('failed', 'invalid_response');
     return;
   }
   const decision = JSON.parse(decisionJson) as Decision;
-  if (decision.action !== 'download') {
+  const responseCacheJson = decision.cache ?? '';
+  // Commits the round's persistent outcome (see commitSyncResult) and maps
+  // it to the round result; a reset during the round wins over `result`.
+  const commit = async (
+    hash: string,
+    hashInfoJson: string,
+    activate: boolean,
+    result: BundlePreparationResult,
+  ): Promise<boolean> => {
     const committed = await context.commitSyncResult(
       resetGeneration,
+      hash,
+      hashInfoJson,
+      activate,
+      responseCacheJson,
+    );
+    roundResult = committed
+      ? result
+      : bundlePreparationResult('cancelled', 'reset');
+    return committed;
+  };
+
+  if (decision.action !== 'download') {
+    await commit(
       '',
       '',
       false,
-      buildResponseCacheJson(configJson, body, responseText, responseAtSeconds),
+      bundlePreparationResult(STATUS_NONE, decision.reason ?? ''),
     );
-    roundResult = committed
-      ? bundlePreparationResult(STATUS_NONE, decision.reason ?? '')
-      : bundlePreparationResult('cancelled', 'reset');
     logger.info(TAG, `nothing to do (${decision.reason ?? ''})`);
     return;
   }
@@ -427,46 +350,15 @@ async function runConfiguredRound(
       decision.attempts ?? [],
       hash,
       currentVersion,
-      httpsOnly,
     );
   }
   if (!downloaded) {
     logger.warn(TAG, `all download attempts for ${hash} failed`);
-    const committed = await context.commitSyncResult(
-      resetGeneration,
-      '',
-      '',
-      false,
-      buildResponseCacheJson(configJson, body, responseText, responseAtSeconds),
-    );
-    roundResult = committed
-      ? bundlePreparationResult('failed', 'download_failed')
-      : bundlePreparationResult('cancelled', 'reset');
+    await commit('', '', false, bundlePreparationResult('failed', 'download_failed'));
     return;
   }
 
-  // 与 JS 侧下载成功后的 setLocalHashInfo 对齐,持久化版本元信息。
-  const info = decision.info;
-  let hashInfoJson = '';
-  if (info) {
-    const hashInfo: DecisionInfo = {};
-    if (typeof info.name === 'string') {
-      hashInfo.name = info.name;
-    }
-    if (typeof info.description === 'string') {
-      hashInfo.description = info.description;
-    }
-    if (typeof info.metaInfo === 'string') {
-      hashInfo.metaInfo = info.metaInfo;
-    }
-    // forceBoot 激活就是救砖路径:记进持久化元信息,这个版本活到 markSuccess
-    // 时 JS 上报 forceBootRescue。只认服务端下发的指令——静默策略的激活是
-    // 普通投递(Android/iOS 同一规则)。
-    if (info.config && info.config.forceBoot) {
-      hashInfo.forceBootRescue = true;
-    }
-    hashInfoJson = JSON.stringify(hashInfo);
-  }
+  const hashInfoJson = JSON.stringify(decision.hashInfo);
 
   // 版本元信息、激活与响应缓存一次性原子提交(见 commitSyncResult);
   // 缓存只在原生文件/状态工作结束后公开,避免 JS 观察到响应后并发下载。
@@ -474,12 +366,11 @@ async function runConfiguredRound(
   const activate = decision.activate === true;
   let committed = false;
   try {
-    committed = await context.commitSyncResult(
-      resetGeneration,
+    committed = await commit(
       hash,
       hashInfoJson,
       activate,
-      buildResponseCacheJson(configJson, body, responseText, responseAtSeconds),
+      bundlePreparationResult('downloaded', '', hash, activate),
     );
   } catch (e) {
     logger.error(TAG, `commit failed: ${getErrorMessage(e)}`);
@@ -492,35 +383,6 @@ async function runConfiguredRound(
     logger.info(TAG, `downloaded ${hash} and set for next launch`);
   } else {
     logger.info(TAG, `downloaded ${hash}, activation left to JS`);
-  }
-  roundResult = committed
-    ? bundlePreparationResult('downloaded', '', hash, activate)
-    : bundlePreparationResult('cancelled', 'reset');
-}
-
-function buildResponseCacheJson(
-  configJson: string,
-  requestBody: string,
-  responseText: string,
-  responseAtSeconds: number,
-): string {
-  const cacheEntry: RespCacheEntry = {
-    ts: responseAtSeconds,
-    body: responseText,
-    request: requestBody,
-    config: configJson,
-  };
-  return JSON.stringify(cacheEntry);
-}
-
-function isValidResponse(responseText: string | undefined): boolean {
-  if (responseText === undefined) {
-    return false;
-  }
-  try {
-    return NativePatchCore.isValidResponse(responseText);
-  } catch (e) {
-    return false;
   }
 }
 
@@ -569,90 +431,30 @@ async function httpRequest(
   }
 }
 
-// 顺序回退(§5.1):按纯层给出的候选序逐个请求,单请求超时;整轮失败后经
-// queryUrls 发现远程候选(排除已试过的)再来一轮。刻意不做 hedged race——
-// 该路径对延迟不敏感。
+// 顺序回退(§5.1):按共享内核给出的下一步逐个请求,单请求超时
+// (NativePatchCore.nextQueryStep:候选序、queryUrls 发现、远程端点的 https
+// 门槛、请求预算、响应 schema)。刻意不做 hedged race——该路径对延迟不敏感。
 async function runQueryRequest(
-  config: NativeConfig,
-  appKey: string,
+  query: string,
   body: string,
-  httpsOnly: boolean,
 ): Promise<string | undefined> {
-  const orderedJson = NativePatchCore.orderEndpointCandidates(
-    JSON.stringify(config.endpoints ?? []),
-    Math.random(),
-  );
-  if (!orderedJson) {
-    return undefined;
-  }
-  const ordered = JSON.parse(orderedJson) as string[];
-  const tried = new Set<string>();
-  let httpAttempts = 0;
-  for (const rawBase of ordered) {
-    const base = normalizeEndpointBase(rawBase);
-    if (!base || tried.has(base)) {
-      continue;
+  let state: string | undefined = query;
+  let text: string | undefined = undefined;
+  while (state !== undefined) {
+    state = NativePatchCore.nextQueryStep(state, text);
+    if (state === undefined) {
+      break;
     }
-    if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
-      return undefined;
+    const step = JSON.parse(state) as QueryStep;
+    if (step.found) {
+      return text;
     }
-    tried.add(base);
-    const response = await httpRequest(`${base}${QUERY_PATH}${appKey}`, body);
-    if (isValidResponse(response)) {
-      return response;
+    if (!step.url) {
+      break;
     }
-  }
-  for (const listUrl of config.queryUrls ?? []) {
-    if (!listUrl) {
-      continue;
-    }
-    if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
-      return undefined;
-    }
-    const listText = await httpRequest(listUrl);
-    if (listText === undefined) {
-      continue;
-    }
-    let remote: string[];
-    try {
-      const parsed = JSON.parse(listText) as Object;
-      if (!Array.isArray(parsed)) {
-        continue;
-      }
-      remote = parsed as string[];
-    } catch (e) {
-      continue;
-    }
-    for (const rawBase of remote) {
-      if (typeof rawBase !== 'string') {
-        continue;
-      }
-      const base = normalizeEndpointBase(rawBase);
-      if (!base || tried.has(base)) {
-        continue;
-      }
-      if (httpsOnly && !isHttpsUrl(base)) {
-        // 远程注入的端点不得把 https 配置降级成明文。
-        logger.warn(TAG, `ignoring non-https remote endpoint ${base}`);
-        continue;
-      }
-      if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
-        return undefined;
-      }
-      tried.add(base);
-      const response = await httpRequest(`${base}${QUERY_PATH}${appKey}`, body);
-      if (isValidResponse(response)) {
-        return response;
-      }
-    }
-    // 拉到一份可解析的远程列表就够了。
-    break;
+    text = await httpRequest(step.url, step.post ? body : undefined);
   }
   return undefined;
-}
-
-function normalizeEndpointBase(base: string): string {
-  return base.replace(/\/+$/, '');
 }
 
 async function runWithinDeadline(
@@ -692,16 +494,11 @@ async function performAttempts(
   attempts: DecisionAttempt[],
   hash: string,
   originHash: string,
-  httpsOnly: boolean,
 ): Promise<boolean> {
   const incrementalDeadline = monotonicNowMs() + DOWNLOAD_PHASE_TIMEOUT_MS;
   let fullDeadline = 0;
   for (const attempt of attempts) {
     const type = attempt.type ?? '';
-    if (type === DOWNLOAD_TYPE_DIFF && !originHash) {
-      // diff 以当前运行版本为源;没有运行中的热更版本就跳过。
-      continue;
-    }
     const isFullAttempt =
       type !== DOWNLOAD_TYPE_DIFF && type !== DOWNLOAD_TYPE_PDIFF;
     if (isFullAttempt && fullDeadline === 0) {
@@ -711,14 +508,6 @@ async function performAttempts(
     }
     const deadline = isFullAttempt ? fullDeadline : incrementalDeadline;
     for (const url of attempt.urls ?? []) {
-      if (!url) {
-        continue;
-      }
-      if (httpsOnly && isCleartextUrl(url)) {
-        // 决策里的明文制品 URL 不得把 https 配置降级(SR-1)。
-        logger.warn(TAG, `ignoring cleartext ${type} url ${url}`);
-        continue;
-      }
       if (monotonicNowMs() >= deadline) {
         if (isFullAttempt) {
           return false;
@@ -745,8 +534,19 @@ async function performAttempts(
         return true;
       } catch (e) {
         logger.warn(TAG, `${type} attempt failed: ${getErrorMessage(e)}`);
+        if (!isMirrorRetryable(e)) {
+          // The bytes arrived but could not be applied: every mirror serves
+          // the same artifact, so move on to the next strategy instead of
+          // re-downloading it (update_flow_core IsMirrorRetryableCode, JS
+          // client.ts isMirrorRetryableCode).
+          break;
+        }
       }
     }
   }
   return false;
+}
+
+function isMirrorRetryable(error: unknown): boolean {
+  return !(error instanceof PushyError && error.code === ERROR_DELTA_FAILED);
 }

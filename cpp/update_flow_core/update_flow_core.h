@@ -81,8 +81,8 @@ bool ShouldActivateAfterDownload(const flowjson::Value& info,
                                  const std::string& afterDownload);
 
 // Composes Parse → ResolveResult → DecideDownload: one call from the
-// raw checkUpdate response text to a download decision, so the platform
-// orchestrators contain no decision logic at all. identity is the union of
+// raw checkUpdate response text to a download decision (the native round
+// reaches it through HandleRoundResponse, native_round.h). identity is the union of
 // both composed functions' needs: { packageVersion, currentVersion?, uuid,
 // rolledBackVersion? }. afterDownload is the client's persisted activation
 // policy; a download decision carries `activate` (ShouldActivateAfterDownload

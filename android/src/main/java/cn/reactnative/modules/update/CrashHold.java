@@ -43,23 +43,20 @@ final class CrashHold {
         installedAtElapsedRealtime = SystemClock.elapsedRealtime();
         final Thread.UncaughtExceptionHandler previous =
             Thread.getDefaultUncaughtExceptionHandler();
-        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
-            @Override
-            public void uncaughtException(Thread thread, Throwable error) {
-                try {
-                    maybeHold(thread);
-                } catch (Throwable ignored) {
-                    // The dying process owes the previous handler its turn no
-                    // matter what the rescue did.
-                }
-                if (previous != null) {
-                    previous.uncaughtException(thread, error);
-                } else {
-                    // Mirror RuntimeInit's default behaviour so the process
-                    // still dies when no other handler was registered.
-                    Process.killProcess(Process.myPid());
-                    System.exit(10);
-                }
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            try {
+                maybeHold(thread);
+            } catch (Throwable ignored) {
+                // The dying process owes the previous handler its turn no
+                // matter what the rescue did.
+            }
+            if (previous != null) {
+                previous.uncaughtException(thread, error);
+            } else {
+                // Mirror RuntimeInit's default behaviour so the process
+                // still dies when no other handler was registered.
+                Process.killProcess(Process.myPid());
+                System.exit(10);
             }
         });
     }
@@ -90,20 +87,15 @@ final class CrashHold {
             + budgetMillis + "ms (uptime " + uptimeMillis + "ms)");
 
         final CountDownLatch done = new CountDownLatch(1);
-        Thread worker = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    SyncCoordinator.runHoldRound(deadlineNanos);
-                } catch (Throwable e) {
-                    Log.w(Texts.LOG_TAG, "crash hold failed: " + e);
-                } finally {
-                    done.countDown();
-                }
+        Threads.startDaemon("pushy-crash-hold", () -> {
+            try {
+                SyncCoordinator.runHoldRound(deadlineNanos);
+            } catch (Throwable e) {
+                Log.w(Texts.LOG_TAG, "crash hold failed: " + e);
+            } finally {
+                done.countDown();
             }
-        }, "pushy-crash-hold");
-        worker.setDaemon(true);
-        worker.start();
+        });
         try {
             if (!done.await(budgetMillis, TimeUnit.MILLISECONDS)) {
                 Log.w(Texts.LOG_TAG, "crash hold: budget exhausted, letting go");

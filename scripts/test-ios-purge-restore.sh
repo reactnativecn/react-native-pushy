@@ -30,12 +30,16 @@ build() {
   else
     python3 "$TEST_DIR/extract.py" "$ROOT_DIR/ios/RCTPushy" "$destination" --mutation "$variant"
   fi
-  # Compile the real production bodies and state_core; only their external I/O
-  # collaborators live in the test host. No RN, CocoaPods, simulator or network.
+  # Compile the real production bodies, state_core and the completion record
+  # core (the extractor's copy of install_record.cpp, which the record mutants
+  # alter; -I cpp/patch_core resolves its file-relative includes); only their
+  # external I/O collaborators live in the test host. No RN, CocoaPods,
+  # simulator or network.
   xcrun clang++ -std=c++17 -fobjc-arc -fblocks $WARNING_FLAGS $SANITIZE_FLAGS \
-    -I"$ROOT_DIR" -I"$destination" \
+    -I"$ROOT_DIR" -I"$destination" -I"$ROOT_DIR/cpp/patch_core" \
     "$TEST_DIR/purge_restore_test.mm" "$ROOT_DIR/cpp/patch_core/state_core.cpp" \
-    "$ROOT_DIR/cpp/patch_core/digest.cpp" \
+    "$ROOT_DIR/cpp/patch_core/digest.cpp" "$destination/install_record.cpp" \
+    "$ROOT_DIR"/cpp/update_flow_core/*.cpp \
     "$ROOT_DIR/ios/RCTPushy/RCTPushyConfiguration.mm" \
     -framework Foundation -o "$destination/purge_restore_test"
 }

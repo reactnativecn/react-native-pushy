@@ -1,7 +1,6 @@
 #import "RCTPushyDownloader.h"
+#import "RCTPushyCommon.h"
 #include "../../cpp/patch_core/archive_limits.h"
-
-static NSString *const RCTPushyDownloaderErrorDomain = @"cn.reactnative.pushy";
 
 // Cross-launch resumable download (NATIVE_CHECKUPDATE_DESIGN §11.4): a data
 // task streams the archive straight into savePath (a download task's
@@ -34,6 +33,16 @@ static NSDictionary *RCTPushyReadResumeMeta(NSString *savePath, NSString *url) {
 static void RCTPushyDeleteResumeSidecar(NSString *savePath) {
     [[NSFileManager defaultManager] removeItemAtPath:RCTPushyResumeSidecarPath(savePath)
                                                error:nil];
+}
+
+void RCTPushyDiscardArchive(NSString *path) {
+    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+    RCTPushyDeleteResumeSidecar(path);
+}
+
+BOOL RCTPushyIsHttpsDowngrade(NSURL *from, NSURL *to) {
+    return [[from.scheme lowercaseString] isEqualToString:@"https"]
+        && [[to.scheme lowercaseString] isEqualToString:@"http"];
 }
 
 long long RCTPushyFileSize(NSString *path) {
@@ -174,7 +183,7 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
 {
     NSURL *url = [NSURL URLWithString:self.urlString];
     if (url == nil) {
-        [self completeWithError:[NSError errorWithDomain:RCTPushyDownloaderErrorDomain
+        [self completeWithError:[NSError errorWithDomain:RCTPushyErrorDomain
                                                     code:-1
                                                 userInfo:@{
                                                     NSLocalizedDescriptionKey: @"invalid download url",
@@ -263,13 +272,8 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
     }
 }
 
-- (void)completeWithError:(NSError *)error
+- (void)closeFileHandle
 {
-    if (self.finished) {
-        return;
-    }
-    self.finished = YES;
-
     if (self.fileHandle != nil) {
         @try {
             [self.fileHandle closeFile];
@@ -277,9 +281,18 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
         }
         self.fileHandle = nil;
     }
+}
+
+- (void)completeWithError:(NSError *)error
+{
+    if (self.finished) {
+        return;
+    }
+    self.finished = YES;
+
+    [self closeFileHandle];
     if (self.discardPartial) {
-        [[NSFileManager defaultManager] removeItemAtPath:self.savePath error:nil];
-        RCTPushyDeleteResumeSidecar(self.savePath);
+        RCTPushyDiscardArchive(self.savePath);
     }
 
     void (^completionHandler)(NSString *, NSError *) = self.completionHandler;
@@ -297,7 +310,7 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
 
 - (void)failWithDescription:(NSString *)description code:(NSInteger)code
 {
-    self.fileError = [NSError errorWithDomain:RCTPushyDownloaderErrorDomain
+    self.fileError = [NSError errorWithDomain:RCTPushyErrorDomain
                                          code:code
                                      userInfo:@{NSLocalizedDescriptionKey: description}];
 }
@@ -317,15 +330,8 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
     self.encodedBody = NO;
     self.lastReportedPercentage = 0;
     self.lastReportedBytes = 0;
-    if (self.fileHandle != nil) {
-        @try {
-            [self.fileHandle closeFile];
-        } @catch (NSException *exception) {
-        }
-        self.fileHandle = nil;
-    }
-    [[NSFileManager defaultManager] removeItemAtPath:self.savePath error:nil];
-    RCTPushyDeleteResumeSidecar(self.savePath);
+    [self closeFileHandle];
+    RCTPushyDiscardArchive(self.savePath);
     [self.session finishTasksAndInvalidate];
     self.session = nil;
     [self startTransfer];
@@ -346,9 +352,7 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
         completionHandler(nil);
         return;
     }
-    NSString *originalScheme = [[NSURL URLWithString:self.urlString].scheme lowercaseString];
-    NSString *nextScheme = [request.URL.scheme lowercaseString];
-    if ([originalScheme isEqualToString:@"https"] && [nextScheme isEqualToString:@"http"]) {
+    if (RCTPushyIsHttpsDowngrade([NSURL URLWithString:self.urlString], request.URL)) {
         [self failWithDescription:[NSString stringWithFormat:
             @"https download redirected to plaintext http: %@", request.URL.absoluteString]
                              code:-1];
@@ -523,19 +527,18 @@ didReceiveResponse:(NSURLResponse *)response
         [dataTask cancel];
         return;
     }
-    if (self.expectedTotal <= 0
-        && self.receivedBytes + (long long)data.length > self.freeSpaceReservedUntil) {
-        // Unknown/encoded length: the response-time check could only
-        // reserve the margin, so probe before any write that would run past
-        // the bytes reserved so far, each probe reserving at least the next
-        // PROBE bytes (more when one callback carries a larger buffer) — no
-        // write can ever eat into the margin. The archive cap alone (512
-        // MiB) is far more than the margin protects. The partial stays: a
-        // later attempt may find the space.
-        long long reserve = MAX(pushy::archive_limits::kUnknownLengthFreeSpaceProbeBytes,
-                                (long long)data.length);
-        self.freeSpaceReservedUntil = self.receivedBytes + reserve;
-        NSString *shortfall = RCTPushyFreeSpaceShortfall(self.savePath, reserve);
+    // Unknown/encoded length: the response-time check could only reserve the
+    // margin, so the disk is probed before any write that would run past the
+    // bytes reserved so far (archive_limits::PlanUnknownLengthFreeSpaceProbe)
+    // — no write can ever eat into the margin. The partial stays: a later
+    // attempt may find the space.
+    pushy::archive_limits::FreeSpaceProbe plan =
+        pushy::archive_limits::PlanUnknownLengthFreeSpaceProbe(
+            self.expectedTotal, self.receivedBytes, (long long)data.length,
+            self.freeSpaceReservedUntil);
+    self.freeSpaceReservedUntil = plan.reserved_until;
+    if (plan.probe) {
+        NSString *shortfall = RCTPushyFreeSpaceShortfall(self.savePath, plan.reserve);
         if (shortfall != nil) {
             [self failWithDescription:shortfall code:-1];
             [dataTask cancel];

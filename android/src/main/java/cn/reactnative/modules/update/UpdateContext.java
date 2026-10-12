@@ -8,21 +8,17 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import com.facebook.react.ReactInstanceManager;
 import java.io.File;
-import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.MessageDigest;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 
 public class UpdateContext {
+    // The one place that loads librnpushy.so (see NativeCore).
     static {
         NativeCore.ensureLoaded();
     }
 
     static final String TAG = Texts.LOG_TAG;
-    static final boolean DEBUG = BuildConfig.DEBUG;
 
     private final Context context;
     private final File rootDir;
@@ -68,7 +64,6 @@ public class UpdateContext {
     private static final int STATE_OP_CLEAR_ROLLBACK_MARK = 5;
     private static final int STATE_OP_RESOLVE_LAUNCH = 6;
     private static final String KEY_FIRST_LOAD_MARKED = "firstLoadMarked";
-    static final String VERSION_COMPLETE_FILE = InstallRecord.FILE_NAME;
     // Bumped by resetToPackagedBundle. The cold-start check runs for minutes
     // and may already hold a decision when the app resets to the packaged
     // bundle; the orchestrator samples this counter and abandons activation
@@ -113,12 +108,7 @@ public class UpdateContext {
 
     private UpdateContext(Context context) {
         this.context = context.getApplicationContext();
-        this.executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                return new Thread(r, "pushy-download");
-            }
-        });
+        this.executor = Threads.single("pushy-download", false);
 
         this.rootDir = new File(this.context.getFilesDir(), Texts.reveal("0502e4d5af9f6d"));
 
@@ -142,7 +132,7 @@ public class UpdateContext {
 
         if (nextState.changed) {
             // Execute cleanUp before clearing SharedPreferences to avoid race condition
-            this.cleanUp();
+            cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
             SharedPreferences.Editor editor = this.sp.edit();
             editor.clear();
             applyState(editor, nextState);
@@ -253,26 +243,21 @@ public class UpdateContext {
     }
 
     private void startBundleHashComputation() {
-        if (DEBUG) {
+        if (BuildConfig.DEBUG) {
             // Metro serves the bundle in debug; mirror the dev buildTime behaviour.
             publishBundleHash("");
             return;
         }
-        Thread thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                String hash = "";
-                try {
-                    hash = loadOrHashBundledAsset();
-                } catch (Throwable e) {
-                    Log.w(TAG, "bundle hash failed: " + e);
-                } finally {
-                    publishBundleHash(hash);
-                }
+        Threads.startDaemon("pushy-bundle-hash", () -> {
+            String hash = "";
+            try {
+                hash = loadOrHashBundledAsset();
+            } catch (Throwable e) {
+                Log.w(TAG, "bundle hash failed: " + e);
+            } finally {
+                publishBundleHash(hash);
             }
-        }, "pushy-bundle-hash");
-        thread.setDaemon(true);
-        thread.start();
+        });
     }
 
     private void publishBundleHash(String hash) {
@@ -315,13 +300,7 @@ public class UpdateContext {
 
     private String sha256OfBundledAsset(String assetName) {
         try (InputStream in = context.getAssets().open(assetName)) {
-            MessageDigest md = UpdateFileUtils.newSha256();
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                md.update(buffer, 0, read);
-            }
-            return UpdateFileUtils.toHex(md.digest());
+            return UpdateFileUtils.sha256Hex(in);
         } catch (IOException e) {
             // Expected when there is no embedded bundle (custom name, no
             // release bundle); "unknown" is a valid answer, not an error.
@@ -347,16 +326,30 @@ public class UpdateContext {
         void onDownloadFailed(Throwable error);
     }
 
-    public void downloadFullUpdate(String url, String hash, DownloadFileListener listener) {
-        downloadFullUpdate(url, hash, listener, 0);
+    /**
+     * Params shared by every download task. deadlineNanos is an absolute
+     * System.nanoTime deadline for orchestrated (native cold-start) tasks; 0
+     * keeps the per-call timeout of a JS-initiated download.
+     */
+    private static DownloadTaskParams downloadParams(
+        int type, String url, String hash, DownloadFileListener listener, long deadlineNanos
+    ) {
+        DownloadTaskParams params = new DownloadTaskParams();
+        params.type = type;
+        params.url = url;
+        params.hash = hash;
+        params.listener = listener;
+        params.deadlineNanos = deadlineNanos;
+        return params;
     }
 
-    /**
-     * The deadline-taking overloads (native cold-start check) return the
-     * queued task's params so the orchestrator can cancel the task when its
-     * phase budget expires (CODE_AUDIT 2.12); null when the request was
-     * rejected up front (the listener has already been told).
+    /*
+     * The patch downloads return the queued task's params so the native
+     * orchestrator can cancel the task when its phase budget expires
+     * (CODE_AUDIT 2.12); null when the request was rejected up front (the
+     * listener has already been told).
      */
+
     @Nullable
     DownloadTaskParams downloadFullUpdate(
         String url, String hash, DownloadFileListener listener, long deadlineNanos
@@ -364,35 +357,23 @@ public class UpdateContext {
         if (rejectUnsafeComponent(hash, listener)) {
             return null;
         }
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FULL;
-        params.url = url;
-        params.hash = hash;
-        params.listener = listener;
-        params.deadlineNanos = deadlineNanos;
+        DownloadTaskParams params = downloadParams(
+            DownloadTaskParams.TASK_TYPE_PATCH_FULL, url, hash, listener, deadlineNanos);
         params.targetFile = new File(rootDir, hash + ".ppk");
         params.unzipDirectory = new File(rootDir, hash);
         enqueue(params);
         return params;
     }
 
+    /** A plain file download into the root dir; hash only keys progress events. */
     public void downloadFile(String url, String hash, String fileName, DownloadFileListener listener) {
         if (rejectUnsafeComponent(fileName, listener)) {
             return;
         }
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD;
-        params.url = url;
-        params.hash = hash;
-        params.listener = listener;
-
+        DownloadTaskParams params = downloadParams(
+            DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD, url, hash, listener, 0);
         params.targetFile = new File(rootDir, fileName);
-//        params.unzipDirectory = new File(rootDir, hash);
         enqueue(params);
-    }
-
-    public void downloadPatchFromApk(String url, String hash, DownloadFileListener listener) {
-        downloadPatchFromApk(url, hash, listener, 0);
     }
 
     @Nullable
@@ -402,20 +383,12 @@ public class UpdateContext {
         if (rejectUnsafeComponent(hash, listener)) {
             return null;
         }
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK;
-        params.url = url;
-        params.hash = hash;
-        params.listener = listener;
-        params.deadlineNanos = deadlineNanos;
+        DownloadTaskParams params = downloadParams(
+            DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK, url, hash, listener, deadlineNanos);
         params.targetFile = new File(rootDir, hash + Texts.reveal("7416e4dae09b69512137"));
         params.unzipDirectory = new File(rootDir, hash);
         enqueue(params);
         return params;
-    }
-
-    public void downloadPatchFromPpk(String url, String hash, String originHash, DownloadFileListener listener) {
-        downloadPatchFromPpk(url, hash, originHash, listener, 0);
     }
 
     @Nullable
@@ -429,13 +402,9 @@ public class UpdateContext {
         if (rejectUnsafeComponent(hash, listener) || rejectUnsafeComponent(originHash, listener)) {
             return null;
         }
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
-        params.url = url;
-        params.hash = hash;
+        DownloadTaskParams params = downloadParams(
+            DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK, url, hash, listener, deadlineNanos);
         params.originHash = originHash;
-        params.listener = listener;
-        params.deadlineNanos = deadlineNanos;
         params.targetFile = new File(rootDir, originHash + "-" + hash + Texts.reveal("7407e4dae09b69512137"));
         params.unzipDirectory = new File(rootDir, hash);
         params.originDirectory = new File(rootDir, originHash);
@@ -493,16 +462,6 @@ public class UpdateContext {
     }
 
     /**
-     * Asynchronous variant for the getConstants path (JS thread): the
-     * in-memory state changes immediately, the disk write happens on the
-     * SharedPreferences writer. Losing it to a crash only re-reports the
-     * one-shot markers on the next launch.
-     */
-    private static void applyEditor(SharedPreferences.Editor editor) {
-        editor.apply();
-    }
-
-    /**
      * Persistence for operations whose result is promised to a caller
      * (switchVersion / markSuccess / setLocalHashInfo / the cold-start round):
      * a commit that did not reach disk is a failed operation, never a
@@ -525,29 +484,16 @@ public class UpdateContext {
         if (!UpdateFileUtils.isSafePathComponent(hash)) {
             throw new IllegalArgumentException("Invalid hash: " + hash);
         }
-        File versionDir = new File(rootDir, hash);
-        File bundleFile = new File(versionDir, "index.bundlejs");
-        if (!bundleFile.isFile()) {
-            throw new IllegalStateException("Bundle version " + hash + " not found.");
-        }
         StateCoreResult currentState = getStateSnapshot();
-        boolean isLegacyActivatedVersion = hash.equals(currentState.currentVersion)
+        // Versions activated before completion records existed are
+        // grandfathered through current/last state, but only while their
+        // directory has no record; any other directory must carry a record
+        // whose bundle digest matches the bytes on disk before the next
+        // launch is pointed at them.
+        boolean grandfathered = hash.equals(currentState.currentVersion)
             || hash.equals(currentState.lastVersion);
-        if (isLegacyActivatedVersion && !new File(versionDir, InstallRecord.FILE_NAME).exists()) {
-            // Versions activated before completion markers were introduced are
-            // explicitly grandfathered through current/last state. A directory
-            // that does carry a record is verified like any other.
-            return;
-        }
-        if (!InstallRecord.isComplete(versionDir, hash)) {
-            // An arbitrary markerless directory may be a crash-left partial
-            // install.
-            throw new IllegalStateException("Bundle version " + hash + " is incomplete.");
-        }
-        // The record's bundle digest must match the bytes on disk before
-        // the next launch is pointed at them.
         try {
-            InstallRecord.verifyForActivation(versionDir, hash, bundleFile);
+            InstallRecord.verifyInstalled(new File(rootDir, hash), hash, grandfathered);
         } catch (IOException e) {
             throw new IllegalStateException(e.getMessage(), e);
         }
@@ -559,13 +505,12 @@ public class UpdateContext {
      * holds commitLock and has run verifySwitchTarget.
      */
     private StateCoreResult computeSwitchState(String hash) {
-        return runStateCore(
-            STATE_OP_SWITCH_VERSION,
-            getStateSnapshot(),
-            hash,
-            false,
-            false
-        );
+        return runStateOp(STATE_OP_SWITCH_VERSION, hash);
+    }
+
+    /** One state-core operation on the current snapshot; caller holds commitLock. */
+    private StateCoreResult runStateOp(int operation, @Nullable String hash) {
+        return runStateCore(operation, getStateSnapshot(), hash, false, false);
     }
 
     public void switchVersion(String hash) {
@@ -631,21 +576,18 @@ public class UpdateContext {
                     editor.remove(KEY_FIRST_LOAD_MARKED);
                 }
                 if (rolledBackVersion != null) {
-                    StateCoreResult nextState = runStateCore(
-                        STATE_OP_CLEAR_ROLLBACK_MARK,
-                        getStateSnapshot(),
-                        null,
-                        false,
-                        false
-                    );
-                    applyState(editor, nextState);
+                    applyState(editor, runStateOp(STATE_OP_CLEAR_ROLLBACK_MARK, null));
                 }
-                applyEditor(editor);
+                // Asynchronous on purpose: the in-memory state changes
+                // immediately, the disk write happens on the
+                // SharedPreferences writer. Losing it to a crash only
+                // re-reports the one-shot markers on the next launch.
+                editor.apply();
             }
         }
         if (markers.rolledBackVersion != null) {
             // The rolled-back version's directory is now eligible for cleanup.
-            this.cleanUp();
+            cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
         }
         return markers;
     }
@@ -659,14 +601,7 @@ public class UpdateContext {
             return;
         }
         synchronized (commitLock) {
-            StateCoreResult currentState = getStateSnapshot();
-            StateCoreResult nextState = runStateCore(
-                STATE_OP_MARK_SUCCESS,
-                currentState,
-                null,
-                false,
-                false
-            );
+            StateCoreResult nextState = runStateOp(STATE_OP_MARK_SUCCESS, null);
             SharedPreferences.Editor editor = sp.edit();
             applyState(editor, nextState);
             if (nextState.staleVersionToDelete != null) {
@@ -675,7 +610,7 @@ public class UpdateContext {
             persistEditorOrThrow(editor, "mark success");
         }
 
-        this.cleanUp();
+        cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
     }
 
     /**
@@ -717,14 +652,7 @@ public class UpdateContext {
         persistEditorOrThrow(editor, "reset to packaged bundle");
         ignoreRollback = false;
         Log.i(TAG, "Reset to packaged bundle");
-
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_CLEANUP;
-        params.maxAgeDays = 0;
-        // Keep names are resolved by the queued task at execution time, so a
-        // later activation is protected too.
-        params.unzipDirectory = rootDir;
-        enqueue(params);
+        cleanUp(0);
     }
 
     public static void setCustomInstanceManager(ReactInstanceManager instanceManager) {
@@ -813,7 +741,7 @@ public class UpdateContext {
                 // the main thread.
                 java.util.HashSet<String> visitedVersions = new java.util.HashSet<>();
                 while (currentVersion != null && visitedVersions.add(currentVersion)) {
-                    File bundleFile = new File(rootDir, currentVersion+"/index.bundlejs");
+                    File bundleFile = InstallRecord.bundleFile(new File(rootDir, currentVersion));
                     if (!bundleFile.exists()) {
                         Log.e(TAG, "Bundle version " + currentVersion + " not found.");
                         currentVersion = this.rollBack();
@@ -838,7 +766,6 @@ public class UpdateContext {
         }
     }
 
-    /** Sampled/compared by the native check orchestrator; see resetGeneration. */
     /** Shared by JS and native hosts. Config replacement invalidates old native decisions. */
     private static final java.util.concurrent.atomic.AtomicLong nativeConfigGeneration =
         new java.util.concurrent.atomic.AtomicLong(0);
@@ -849,10 +776,10 @@ public class UpdateContext {
 
     void setNativeConfig(String config) {
         synchronized (commitLock) {
-            // Canonical comparison (ConfigEquivalence): re-sending the same
-            // config with another key order or trailing slashes must not
-            // cancel an in-flight round or drop its cache.
-            boolean changed = !ConfigEquivalence.equivalent(
+            // Canonical comparison (C1, FlowBridge.configsEquivalent):
+            // re-sending the same config with another key order or trailing
+            // slashes must not cancel an in-flight round or drop its cache.
+            boolean changed = !FlowBridge.configsEquivalent(
                 config, sp.getString(SyncCoordinator.KEY_CONFIG, null));
             SharedPreferences.Editor editor = sp.edit();
             if (changed) {
@@ -880,7 +807,11 @@ public class UpdateContext {
         SyncCoordinator.onConfigured(this);
     }
 
-    // Native-decision generation: bumped by reset AND configuration replacement.
+    /**
+     * Native-decision generation, sampled/compared by the native check
+     * orchestrator: bumped by reset AND configuration replacement (see
+     * resetGeneration).
+     */
     static long getResetGeneration() {
         return resetGeneration.get();
     }
@@ -964,8 +895,7 @@ public class UpdateContext {
         if (hash == null || hash.isEmpty() || !UpdateFileUtils.isSafePathComponent(hash)) {
             return "";
         }
-        JSONObject record = InstallRecord.read(new File(rootDir, hash));
-        return record == null ? "" : record.optString("bundleSha256", "");
+        return InstallRecord.recordedBundleSha256(new File(rootDir, hash));
     }
 
     /** Raw native check response for JS (§10.3); null when absent. */
@@ -989,22 +919,14 @@ public class UpdateContext {
         if (!UpdateFileUtils.isSafePathComponent(hash)) {
             return false;
         }
-        File versionDir = new File(rootDir, hash);
-        return new File(versionDir, "index.bundlejs").isFile()
-            && InstallRecord.isComplete(versionDir, hash);
+        return InstallRecord.isInstalled(new File(rootDir, hash), hash);
     }
 
     private String rollBack() {
         synchronized (commitLock) {
-            StateCoreResult currentState = getStateSnapshot();
-            StateCoreResult nextState = runStateCore(
-                STATE_OP_ROLLBACK,
-                currentState,
-                null,
-                false,
-                false
-            );
-            Log.e(TAG, "Rolling back version " + currentState.currentVersion
+            String rollingBack = getCurrentVersion();
+            StateCoreResult nextState = runStateOp(STATE_OP_ROLLBACK, null);
+            Log.e(TAG, "Rolling back version " + rollingBack
                 + " to " + nextState.currentVersion);
             SharedPreferences.Editor editor = sp.edit();
             applyState(editor, nextState);
@@ -1048,9 +970,15 @@ public class UpdateContext {
         }
     }
 
-    private void cleanUp() {
+    /**
+     * Queues removal of every version entry older than maxAgeDays (0: all)
+     * except the keep names, which the queued task resolves at execution
+     * time so a later activation is protected too.
+     */
+    private void cleanUp(int maxAgeDays) {
         DownloadTaskParams params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_CLEANUP;
+        params.maxAgeDays = maxAgeDays;
         params.unzipDirectory = rootDir;
         enqueue(params);
     }

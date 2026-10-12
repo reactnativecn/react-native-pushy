@@ -1,5 +1,12 @@
 import hilog from '@ohos.hilog';
 
+type HilogFunction = (
+  domain: number,
+  tag: string,
+  format: string,
+  ...args: string[]
+) => void;
+
 class Logger {
   private domain: number;
   private prefix: string;
@@ -24,54 +31,33 @@ class Logger {
     this.isDebug = enabled;
   }
 
-  private tagOf(args: string[]): string {
-    return args.length > 0 ? args[0] : '';
-  }
-
-  private messageOf(args: string[]): string {
-    return args.length > 1 ? args.slice(1).join(' ') : '';
+  // args[0] is the tag, the rest is joined into the message.
+  private log(fn: HilogFunction, args: string[]): void {
+    fn(
+      this.domain,
+      this.prefix,
+      this.format,
+      args.length > 0 ? args[0] : '',
+      args.length > 1 ? args.slice(1).join(' ') : '',
+    );
   }
 
   debug(...args: string[]): void {
     if (this.isDebug) {
-      hilog.debug(
-        this.domain,
-        this.prefix,
-        this.format,
-        this.tagOf(args),
-        this.messageOf(args),
-      );
+      this.log(hilog.debug, args);
     }
   }
 
   info(...args: string[]): void {
-    hilog.info(
-      this.domain,
-      this.prefix,
-      this.format,
-      this.tagOf(args),
-      this.messageOf(args),
-    );
+    this.log(hilog.info, args);
   }
 
   warn(...args: string[]): void {
-    hilog.warn(
-      this.domain,
-      this.prefix,
-      this.format,
-      this.tagOf(args),
-      this.messageOf(args),
-    );
+    this.log(hilog.warn, args);
   }
 
   error(...args: string[]): void {
-    hilog.error(
-      this.domain,
-      this.prefix,
-      this.format,
-      this.tagOf(args),
-      this.messageOf(args),
-    );
+    this.log(hilog.error, args);
   }
 }
 

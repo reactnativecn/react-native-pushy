@@ -127,7 +127,12 @@ const NATIVE_CONFIG_DEFAULTS: Record<string, unknown> = {
   afterDownload: 'none',
 };
 
-const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
+/**
+ * Deep equality of JSON values, key order ignored. Object members whose value
+ * is undefined count as absent, matching JSON.stringify (they do not exist on
+ * the wire).
+ */
+export const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
   if (a === b) {
     return true;
   }
@@ -144,11 +149,16 @@ const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
   }
   const left = a as Record<string, unknown>;
   const right = b as Record<string, unknown>;
-  const leftKeys = Object.keys(left);
+  const definedKeys = (object: Record<string, unknown>) =>
+    Object.keys(object).filter((key) => object[key] !== undefined);
+  const leftKeys = definedKeys(left);
   return (
-    leftKeys.length === Object.keys(right).length &&
+    leftKeys.length === definedKeys(right).length &&
     leftKeys.every(
-      (key) => Object.hasOwn(right, key) && jsonDeepEqual(left[key], right[key])
+      (key) =>
+        // biome-ignore lint/suspicious/noPrototypeBuiltins: Object.hasOwn is missing from JSC before iOS 15.4
+        Object.prototype.hasOwnProperty.call(right, key) &&
+        jsonDeepEqual(left[key], right[key])
     )
   );
 };
@@ -324,8 +334,10 @@ export interface CheckFingerprintInput {
   appKey?: string;
   endpoints?: string[];
   queryUrls?: string[];
-  uuid?: string;
-  /** The exact serialized request body (identity fields + extra). */
+  /**
+   * The exact serialized request body (identity fields + extra; the client
+   * uuid travels inside its cInfo).
+   */
   body: string;
 }
 
@@ -337,16 +349,9 @@ export function buildCheckFingerprint({
   appKey,
   endpoints,
   queryUrls,
-  uuid,
   body,
 }: CheckFingerprintInput): string {
-  return JSON.stringify([
-    appKey ?? '',
-    endpoints ?? [],
-    queryUrls ?? [],
-    uuid ?? '',
-    body,
-  ]);
+  return JSON.stringify([appKey ?? '', endpoints ?? [], queryUrls ?? [], body]);
 }
 
 /**

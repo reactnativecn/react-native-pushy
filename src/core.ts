@@ -35,6 +35,34 @@ if (!PushyModule) {
   );
 }
 
+/**
+ * `module[name]` as an always-async function (a synchronous bridge throw
+ * becomes a rejection), or undefined when the module lacks it: the JS layer
+ * can arrive via hot update onto an older binary whose native module predates
+ * the method. Always undefined on web, where the module is a noop Proxy that
+ * would pass any typeof check.
+ */
+export const bindNativeMethod = (
+  module: Record<string, any>,
+  name: string
+): ((...args: any[]) => Promise<any>) | undefined => {
+  const method = module === emptyModule ? undefined : module[name];
+  if (typeof method !== 'function') {
+    return undefined;
+  }
+  return (...args) => {
+    try {
+      return Promise.resolve(method.apply(module, args));
+    } catch (e) {
+      return Promise.reject(e);
+    }
+  };
+};
+
+/** An optional PushyModule method, see bindNativeMethod. */
+export const nativeMethod = (name: string) =>
+  bindNativeMethod(PushyModule, name);
+
 // On web PushyModule is a Proxy whose every property is a noop function, so
 // reading the constants off it would make each of them a function:
 // `isRolledBack` true (a fake rollback report on every page load), a uuid of
@@ -99,7 +127,6 @@ export const currentBundleSha256: string =
     : '';
 
 export const isFirstTime: boolean = PushyConstants.isFirstTime;
-export const isFirstTimeDebug: boolean = isFirstTime && isDebugChannel;
 export const rolledBackVersion: string = PushyConstants.rolledBackVersion;
 export const isRolledBack: boolean = !!rolledBackVersion;
 
@@ -121,9 +148,10 @@ let uuid = PushyConstants.uuid;
 // between its dedup window and the fetch, and a hash is never worth delaying
 // a check for.
 let bundleHash = '';
-// The JS layer can arrive via hot update onto an older binary whose native
-// module predates the method, hence the feature detect (on web the noop Proxy
-// would pass it, so web is excluded explicitly).
+// Feature-detected like nativeMethod (older natives lack it, web has no native
+// module), but called directly rather than through it: a synchronous throw
+// means a broken native integration and must propagate at module load, not be
+// turned into a logged rejection. Only an async failure is tolerated.
 if (!isWebPlatform && typeof PushyModule.getBundleHash === 'function') {
   Promise.resolve(PushyModule.getBundleHash())
     .then((hash: unknown) => {
@@ -171,7 +199,7 @@ export const cInfo = {
   rnu: require('../package.json').version,
   rn: RNVersion,
   // tvOS reports Platform.OS 'ios'; label it apart so the server can bucket
-  // tvOS devices separately. Must match PushyOsName in RCTPushy.mm.
+  // tvOS devices separately. Must match PushyOsName in RCTPushyOrchestrator.mm.
   os: `${Platform.OS === 'ios' && Platform.isTV ? 'tvos' : Platform.OS} ${Platform.Version}`,
   uuid,
 };
@@ -181,7 +209,6 @@ log('bootup status', {
   currentVersion,
   currentVersionInfo,
   isFirstTime,
-  isFirstTimeDebug,
   isDebugChannel,
   cInfo,
 });

@@ -1,10 +1,10 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import React from 'react';
 import TestRenderer from 'react-test-renderer';
+import { setDevForFile } from './helpers';
 
 // Must set __DEV__ before importing context.ts
-const _origDEV = (globalThis as any).__DEV__;
-(globalThis as any).__DEV__ = true;
+setDevForFile(true);
 
 const { useUpdate, UpdateContext } = await import('../context');
 const { default: i18n } = await import('../i18n');
@@ -22,10 +22,6 @@ const renderHook = <T>(hook: () => T) => {
 };
 
 describe('context', () => {
-  afterAll(() => {
-    (globalThis as any).__DEV__ = _origDEV;
-  });
-
   test('useUpdate throws error when used outside UpdateProvider in __DEV__', () => {
     expect(() => renderHook(() => useUpdate())).toThrow(
       i18n.t('error_use_update_outside_provider')

@@ -56,34 +56,17 @@ def parseDeclaredMajorVersion(String declared) {
 def resolveInstalledExpoMajorVersion(File projectDir) {
     def nodeArgs = ['node', '--print', "require('expo/package.json').version"]
     try {
-        String stdout
-        if (GradleVersion.current() >= GradleVersion.version('7.5')) {
-            // providers.exec exists since Gradle 7.5; Project.exec is gone in 9.
-            def output = providers.exec {
-                workingDir projectDir
-                commandLine nodeArgs
-                ignoreExitValue = true
-            }
-            if (output.result.get().exitValue != 0) {
-                return null
-            }
-            stdout = output.standardOutput.asText.get()
-        } else {
-            def out = new ByteArrayOutputStream()
-            def result = project.exec {
-                workingDir projectDir
-                commandLine nodeArgs
-                standardOutput = out
-                errorOutput = new ByteArrayOutputStream()
-                ignoreExitValue true
-            }
-            if (result.exitValue != 0) {
-                return null
-            }
-            stdout = out.toString()
+        // providers.exec exists since Gradle 7.5 (Expo SDK 50+ requires
+        // Gradle 8); Project.exec is gone in 9.
+        def output = providers.exec {
+            workingDir projectDir
+            commandLine nodeArgs
+            ignoreExitValue = true
         }
-
-        return parseMajorVersion(stdout.trim())
+        if (output.result.get().exitValue != 0) {
+            return null
+        }
+        return parseMajorVersion(output.standardOutput.asText.get().trim())
     } catch (Exception ignored) {
         return null
     }
@@ -154,18 +137,16 @@ if (isNewArchitectureEnabled()) {
     apply plugin: 'com.facebook.react'
 }
 
+version = projectVersion
 if (expoProject) {
     group = 'expo.modules.pushy'
-    version = projectVersion
 
     def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.absolutePath, "ExpoModulesCorePlugin.gradle")
     apply from: expoModulesCorePlugin
     applyKotlinExpoModulesCorePlugin()
-    // useExpoPublishing()
     useCoreDependencies()
 } else {
     group = 'cn.reactnative.modules.update'
-    version = projectVersion
 }
 
 android {
@@ -179,6 +160,9 @@ android {
         }
     }
     compileSdkVersion safeExtGet('compileSdkVersion', 34)
+    // Follows the app's ext.buildToolsVersion: without it AGP falls back to
+    // its own default, which hosts that only install the app's build-tools
+    // then have to download.
     buildToolsVersion safeExtGet('buildToolsVersion', '34.0.0')
     defaultConfig {
         minSdkVersion safeExtGet('minSdkVersion', 21)
@@ -186,14 +170,22 @@ android {
         consumerProguardFiles "proguard.pro"
         buildConfigField "boolean", "IS_NEW_ARCHITECTURE_ENABLED", isNewArchitectureEnabled().toString()
     }
+
+    // The sources use lambdas, which AGP < 4.2 (React Native < 0.65) only
+    // compiles with an explicit Java 8 level. React Native's Gradle plugin
+    // (0.73+) raises every module to its own JDK level in finalizeDsl.
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
     
     sourceSets {
         main {
             // let gradle pack the shared library into apk
             jniLibs.srcDirs = ['./lib']
-            if (isNewArchitectureEnabled()) {
-                java.srcDirs += ['src/newarch']
-            } else {
+            // Under the new architecture codegen generates NativePushySpec;
+            // the old one compiles the hand-written stand-in instead.
+            if (!isNewArchitectureEnabled()) {
                 java.srcDirs += ['src/oldarch']
             }
             

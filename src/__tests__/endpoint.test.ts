@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from 'bun:test';
 import {
-  dedupeEndpoints,
   executeEndpointFallback,
   selectFastestSuccessfulEndpoint,
 } from '../endpoint';
+import { dedupeEndpoints } from '../updateFlowCore';
 
 const delay = (ms: number) =>
   new Promise<void>((resolve) => {

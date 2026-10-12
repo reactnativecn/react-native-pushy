@@ -1,27 +1,26 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import {
+  createClient,
+  createJsonResponse,
+  importFreshClient,
+  mockCore,
+  mockI18n,
+  mockPlatform,
+  restoreDevAfterEach,
+} from './helpers';
+import { realProjectModules } from './setup';
 
-const importFreshClient = (cacheKey: string) => import(`../client?${cacheKey}`);
-
-const originalDev = (globalThis as any).__DEV__;
 const originalErrorUtils = (globalThis as any).ErrorUtils;
 
 // Module mocks and mock.restore() are handled globally in setup.ts.
+restoreDevAfterEach();
 afterEach(() => {
-  (globalThis as any).__DEV__ = originalDev;
   if (originalErrorUtils === undefined) {
     delete (globalThis as any).ErrorUtils;
   } else {
     (globalThis as any).ErrorUtils = originalErrorUtils;
   }
 });
-
-const createJsonResponse = (payload: unknown) =>
-  ({
-    ok: true,
-    status: 200,
-    text: async () => JSON.stringify(payload),
-    json: async () => payload,
-  }) as Response;
 
 const setupClientMocks = ({
   isFirstTime = false,
@@ -45,6 +44,8 @@ const setupClientMocks = ({
   getNativeCheckCache = undefined,
   markJsCheckCompleted = undefined,
   setLocalHashInfo = mock(() => {}),
+  downloadAndInstallApk = mock(() => Promise.resolve()),
+  platform = 'ios',
 }: {
   isFirstTime?: boolean;
   markSuccess?: ReturnType<typeof mock>;
@@ -62,24 +63,13 @@ const setupClientMocks = ({
   getNativeCheckCache?: ReturnType<typeof mock>;
   markJsCheckCompleted?: ReturnType<typeof mock>;
   setLocalHashInfo?: ReturnType<typeof mock>;
+  downloadAndInstallApk?: ReturnType<typeof mock>;
+  platform?: 'ios' | 'android';
 } = {}) => {
   (globalThis as any).__DEV__ = false;
 
-  mock.module('react-native', () => ({
-    Platform: {
-      OS: 'ios',
-      Version: 17,
-    },
-    DeviceEventEmitter: {
-      addListener: mock(() => ({ remove: mock(() => {}) })),
-    },
-    NativeEventEmitter: class {
-      addListener = mock(() => ({ remove: mock(() => {}) }));
-      removeAllListeners = mock(() => {});
-    },
-  }));
-
-  mock.module('../core', () => ({
+  mockPlatform({ OS: platform, Version: platform === 'ios' ? 17 : 30 });
+  mockCore({
     PushyModule: {
       markSuccess,
       reloadUpdate,
@@ -87,99 +77,30 @@ const setupClientMocks = ({
       downloadPatchFromPpk,
       downloadPatchFromPackage,
       downloadFullUpdate,
-      downloadAndInstallApk: mock(() => Promise.resolve()),
+      downloadAndInstallApk,
       restartApp,
       resetToPackagedBundle,
       ...(syncNativeConfig ? { syncNativeConfig } : {}),
       ...(getNativeCheckCache ? { getNativeCheckCache } : {}),
       ...(markJsCheckCompleted ? { markJsCheckCompleted } : {}),
     },
-    buildTime: '2023-01-01',
-    cInfo: {
-      rnu: '10.0.0',
-      rn: '0.73.0',
-      os: 'ios',
-      uuid: 'uuid',
-    },
-    currentVersion: 'hash',
-    currentVersionInfo: {},
+    cInfo: { rnu: '10.0.0', rn: '0.73.0', os: platform, uuid: 'uuid' },
     isFirstTime,
-    isRolledBack: false,
-    packageVersion: '1.0.0',
     pushyNativeEventEmitter: {
       addListener: addProgressListener,
     },
-    rolledBackVersion: '',
     setLocalHashInfo,
     supportedDiffVersion,
     getBundleHash,
-  }));
-
-  mock.module('../i18n', () => ({
-    default: {
-      t: (key: string) => key,
-      setLocale: mock(() => {}),
-    },
-  }));
-};
-
-const setupAndroidApkMocks = (
-  downloadAndInstallApk: ReturnType<typeof mock>
-) => {
-  (globalThis as any).__DEV__ = false;
-
-  mock.module('react-native', () => ({
-    Platform: {
-      OS: 'android',
-      Version: 30,
-    },
-    DeviceEventEmitter: {
-      addListener: mock(() => ({ remove: mock(() => {}) })),
-    },
-    NativeEventEmitter: class {
-      addListener = mock(() => ({ remove: mock(() => {}) }));
-      removeAllListeners = mock(() => {});
-    },
-  }));
-
-  mock.module('../core', () => ({
-    PushyModule: {
-      markSuccess: mock(() => {}),
-      reloadUpdate: mock(() => Promise.resolve()),
-      setNeedUpdate: mock(() => Promise.resolve()),
-      downloadPatchFromPpk: mock(() => Promise.resolve()),
-      downloadPatchFromPackage: mock(() => Promise.resolve()),
-      downloadFullUpdate: mock(() => Promise.resolve()),
-      downloadAndInstallApk,
-      restartApp: mock(() => Promise.resolve()),
-    },
-    buildTime: '2023-01-01',
-    cInfo: { rnu: '10.0.0', rn: '0.73.0', os: 'android', uuid: 'uuid' },
-    currentVersion: 'hash',
-    currentVersionInfo: {},
-    isFirstTime: false,
-    isRolledBack: false,
-    packageVersion: '1.0.0',
-    pushyNativeEventEmitter: {
-      addListener: mock(() => ({ remove: mock(() => {}) })),
-    },
-    rolledBackVersion: '',
-    setLocalHashInfo: mock(() => {}),
-    supportedDiffVersion: 2,
-    getBundleHash: mock(() => ''),
-  }));
-
-  mock.module('../i18n', () => ({
-    default: { t: (key: string) => key, setLocale: mock(() => {}) },
-  }));
+  });
+  mockI18n();
 };
 
 describe('Pushy server config', () => {
   test('uses preset main endpoints directly as configured endpoints', async () => {
     setupClientMocks();
 
-    const { Pushy } = await importFreshClient('preset-main');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(client.getConfiguredCheckEndpoints()).toEqual([
       'https://update.react-native.cn/api',
@@ -187,7 +108,7 @@ describe('Pushy server config', () => {
     ]);
   });
 
-  test('filters remote endpoints against all configured main endpoints', async () => {
+  test('dedupes remote endpoints (the fallback drops configured ones)', async () => {
     setupClientMocks();
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse([
@@ -199,11 +120,12 @@ describe('Pushy server config', () => {
       ])
     );
 
-    const { Pushy } = await importFreshClient('remote-main-array');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.getRemoteEndpoints()).toEqual([
+      'https://update.react-native.cn/api',
       'https://edge-a.example.com',
+      'https://update.reactnative.cn/api',
       'https://edge-b.example.com',
     ]);
   });
@@ -211,8 +133,7 @@ describe('Pushy server config', () => {
   test('clones custom server config when setOptions overrides server', async () => {
     setupClientMocks();
 
-    const { Pushy } = await importFreshClient('clone-server-config');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     const server = {
       main: ['https://a.example.com', 'https://b.example.com'],
       queryUrls: ['https://q.example.com'],
@@ -233,8 +154,7 @@ describe('Pushy server config', () => {
     setupClientMocks();
     const logger = mock(() => {});
 
-    const { Pushy } = await importFreshClient('report-late-logger');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     const reportPromise = (client as any).report({ type: 'markSuccess' });
     expect(logger).not.toHaveBeenCalled();
@@ -252,9 +172,7 @@ describe('Pushy server config', () => {
     const beforeCheckUpdate = mock(() => false);
     const afterCheckUpdate = mock(() => {});
 
-    const { Pushy } = await importFreshClient('after-check-update-skipped');
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       beforeCheckUpdate,
       afterCheckUpdate,
     });
@@ -278,9 +196,7 @@ describe('Pushy server config', () => {
       createJsonResponse(checkResult)
     );
 
-    const { Pushy } = await importFreshClient('after-check-update-completed');
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       afterCheckUpdate,
     });
 
@@ -296,8 +212,8 @@ describe('Pushy server config', () => {
     const fetchMock = mock(async () => createJsonResponse({ update: false }));
     (globalThis as any).fetch = fetchMock;
 
-    const { Pushy } = await importFreshClient('check-body-diffv');
-    await new Pushy({ appKey: 'demo-app' }).checkUpdate();
+    const { client } = await createClient();
+    await client.checkUpdate();
 
     const body = JSON.parse((fetchMock.mock.calls[0] as any[])[1].body);
     expect(body.diffV).toBe(2);
@@ -308,8 +224,8 @@ describe('Pushy server config', () => {
     const fetchMock = mock(async () => createJsonResponse({ update: false }));
     (globalThis as any).fetch = fetchMock;
 
-    const { Pushy } = await importFreshClient('check-body-no-diffv');
-    await new Pushy({ appKey: 'demo-app' }).checkUpdate();
+    const { client } = await createClient();
+    await client.checkUpdate();
 
     const body = JSON.parse((fetchMock.mock.calls[0] as any[])[1].body);
     expect(body).not.toHaveProperty('diffV');
@@ -320,8 +236,8 @@ describe('Pushy server config', () => {
     const fetchMock = mock(async () => createJsonResponse({ update: false }));
     (globalThis as any).fetch = fetchMock;
 
-    const { Pushy } = await importFreshClient('check-body-bundlehash');
-    await new Pushy({ appKey: 'demo-app' }).checkUpdate();
+    const { client } = await createClient();
+    await client.checkUpdate();
 
     const body = JSON.parse((fetchMock.mock.calls[0] as any[])[1].body);
     expect(body.bundleHash).toBe('a'.repeat(64));
@@ -335,8 +251,8 @@ describe('Pushy server config', () => {
     const fetchMock = mock(async () => createJsonResponse({ update: false }));
     (globalThis as any).fetch = fetchMock;
 
-    const { Pushy } = await importFreshClient('check-body-no-bundlehash');
-    await new Pushy({ appKey: 'demo-app' }).checkUpdate();
+    const { client } = await createClient();
+    await client.checkUpdate();
 
     const body = JSON.parse((fetchMock.mock.calls[0] as any[])[1].body);
     expect(body).not.toHaveProperty('bundleHash');
@@ -348,10 +264,8 @@ describe('Pushy server config', () => {
       createJsonResponse({ upToDate: true, bundleStatus: 'unknownBundle' })
     );
 
-    const { Pushy } = await importFreshClient('check-unknown-bundle');
     const events: any[] = [];
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       logger: (event: any) => events.push(event),
     });
     const result = await client.checkUpdate();
@@ -368,10 +282,8 @@ describe('Pushy server config', () => {
       createJsonResponse({ upToDate: true, bundleStatus: 'matched' })
     );
 
-    const { Pushy } = await importFreshClient('check-matched-bundle');
     const events: any[] = [];
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       logger: (event: any) => events.push(event),
     });
     await client.checkUpdate();
@@ -387,9 +299,7 @@ describe('Pushy server config', () => {
       throw fetchError;
     });
 
-    const { Pushy } = await importFreshClient('after-check-update-error');
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       throwError: true,
       afterCheckUpdate,
     });
@@ -412,9 +322,7 @@ describe('Pushy server config', () => {
       downloadFullUpdate,
     });
 
-    const { Pushy } = await importFreshClient('skip-current-hash-download');
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       logger,
     });
 
@@ -451,11 +359,7 @@ describe('Pushy server config', () => {
       markSuccess: nativeMarkSuccess,
     });
 
-    const { Pushy, sharedState } = await importFreshClient(
-      'mark-success-awaits-native'
-    );
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client, sharedState } = await createClient({
       logger,
     });
 
@@ -485,10 +389,7 @@ describe('Pushy server config', () => {
     );
     const logger = mock(() => {});
     setupClientMocks({ isFirstTime: true, markSuccess: nativeMarkSuccess });
-    const { Pushy, sharedState } = await importFreshClient(
-      'mark-success-concurrent'
-    );
-    const client = new Pushy({ appKey: 'demo-app', logger });
+    const { client, sharedState } = await createClient({ logger });
 
     const first = client.markSuccess();
     const second = client.markSuccess();
@@ -509,9 +410,7 @@ describe('Pushy server config', () => {
       ++calls === 1 ? Promise.reject(Error('busy')) : Promise.resolve()
     );
     setupClientMocks({ isFirstTime: true, markSuccess: nativeMarkSuccess });
-    const { Pushy, sharedState } =
-      await importFreshClient('mark-success-retry');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client, sharedState } = await createClient();
     const errors: any[] = [];
     client.onError((e: any) => {
       errors.push(e);
@@ -546,14 +445,10 @@ describe('Pushy server config', () => {
     });
     setupClientMocks({ reloadUpdate });
 
-    const { Pushy, sharedState } = await importFreshClient(
-      'before-reload-switch-version'
-    );
-    sharedState.downloadedHash = 'next-hash';
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client, sharedState } = await createClient({
       beforeReload,
     });
+    sharedState.downloadedHash = 'next-hash';
 
     await client.switchVersion('next-hash');
 
@@ -567,14 +462,10 @@ describe('Pushy server config', () => {
     const beforeReload = mock(() => false);
     setupClientMocks({ reloadUpdate });
 
-    const { Pushy, sharedState } = await importFreshClient(
-      'before-reload-skip-switch'
-    );
-    sharedState.downloadedHash = 'next-hash';
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client, sharedState } = await createClient({
       beforeReload,
     });
+    sharedState.downloadedHash = 'next-hash';
 
     await client.switchVersion('next-hash');
 
@@ -597,9 +488,7 @@ describe('Pushy server config', () => {
     });
     setupClientMocks({ restartApp });
 
-    const { Pushy } = await importFreshClient('before-reload-restart-app');
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       beforeReload,
     });
 
@@ -621,8 +510,7 @@ describe('JS exception reporting', () => {
       }
     );
 
-    const { Pushy } = await importFreshClient('js-exception-report');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     const error = Object.assign(new Error('boom'), {
       name: 'TypeError',
       stack: 'TypeError: boom\n at index.bundlejs:12:34',
@@ -673,8 +561,7 @@ describe('JS exception reporting', () => {
       },
     };
 
-    const { Pushy } = await importFreshClient('js-exception-global');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     expect(current).not.toBe(previous);
     const cleanup = client.enableErrorReporting();
     const error = new Error('fatal');
@@ -700,9 +587,7 @@ describe('JS exception reporting', () => {
       },
     };
 
-    const { Pushy } = await importFreshClient('js-exception-opt-out');
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       disableErrorReporting: true,
     });
     expect(current).toBe(previous);
@@ -724,8 +609,7 @@ describe('JS exception reporting', () => {
     setupClientMocks();
     const fetch = mock(async () => createJsonResponse({ ok: 1 }));
     (globalThis as any).fetch = fetch;
-    const { Pushy } = await importFreshClient('js-exception-disabled');
-    const client = new Pushy({ appKey: 'demo-app', disableTelemetry: true });
+    const { client } = await createClient({ disableTelemetry: true });
     client.captureException(new Error('ignored'));
     await Promise.resolve();
     expect(fetch).not.toHaveBeenCalled();
@@ -740,8 +624,7 @@ describe('error pipeline (onError + stable codes, EH-1/EH-2/EH-3)', () => {
       throw new Error('offline');
     });
 
-    const { Pushy } = await importFreshClient('pipeline-check-failed');
-    const client = new Pushy({ appKey: 'demo-app', logger });
+    const { client } = await createClient({ logger });
     const seen: any[] = [];
     client.onError((e: any, eventType: string) => {
       seen.push({ e, eventType });
@@ -768,8 +651,7 @@ describe('error pipeline (onError + stable codes, EH-1/EH-2/EH-3)', () => {
       throw new Error('offline');
     });
 
-    const { Pushy } = await importFreshClient('pipeline-unsubscribe');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     const listener = mock(() => {});
     const unsubscribe = client.onError(listener);
     unsubscribe();
@@ -783,12 +665,8 @@ describe('error pipeline (onError + stable codes, EH-1/EH-2/EH-3)', () => {
     const logger = mock(() => {});
     setupClientMocks({ reloadUpdate });
 
-    const { Pushy, sharedState } = await importFreshClient(
-      'pipeline-switch-version-failed'
-    );
+    const { client, sharedState } = await createClient({ logger });
     sharedState.downloadedHash = 'next-hash';
-    sharedState.applyingUpdate = false;
-    const client = new Pushy({ appKey: 'demo-app', logger });
     const seen: any[] = [];
     client.onError((e: any, eventType: string) => {
       seen.push({ e, eventType });
@@ -822,12 +700,8 @@ describe('error pipeline (onError + stable codes, EH-1/EH-2/EH-3)', () => {
     const reloadUpdate = mock(() => Promise.reject(nativeError));
     setupClientMocks({ reloadUpdate });
 
-    const { Pushy, sharedState } = await importFreshClient(
-      'pipeline-native-code-preserved'
-    );
+    const { client, sharedState } = await createClient();
     sharedState.downloadedHash = 'next-hash';
-    sharedState.applyingUpdate = false;
-    const client = new Pushy({ appKey: 'demo-app' });
     const seen: any[] = [];
     client.onError((e: any, eventType: string) => {
       seen.push({ e, eventType });
@@ -843,11 +717,8 @@ describe('error pipeline (onError + stable codes, EH-1/EH-2/EH-3)', () => {
 
   test('a beforeReload hook throw gets USER_HOOK_ERROR, distinct from pipeline failures (JS2-3)', async () => {
     setupClientMocks();
-    const { Pushy, sharedState } = await importFreshClient(
-      'pipeline-user-hook-error'
-    );
+    const { Pushy, sharedState } = await importFreshClient();
     sharedState.downloadedHash = 'next-hash';
-    sharedState.applyingUpdate = false;
     const client = new Pushy({
       appKey: 'demo-app',
       beforeReload: () => {
@@ -871,12 +742,44 @@ describe('error pipeline (onError + stable codes, EH-1/EH-2/EH-3)', () => {
     expect(sharedState.applyingUpdate).toBe(false);
   });
 
+  test('an onError listener retrying switchVersion after a beforeReload throw is not ignored', async () => {
+    const reloadUpdate = mock(() => Promise.resolve());
+    setupClientMocks({ reloadUpdate });
+    const { Pushy, sharedState } = await importFreshClient();
+    sharedState.downloadedHash = 'next-hash';
+    let hookCalls = 0;
+    const client = new Pushy({
+      appKey: 'demo-app',
+      beforeReload: () => {
+        hookCalls += 1;
+        if (hookCalls === 1) {
+          throw new Error('hook exploded');
+        }
+        return true;
+      },
+    });
+    let retry: Promise<boolean> | undefined;
+    client.onError(() => {
+      // Synchronous retry: applyingUpdate must already be released.
+      retry ??= client.switchVersion('next-hash');
+    });
+
+    await expect(client.switchVersion('next-hash')).rejects.toThrow(
+      'hook exploded'
+    );
+
+    expect(retry).toBeDefined();
+    expect(await retry).toBe(true);
+    expect(hookCalls).toBe(2);
+    expect(reloadUpdate).toHaveBeenCalledTimes(1);
+  });
+
   test('concurrent checkUpdate reusing a failing in-flight check keeps its contracts (JS2-1)', async () => {
     setupClientMocks();
     (globalThis as any).fetch = mock(async () => {
       throw new Error('offline');
     });
-    const { Pushy } = await importFreshClient('pipeline-check-cache-error');
+    const { Pushy } = await importFreshClient();
     const states: any[] = [];
     const client = new Pushy({
       appKey: 'demo-app',
@@ -903,12 +806,12 @@ describe('error pipeline (onError + stable codes, EH-1/EH-2/EH-3)', () => {
       Promise.reject(Error('disk full'))
     );
     const logger = mock(() => {});
-    setupAndroidApkMocks(downloadAndInstallApk);
+    setupClientMocks({
+      platform: 'android',
+      downloadAndInstallApk: downloadAndInstallApk,
+    });
 
-    const { Pushy, sharedState } =
-      await importFreshClient('pipeline-apk-cause');
-    sharedState.apkStatus = null;
-    const client = new Pushy({ appKey: 'demo-app', logger });
+    const { client } = await createClient({ logger });
     const seen: any[] = [];
     client.onError((e: any, eventType: string) => {
       seen.push({ e, eventType });
@@ -957,12 +860,8 @@ describe('switchVersion operation ownership', () => {
     }) as unknown as typeof clearTimeout;
 
     setupClientMocks({ reloadUpdate: mock(() => Promise.resolve()) });
-    const { Pushy, sharedState } = await importFreshClient(
-      'switch-watchdog-ownership'
-    );
     const logger = mock((_event: any) => {});
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client, sharedState } = await createClient({
       logger,
       disableTelemetry: true,
       disableErrorReporting: true,
@@ -1016,11 +915,7 @@ describe('switchVersion operation ownership', () => {
         })
     );
     setupClientMocks({ reloadUpdate });
-    const { Pushy, sharedState } = await importFreshClient(
-      'switch-rejection-ownership'
-    );
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client, sharedState } = await createClient({
       disableTelemetry: true,
       disableErrorReporting: true,
     });
@@ -1082,7 +977,7 @@ describe('downloadUpdate fallback chain', () => {
 
     // Mock testUrls to return urls directly (skip actual HEAD ping)
     mock.module('../utils', () => ({
-      __esModule: true,
+      ...realProjectModules['../utils'],
       assertWeb: () => true,
       computeProgress: (received: number, total: number) =>
         total > 0
@@ -1091,8 +986,6 @@ describe('downloadUpdate fallback chain', () => {
       DEFAULT_FETCH_TIMEOUT_MS: 5000,
       fetchWithTimeout,
       info: mock(() => {}),
-      joinUrls: (paths: string[], fileName?: string) =>
-        fileName ? paths.map((p) => `${p}/${fileName}`) : undefined,
       log: mock(() => {}),
       noop: () => {},
       promiseAny: mock(() => Promise.resolve()),
@@ -1130,9 +1023,7 @@ describe('downloadUpdate fallback chain', () => {
 
   test('uses diff when available', async () => {
     const { downloadPatchFromPpk } = setupDownloadMocks();
-    const { Pushy, sharedState } = await importFreshClient('dl-diff-ok');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     const hash = await client.downloadUpdate(updateInfo);
 
@@ -1163,9 +1054,7 @@ describe('downloadUpdate fallback chain', () => {
     const { downloadPatchFromPackage, downloadFullUpdate } = setupDownloadMocks(
       { downloadPatchFromPpk }
     );
-    const { Pushy, sharedState } = await importFreshClient('dl-mirror-next');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client } = await createClient({ maxRetries: 0 });
 
     expect(await client.downloadUpdate(twoMirrors)).toBe('new-hash');
     expect(downloadPatchFromPpk).toHaveBeenCalledTimes(2);
@@ -1186,9 +1075,7 @@ describe('downloadUpdate fallback chain', () => {
     const { downloadPatchFromPackage } = setupDownloadMocks({
       downloadPatchFromPpk,
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-mirror-patch');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client } = await createClient({ maxRetries: 0 });
 
     expect(await client.downloadUpdate(twoMirrors)).toBe('new-hash');
     // Same bytes on every mirror: one attempt, then straight to pdiff.
@@ -1206,11 +1093,7 @@ describe('downloadUpdate fallback chain', () => {
       listener?.({ hash: 'new-hash', received: 50, total: 100 });
     });
     setupDownloadMocks({ downloadPatchFromPpk, addProgressListener });
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-progress-isolated'
-    );
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client } = await createClient({ maxRetries: 0 });
 
     const seen: number[] = [];
     const first = client.downloadUpdate(updateInfo, () => {
@@ -1229,9 +1112,7 @@ describe('downloadUpdate fallback chain', () => {
   test('a version is not "downloaded" until its hash info is persisted', async () => {
     const setLocalHashInfo = mock(() => Promise.reject(Error('commit failed')));
     setupDownloadMocks({ setLocalHashInfo });
-    const { Pushy, sharedState } = await importFreshClient('dl-hashinfo-fail');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client, sharedState } = await createClient({ maxRetries: 0 });
     const seen: any[] = [];
     client.onError((e: any, eventType: string) => {
       seen.push({ e, eventType });
@@ -1253,10 +1134,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadFullUpdate,
     } = setupDownloadMocks();
     const logger = mock(() => {});
-    const { Pushy, sharedState } = await importFreshClient('dl-no-artifact');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       logger,
       disableTelemetry: true,
     });
@@ -1305,9 +1183,7 @@ describe('downloadUpdate fallback chain', () => {
         });
       }),
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-progress');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     await client.downloadUpdate(updateInfo, onDownloadProgress);
 
@@ -1324,9 +1200,7 @@ describe('downloadUpdate fallback chain', () => {
       setupDownloadMocks({
         downloadPatchFromPpk: mock(() => Promise.reject(Error('diff fail'))),
       });
-    const { Pushy, sharedState } = await importFreshClient('dl-fallback-pdiff');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     const hash = await client.downloadUpdate(updateInfo);
 
@@ -1344,9 +1218,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPpk: mock(() => Promise.reject(Error('diff fail'))),
       downloadPatchFromPackage: mock(() => Promise.reject(Error('pdiff fail'))),
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-fallback-full');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     const hash = await client.downloadUpdate(updateInfo);
 
@@ -1362,9 +1234,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPackage: mock(() => Promise.reject(Error('pdiff fail'))),
       downloadFullUpdate: mock(() => Promise.reject(Error('full fail'))),
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-all-fail');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client } = await createClient({ maxRetries: 0 });
 
     await expect(client.downloadUpdate(updateInfo)).rejects.toThrow(
       'error_full_patch_failed'
@@ -1377,11 +1247,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPackage: mock(() => Promise.reject(Error('pdiff fail'))),
       downloadFullUpdate: mock(() => Promise.reject(Error('full fail'))),
     });
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-negative-retries'
-    );
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: -1 });
+    const { client } = await createClient({ maxRetries: -1 });
 
     await expect(client.downloadUpdate(updateInfo)).rejects.toThrow(
       'error_full_patch_failed'
@@ -1402,9 +1268,7 @@ describe('downloadUpdate fallback chain', () => {
         return Promise.resolve();
       }),
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-retry-ok');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 2 });
+    const { client } = await createClient({ maxRetries: 2 });
 
     const hash = await client.downloadUpdate(updateInfo);
 
@@ -1426,9 +1290,7 @@ describe('downloadUpdate fallback chain', () => {
           : Promise.resolve();
       }),
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-rank-once');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 3 });
+    const { client } = await createClient({ maxRetries: 3 });
 
     expect(await client.downloadUpdate(twoMirrors)).toBe('new-hash');
     // diff, pdiff, full: one HEAD race each, not one per attempt.
@@ -1447,10 +1309,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPackage: mock(() => Promise.reject(Error('pdiff fail'))),
       downloadFullUpdate: mock(() => Promise.reject(Error('full fail'))),
     });
-    const { Pushy, sharedState } =
-      await importFreshClient('dl-default-retries');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     await expect(client.downloadUpdate(updateInfo)).rejects.toThrow();
     // 1 initial + 3 retries = 4 calls
@@ -1463,9 +1322,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPackage: mock(() => Promise.reject(Error('pdiff fail'))),
       downloadFullUpdate: mock(() => Promise.reject(Error('full fail'))),
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-retry-exhaust');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 2 });
+    const { client } = await createClient({ maxRetries: 2 });
 
     await expect(client.downloadUpdate(updateInfo)).rejects.toThrow(
       'error_full_patch_failed'
@@ -1478,9 +1335,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPackage: mock(() => Promise.reject(Error('pdiff fail'))),
       downloadFullUpdate: mock(() => Promise.reject(Error('full fail'))),
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-failed-code');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client } = await createClient({ maxRetries: 0 });
     const seen: any[] = [];
     client.onError((e: any, eventType: string) => {
       seen.push({ e, eventType });
@@ -1507,11 +1362,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPackage: mock(() => Promise.reject(Error('pdiff fail'))),
       downloadFullUpdate: mock(() => Promise.reject(patchError)),
     });
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-patch-failed-code'
-    );
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client } = await createClient({ maxRetries: 0 });
     const seen: any[] = [];
     client.onError((e: any, eventType: string) => {
       seen.push({ e, eventType });
@@ -1538,10 +1389,6 @@ describe('downloadUpdate fallback chain', () => {
         })
     );
     setupDownloadMocks({ downloadFullUpdate });
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-concurrent-dedup'
-    );
-    sharedState.downloadedHash = undefined;
     // Only a full URL so the full strategy is the one exercised.
     const fullOnlyInfo = {
       update: true as const,
@@ -1553,7 +1400,7 @@ describe('downloadUpdate fallback chain', () => {
     };
     // No onDownloadProgress passed — old code only deduped when a progress
     // handler was registered, so this exercises the new promise-table dedup.
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     const first = client.downloadUpdate(fullOnlyInfo);
     const second = client.downloadUpdate(fullOnlyInfo);
@@ -1581,11 +1428,7 @@ describe('downloadUpdate fallback chain', () => {
       ),
       downloadFullUpdate: mock(() => Promise.reject(Error('full offline'))),
     });
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-exhausted-strategy'
-    );
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 2 });
+    const { client } = await createClient({ maxRetries: 2 });
 
     await expect(client.downloadUpdate(updateInfo)).rejects.toThrow();
 
@@ -1611,9 +1454,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPackage: mock(reject),
       downloadFullUpdate: mock(reject),
     });
-    const { Pushy, sharedState } = await importFreshClient('dl-all-exhausted');
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 3 });
+    const { client } = await createClient({ maxRetries: 3 });
 
     const err: any = await client
       .downloadUpdate(updateInfo)
@@ -1635,11 +1476,10 @@ describe('downloadUpdate fallback chain', () => {
       ),
     });
     const logger = mock(() => {});
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-fallback-patch-code'
-    );
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0, logger });
+    const { client } = await createClient({
+      maxRetries: 0,
+      logger,
+    });
 
     expect(await client.downloadUpdate(updateInfo)).toBe('new-hash');
 
@@ -1661,11 +1501,7 @@ describe('downloadUpdate fallback chain', () => {
     const { fetchWithTimeout } = setupDownloadMocks({
       downloadPatchFromPpk: mock(() => Promise.reject(timeout)),
     });
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-fallback-transport-report'
-    );
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client } = await createClient({ maxRetries: 0 });
 
     expect(await client.downloadUpdate(updateInfo)).toBe('new-hash');
 
@@ -1683,11 +1519,7 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPpk: mock(() => Promise.reject(patchError)),
       downloadPatchFromPackage: mock(() => Promise.reject(timeout)),
     });
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-fallback-patch-report'
-    );
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0 });
+    const { client } = await createClient({ maxRetries: 0 });
 
     expect(await client.downloadUpdate(updateInfo)).toBe('new-hash');
 
@@ -1710,11 +1542,10 @@ describe('downloadUpdate fallback chain', () => {
       downloadPatchFromPpk,
     });
     const logger = mock(() => {});
-    const { Pushy, sharedState } = await importFreshClient(
-      'dl-prefixed-patch-code'
-    );
-    sharedState.downloadedHash = undefined;
-    const client = new Pushy({ appKey: 'demo-app', maxRetries: 0, logger });
+    const { client } = await createClient({
+      maxRetries: 0,
+      logger,
+    });
 
     expect(await client.downloadUpdate(twoMirrors)).toBe('new-hash');
 
@@ -1733,8 +1564,7 @@ describe('Cresc class', () => {
   test('uses Cresc server endpoints', async () => {
     setupClientMocks();
 
-    const { Cresc } = await importFreshClient('cresc-endpoints');
-    const client = new Cresc({ appKey: 'demo-app' });
+    const { client } = await createClient({}, 'Cresc');
 
     expect(client.getConfiguredCheckEndpoints()).toEqual([
       'https://api.cresc.dev',
@@ -1746,14 +1576,9 @@ describe('Cresc class', () => {
     setupClientMocks();
     // Override i18n mock AFTER setupClientMocks to avoid being overwritten
     const setLocale = mock(() => {});
-    mock.module('../i18n', () => ({
-      default: {
-        t: (key: string) => key,
-        setLocale,
-      },
-    }));
+    mockI18n({ setLocale });
 
-    const { Cresc } = await importFreshClient('cresc-locale');
+    const { Cresc } = await importFreshClient();
     const client = new Cresc({ appKey: 'demo-app' });
 
     expect(client.clientType).toBe('Cresc');
@@ -1763,14 +1588,9 @@ describe('Cresc class', () => {
   test('explicit locale option overrides clientType default', async () => {
     setupClientMocks();
     const setLocale = mock(() => {});
-    mock.module('../i18n', () => ({
-      default: {
-        t: (key: string) => key,
-        setLocale,
-      },
-    }));
+    mockI18n({ setLocale });
 
-    const { Pushy } = await importFreshClient('pushy-locale-override');
+    const { Pushy } = await importFreshClient();
     // Pushy defaults to 'zh'; an explicit 'en' must win.
     new Pushy({ appKey: 'demo-app', locale: 'en' });
 
@@ -1780,7 +1600,7 @@ describe('Cresc class', () => {
   test('Cresc is instance of Pushy', async () => {
     setupClientMocks();
 
-    const { Cresc, Pushy } = await importFreshClient('cresc-instanceof');
+    const { Cresc, Pushy } = await importFreshClient();
     const client = new Cresc({ appKey: 'demo-app' });
 
     expect(client).toBeInstanceOf(Pushy);
@@ -1790,14 +1610,15 @@ describe('Cresc class', () => {
   test('Cresc custom server overrides default endpoints', async () => {
     setupClientMocks();
 
-    const { Cresc } = await importFreshClient('cresc-custom-server');
-    const client = new Cresc({
-      appKey: 'demo-app',
-      server: {
-        main: ['https://custom.example.com'],
-        queryUrls: ['https://q.example.com'],
+    const { client } = await createClient(
+      {
+        server: {
+          main: ['https://custom.example.com'],
+          queryUrls: ['https://q.example.com'],
+        },
       },
-    });
+      'Cresc'
+    );
 
     expect(client.getConfiguredCheckEndpoints()).toEqual([
       'https://custom.example.com',
@@ -1811,10 +1632,9 @@ describe('resetToPackagedBundle', () => {
     const resetToPackagedBundle = mock(() => Promise.resolve());
     const restartApp = mock(() => Promise.resolve());
     setupClientMocks({ resetToPackagedBundle, restartApp });
-    const { Pushy, sharedState } = await importFreshClient('reset-basic');
+    const { client, sharedState } = await createClient();
     sharedState.downloadedHash = 'stale-hash';
     sharedState.marked = true;
-    const client = new Pushy({ appKey: 'demo-app' });
 
     const result = await client.resetToPackagedBundle();
 
@@ -1830,8 +1650,7 @@ describe('resetToPackagedBundle', () => {
     const resetToPackagedBundle = mock(() => Promise.resolve());
     const restartApp = mock(() => Promise.resolve());
     setupClientMocks({ resetToPackagedBundle, restartApp });
-    const { Pushy } = await importFreshClient('reset-restart');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     await client.resetToPackagedBundle({ restart: true });
 
@@ -1843,8 +1662,7 @@ describe('resetToPackagedBundle', () => {
     // Simulates new JS arriving via hot update onto an older binary. Like the
     // other update-flow APIs this must not throw by default.
     setupClientMocks({ resetToPackagedBundle: null });
-    const { Pushy } = await importFreshClient('reset-unsupported');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     const seen: any[] = [];
     client.onError((err: any) => seen.push(err));
 
@@ -1857,8 +1675,7 @@ describe('resetToPackagedBundle', () => {
 
   test('throwError option makes an unsupported reset throw', async () => {
     setupClientMocks({ resetToPackagedBundle: null });
-    const { Pushy } = await importFreshClient('reset-unsupported-throw');
-    const client = new Pushy({ appKey: 'demo-app', throwError: true });
+    const { client } = await createClient({ throwError: true });
 
     await expect(client.resetToPackagedBundle()).rejects.toMatchObject({
       code: 'RESET_FAILED',
@@ -1870,9 +1687,8 @@ describe('resetToPackagedBundle', () => {
       Promise.reject(Error('disk full'))
     );
     setupClientMocks({ resetToPackagedBundle });
-    const { Pushy, sharedState } = await importFreshClient('reset-native-fail');
+    const { client, sharedState } = await createClient();
     sharedState.downloadedHash = 'stale-hash';
-    const client = new Pushy({ appKey: 'demo-app' });
     const seen: any[] = [];
     client.onError((err: any) => seen.push(err));
 
@@ -1898,10 +1714,11 @@ describe('downloadAndInstallApk apkStatus (JS-3)', () => {
       }
       return Promise.resolve();
     });
-    setupAndroidApkMocks(downloadAndInstallApk);
-    const { Pushy, sharedState } = await importFreshClient('apk-retry');
-    sharedState.apkStatus = null;
-    const client = new Pushy({ appKey: 'demo-app' });
+    setupClientMocks({
+      platform: 'android',
+      downloadAndInstallApk: downloadAndInstallApk,
+    });
+    const { client, sharedState } = await createClient();
 
     await client.downloadAndInstallApk('https://example.com/app.apk');
     // Failure must leave apkStatus reset (null), not stuck at 'downloaded'.
@@ -1917,7 +1734,7 @@ describe('downloadAndInstallApk apkStatus (JS-3)', () => {
 describe('client singleton', () => {
   test('a second client with a different appKey throws SINGLETON_VIOLATION', async () => {
     setupClientMocks();
-    const { Pushy } = await importFreshClient('singleton-different-appkey');
+    const { Pushy } = await importFreshClient();
     const client1 = new Pushy({ appKey: 'app-1' });
     expect(client1.options.appKey).toBe('app-1');
 
@@ -1932,7 +1749,7 @@ describe('client singleton', () => {
 
   test('a Cresc client after a Pushy client throws SINGLETON_VIOLATION', async () => {
     setupClientMocks();
-    const { Pushy, Cresc } = await importFreshClient('singleton-cross-type');
+    const { Pushy, Cresc } = await importFreshClient();
     new Pushy({ appKey: 'app-1' });
 
     let error: any;
@@ -1946,7 +1763,7 @@ describe('client singleton', () => {
 
   test('re-creating the same client is idempotent and applies the new options', async () => {
     setupClientMocks();
-    const { Pushy } = await importFreshClient('singleton-idempotent');
+    const { Pushy } = await importFreshClient();
     const client1 = new Pushy({ appKey: 'app-1', debug: true });
     // e.g. dev fast refresh re-running the module that builds the client
     const client2 = new Pushy({
@@ -1961,8 +1778,7 @@ describe('client singleton', () => {
 
   test('setOptions bumps optionsVersion and notifies subscribers', async () => {
     setupClientMocks();
-    const { Pushy } = await importFreshClient('singleton-options-version');
-    const client = new Pushy({ appKey: 'app-1' });
+    const { client } = await createClient({ appKey: 'app-1' });
     const initialVersion = client.optionsVersion;
     const listener = mock(() => {});
     const unsubscribe = client.onOptionsChange(listener);
@@ -1978,8 +1794,7 @@ describe('client singleton', () => {
 
   test('a second concurrent provider mount claim throws SINGLETON_VIOLATION', async () => {
     setupClientMocks();
-    const { Pushy } = await importFreshClient('singleton-provider-claim');
-    const client = new Pushy({ appKey: 'app-1' });
+    const { client } = await createClient({ appKey: 'app-1' });
 
     const release = client.claimProviderMount();
     let error: any;
@@ -2000,7 +1815,7 @@ describe('syncNativeConfig', () => {
   test('persists the native check config on construction (silent strategy activates)', async () => {
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-1');
+    const { Pushy } = await importFreshClient();
     new Pushy({ appKey: 'demo-app', updateStrategy: 'silentAndLater' });
 
     expect(syncNativeConfig).toHaveBeenCalled();
@@ -2023,7 +1838,7 @@ describe('syncNativeConfig', () => {
     // only the server's explicit forceBoot may still activate.
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-no-autocheck');
+    const { Pushy } = await importFreshClient();
     new Pushy({
       appKey: 'demo-app',
       updateStrategy: 'silentAndNow',
@@ -2039,7 +1854,7 @@ describe('syncNativeConfig', () => {
   test('silent strategy with automatic checks still activates', async () => {
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-autocheck');
+    const { Pushy } = await importFreshClient();
     new Pushy({
       appKey: 'demo-app',
       updateStrategy: 'silentAndNow',
@@ -2055,7 +1870,7 @@ describe('syncNativeConfig', () => {
   test('disableNativeCheck writes a disabling config the natives bail on', async () => {
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-optout');
+    const { Pushy } = await importFreshClient();
     new Pushy({
       appKey: 'demo-app',
       updateStrategy: 'silentAndNow',
@@ -2074,7 +1889,7 @@ describe('syncNativeConfig', () => {
   test('alert strategies keep activation with JS (afterDownload none)', async () => {
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-2');
+    const { Pushy } = await importFreshClient();
     new Pushy({ appKey: 'demo-app' });
 
     const config = JSON.parse(
@@ -2086,8 +1901,7 @@ describe('syncNativeConfig', () => {
   test('setOptions re-syncs when the strategy changes', async () => {
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-3');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     client.setOptions({ updateStrategy: 'silentAndNow' });
     await Promise.resolve();
     await Promise.resolve();
@@ -2106,8 +1920,7 @@ describe('syncNativeConfig', () => {
     // disableNativeCheck writes the disabled state.
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-transient');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -2142,9 +1955,7 @@ describe('syncNativeConfig', () => {
   test('persists and exposes the effective overridden package version', async () => {
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-package-override');
-    const client = new Pushy({
-      appKey: 'demo-app',
+    const { client } = await createClient({
       overridePackageVersion: '9.9.9',
     });
 
@@ -2158,8 +1969,7 @@ describe('syncNativeConfig', () => {
   test('skips duplicate config writes after the same value succeeds', async () => {
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-dedupe');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -2178,8 +1988,7 @@ describe('syncNativeConfig', () => {
         })
     );
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-serialized');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     client.setOptions({ updateStrategy: 'silentAndNow' });
     expect(syncNativeConfig).toHaveBeenCalledTimes(1);
@@ -2205,8 +2014,7 @@ describe('syncNativeConfig', () => {
         })
     );
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-revert-race');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     // Finish the initial alert-strategy value (A).
     resolvers[0]();
@@ -2242,8 +2050,7 @@ describe('syncNativeConfig', () => {
         : Promise.resolve();
     });
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-retry');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -2256,8 +2063,7 @@ describe('syncNativeConfig', () => {
   test('switching ownership to native and back writes the config again', async () => {
     const syncNativeConfig = mock(() => Promise.resolve());
     setupClientMocks({ syncNativeConfig });
-    const { Pushy } = await importFreshClient('sync-config-owner-roundtrip');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
@@ -2274,9 +2080,23 @@ describe('syncNativeConfig', () => {
     );
   });
 
+  test('native ownership suppresses constructor and setOptions writes until handed back', async () => {
+    const syncNativeConfig = mock(() => Promise.resolve());
+    setupClientMocks({ syncNativeConfig });
+    const { client } = await createClient({
+      nativeConfigSource: 'native',
+    });
+    client.setOptions({ updateStrategy: 'silentAndLater' });
+    await Promise.resolve();
+    expect(syncNativeConfig).not.toHaveBeenCalled();
+
+    client.setOptions({ nativeConfigSource: 'javascript' });
+    expect(syncNativeConfig).toHaveBeenCalledTimes(1);
+  });
+
   test('an older native module without the method is skipped silently', async () => {
     setupClientMocks();
-    const { Pushy } = await importFreshClient('sync-config-4');
+    const { Pushy } = await importFreshClient();
     // Must not throw even though PushyModule lacks syncNativeConfig.
     new Pushy({ appKey: 'demo-app' });
   });
@@ -2316,8 +2136,7 @@ describe('native check cache reuse', () => {
     setupClientMocks({ getNativeCheckCache, syncNativeConfig });
     // setup.ts's default fetch throws, so any network attempt would surface
     // as a failed check (undefined) instead of the cached result.
-    const { Pushy } = await importFreshClient('native-cache-fresh');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual(cachedResult);
     expect(getNativeCheckCache).toHaveBeenCalled();
@@ -2344,8 +2163,7 @@ describe('native check cache reuse', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse(networkResult)
     );
-    const { Pushy } = await importFreshClient('native-cache-stale');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual(networkResult);
   });
@@ -2358,8 +2176,7 @@ describe('native check cache reuse', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse(networkResult)
     );
-    const { Pushy } = await importFreshClient('native-cache-bad');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual(networkResult);
   });
@@ -2385,8 +2202,7 @@ describe('native check cache reuse', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse(networkResult)
     );
-    const { Pushy } = await importFreshClient('native-cache-request-key');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate({ toHash: 'requested-hash' })).toEqual(
       networkResult
@@ -2422,8 +2238,7 @@ describe('native check cache reuse', () => {
       )
     );
     setupClientMocks({ getNativeCheckCache, syncNativeConfig });
-    const { Pushy } = await importFreshClient('native-cache-key-order');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual(cachedResult);
   });
@@ -2446,8 +2261,7 @@ describe('native check cache reuse', () => {
       )
     );
     setupClientMocks({ getNativeCheckCache, syncNativeConfig });
-    const { Pushy } = await importFreshClient('native-cache-undefined-extra');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate({ omitted: undefined })).toEqual(
       cachedResult
@@ -2471,8 +2285,7 @@ describe('native check cache reuse', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse(networkResult)
     );
-    const { Pushy } = await importFreshClient('native-cache-config-key');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual(networkResult);
   });
@@ -2495,8 +2308,7 @@ describe('native check cache reuse', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse(networkResult)
     );
-    const { Pushy } = await importFreshClient('native-cache-expired-once');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     const parse = spyOn(JSON, 'parse');
     let parsedCacheFields: unknown[][] = [];
@@ -2525,8 +2337,7 @@ describe('native check cache reuse', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse(networkResult)
     );
-    const { Pushy } = await importFreshClient('native-cache-absent-once');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     await client.checkUpdate();
     await client.checkUpdate({ toHash: 'other' });
@@ -2560,8 +2371,7 @@ describe('native check cache reuse', () => {
       );
     });
     setupClientMocks({ getNativeCheckCache, syncNativeConfig });
-    const { Pushy } = await importFreshClient('native-cache-canonical-config');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual(cachedResult);
   });
@@ -2576,8 +2386,7 @@ describe('native check cache reuse', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse({ upToDate: true })
     );
-    const { Pushy } = await importFreshClient('mark-js-check-once');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     const flushAll = async () => {
       for (let i = 0; i < 5; i++) {
         await Promise.resolve();
@@ -2624,8 +2433,7 @@ describe('native check cache reuse', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse(networkResult)
     );
-    const { Pushy } = await importFreshClient('native-cache-future');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual(networkResult);
   });
@@ -2641,8 +2449,7 @@ describe('checkUpdate request identity', () => {
     setupClientMocks();
     const fetchMock = mock(async () => createJsonResponse({ upToDate: true }));
     (globalThis as any).fetch = fetchMock;
-    const { Pushy } = await importFreshClient('check-identity-same');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     await client.checkUpdate({ channel: 'beta' });
     await client.checkUpdate({ channel: 'beta' });
@@ -2657,8 +2464,7 @@ describe('checkUpdate request identity', () => {
       return createJsonResponse({ update: true, hash: `hash-${body.channel}` });
     });
     (globalThis as any).fetch = fetchMock;
-    const { Pushy } = await importFreshClient('check-identity-extra');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     const a = await client.checkUpdate({ channel: 'a' });
     const b = await client.checkUpdate({ channel: 'b' });
@@ -2676,8 +2482,7 @@ describe('checkUpdate request identity', () => {
       return createJsonResponse({ upToDate: true });
     });
     (globalThis as any).fetch = fetchMock;
-    const { Pushy } = await importFreshClient('check-identity-forge');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     await client.checkUpdate({ packageVersion: '9.9.9', hash: 'forged' });
 
@@ -2696,8 +2501,7 @@ describe('checkUpdate request identity', () => {
       return createJsonResponse({ update: true, hash: 'old-good' });
     });
     (globalThis as any).fetch = fetchMock;
-    const { Pushy } = await importFreshClient('check-identity-stale');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(((await client.checkUpdate()) as any).hash).toBe('old-good');
 
@@ -2723,8 +2527,7 @@ describe('JS -> native check completion signal', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse({ upToDate: true })
     );
-    const { Pushy } = await importFreshClient('js-check-completed');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     await client.checkUpdate();
     await Promise.resolve();
@@ -2743,8 +2546,7 @@ describe('JS -> native check completion signal', () => {
     (globalThis as any).fetch = mock(async () => {
       throw new Error('offline');
     });
-    const { Pushy } = await importFreshClient('js-check-failed');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toBeUndefined();
     expect(markJsCheckCompleted).not.toHaveBeenCalled();
@@ -2756,12 +2558,12 @@ describe('JS -> native check completion signal', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse({ upToDate: true })
     );
-    const { Pushy } = await importFreshClient('js-check-reject');
+    const { Pushy } = await importFreshClient();
     const client = new Pushy({ appKey: 'demo-app' });
     expect(await client.checkUpdate()).toEqual({ upToDate: true });
 
     setupClientMocks();
-    const { Pushy: OldPushy } = await importFreshClient('js-check-old-native');
+    const { Pushy: OldPushy } = await importFreshClient();
     const old = new OldPushy({ appKey: 'demo-app' });
     expect(await old.checkUpdate()).toEqual({ upToDate: true });
   });
@@ -2780,8 +2582,7 @@ describe('check response schema gate', () => {
       }
       return createJsonResponse([]);
     });
-    const { Pushy } = await importFreshClient('schema-gate-fallback');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual({ upToDate: true });
     expect(checks).toBeGreaterThanOrEqual(2);
@@ -2794,8 +2595,7 @@ describe('check response schema gate', () => {
         String(url).includes('/checkUpdate/') ? { error: 'internal' } : []
       )
     );
-    const { Pushy } = await importFreshClient('schema-gate-all');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     const seen: any[] = [];
     client.onError((e: any) => {
       seen.push(e);
@@ -2812,11 +2612,8 @@ describe('setOptions (1.3 / 1.11)', () => {
   test('applies a locale change at runtime', async () => {
     const setLocale = mock(() => {});
     setupClientMocks();
-    mock.module('../i18n', () => ({
-      default: { t: (key: string) => key, setLocale },
-    }));
-    const { Pushy } = await importFreshClient('set-options-locale');
-    const client = new Pushy({ appKey: 'demo-app', locale: 'en' });
+    mockI18n({ setLocale });
+    const { client } = await createClient({ locale: 'en' });
     expect(setLocale).toHaveBeenLastCalledWith('en');
 
     client.setOptions({ locale: 'zh' });
@@ -2825,7 +2622,7 @@ describe('setOptions (1.3 / 1.11)', () => {
 
   test('debug gates the verbose log output in release builds', async () => {
     setupClientMocks();
-    const { Pushy } = await importFreshClient('set-options-debug');
+    const { Pushy } = await importFreshClient();
     const { log } = await import('../utils');
     const logSpy = spyOn(console, 'log').mockImplementation(() => {});
     try {
@@ -2864,8 +2661,7 @@ describe('getRemoteEndpoints (1.4 / 6.8)', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
       return createJsonResponse(['https://edge.example.com']);
     });
-    const { Pushy } = await importFreshClient('remote-endpoints-ok-gate');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.getRemoteEndpoints()).toEqual([
       'https://edge.example.com',
@@ -2884,8 +2680,7 @@ describe('getRemoteEndpoints (1.4 / 6.8)', () => {
         null,
       ])
     );
-    const { Pushy } = await importFreshClient('remote-endpoints-https-only');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.getRemoteEndpoints()).toEqual([
       'https://edge.example.com',
@@ -2898,8 +2693,7 @@ describe('getRemoteEndpoints (1.4 / 6.8)', () => {
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse({ endpoints: ['https://edge.example.com'] })
     );
-    const { Pushy } = await importFreshClient('remote-endpoints-not-list');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.getRemoteEndpoints()).toEqual([]);
   });
@@ -2932,8 +2726,7 @@ describe('native check cache schema gate (1.5)', () => {
     setupClientMocks({ getNativeCheckCache, syncNativeConfig });
     const fetchMock = mock(async () => createJsonResponse({ upToDate: true }));
     (globalThis as any).fetch = fetchMock;
-    const { Pushy } = await importFreshClient('native-cache-schema-gate');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     expect(await client.checkUpdate()).toEqual({ upToDate: true });
     expect(getNativeCheckCache).toHaveBeenCalled();
@@ -2954,10 +2747,8 @@ describe('switchVersion result and reload watchdog (1.7)', () => {
     globalThis.setTimeout = ((fn: (...args: any[]) => void) =>
       realSetTimeout(fn, 0)) as unknown as typeof setTimeout;
     const logger = mock(() => {});
-    const { Pushy, sharedState } = await importFreshClient('switch-watchdog');
+    const { client, sharedState } = await createClient({ logger });
     sharedState.downloadedHash = 'next-hash';
-    sharedState.applyingUpdate = false;
-    const client = new Pushy({ appKey: 'demo-app', logger });
 
     expect(await client.switchVersion('next-hash')).toBe(true);
     expect(sharedState.applyingUpdate).toBe(true);
@@ -2981,10 +2772,7 @@ describe('switchVersion result and reload watchdog (1.7)', () => {
 
   test('resolves false when there is nothing to switch to', async () => {
     setupClientMocks();
-    const { Pushy, sharedState } = await importFreshClient('switch-nothing');
-    sharedState.downloadedHash = undefined;
-    sharedState.applyingUpdate = false;
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client, sharedState } = await createClient();
 
     expect(await client.switchVersion('next-hash')).toBe(false);
     expect(sharedState.applyingUpdate).toBe(false);
@@ -2995,12 +2783,8 @@ describe('switchVersion result and reload watchdog (1.7)', () => {
       Promise.reject(new Error('[INVALID_OPTIONS] empty hash'))
     );
     setupClientMocks({ reloadUpdate });
-    const { Pushy, sharedState } = await importFreshClient(
-      'switch-prefixed-code'
-    );
+    const { client, sharedState } = await createClient();
     sharedState.downloadedHash = 'next-hash';
-    sharedState.applyingUpdate = false;
-    const client = new Pushy({ appKey: 'demo-app' });
     const seen: any[] = [];
     client.onError((e: any) => {
       seen.push(e);
@@ -3031,8 +2815,7 @@ describe('check dedup slot ownership (P4)', () => {
       }
       return createJsonResponse({ upToDate: true });
     });
-    const { Pushy } = await importFreshClient('dedup-slot');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
 
     const first = client.checkUpdate({ toHash: 'slow-fail' });
     const second = client.checkUpdate({ toHash: 'fast-ok' });
@@ -3052,13 +2835,7 @@ describe('check dedup slot ownership (P4)', () => {
 describe('non-2xx check responses (P4)', () => {
   test('the error text is truncated to 200 characters', async () => {
     setupClientMocks();
-    mock.module('../i18n', () => ({
-      default: {
-        t: (key: string, params?: Record<string, unknown>) =>
-          params ? `${key}${JSON.stringify(params)}` : key,
-        setLocale: mock(() => {}),
-      },
-    }));
+    mockI18n({ withParams: true });
     (globalThis as any).fetch = mock(async (url: string) => {
       if (!url.includes('/checkUpdate/')) {
         throw new Error('no mirrors');
@@ -3070,8 +2847,7 @@ describe('non-2xx check responses (P4)', () => {
         json: async () => ({}),
       };
     });
-    const { Pushy } = await importFreshClient('http-error-truncated');
-    const client = new Pushy({ appKey: 'demo-app' });
+    const { client } = await createClient();
     const seen: any[] = [];
     client.onError((e: any) => {
       seen.push(e);
@@ -3088,21 +2864,12 @@ describe('non-2xx check responses (P4)', () => {
 describe('appKey requirement (P4)', () => {
   const setupPlatform = (os: string) => {
     setupClientMocks();
-    mock.module('react-native', () => ({
-      Platform: { OS: os, Version: 1 },
-      DeviceEventEmitter: {
-        addListener: mock(() => ({ remove: mock(() => {}) })),
-      },
-      NativeEventEmitter: class {
-        addListener = mock(() => ({ remove: mock(() => {}) }));
-        removeAllListeners = mock(() => {});
-      },
-    }));
+    mockPlatform({ OS: os, Version: 1 });
   };
 
   test('harmony without an appKey fails fast with APPKEY_REQUIRED', async () => {
     setupPlatform('harmony');
-    const { Pushy } = await importFreshClient('appkey-harmony');
+    const { Pushy } = await importFreshClient();
 
     let error: any;
     try {
@@ -3117,7 +2884,7 @@ describe('appKey requirement (P4)', () => {
     setupPlatform('web');
     const consoleWarn = spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      const { Pushy } = await importFreshClient('appkey-web');
+      const { Pushy } = await importFreshClient();
       expect(() => new Pushy({ appKey: '' })).not.toThrow();
     } finally {
       consoleWarn.mockRestore();

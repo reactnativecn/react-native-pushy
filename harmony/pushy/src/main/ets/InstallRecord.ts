@@ -1,205 +1,88 @@
-import fileIo from '@ohos.file.fs';
-import { util } from '@kit.ArkTS';
 import NativePatchCore from './NativePatchCore';
 import {
   ERROR_DELTA_FAILED,
   ERROR_SWITCH_VERSION_FAILED,
   createPushyError,
+  getErrorMessage,
 } from './ErrorCodes';
 
-// ArkTS mirror of cpp/patch_core/install_record.h — keep in sync by hand
-// (harmony/pushy/src/test/check-constant-parity.js asserts the values match).
-// 两阶段安装的完成记录:作为安装最后一步写进 staging 目录,随后 staging
-// 原子 rename 成版本目录;激活前重新校验 bundle 摘要。空文件 = 旧版 SDK
-// 写的历史标记,仍视为完整安装(无摘要可验)。
-export const INSTALL_RECORD_SCHEMA = 1;
-export const INSTALL_RECORD_FILE_NAME = '.pushy-complete';
+// 两阶段安装的完成记录(cpp/patch_core/install_record.h,三端共用的唯一
+// 实现):解压/打补丁全在 staging 目录里进行,最后写入记录,再一次 rename 成
+// 版本目录;激活前重新校验 bundle 摘要。这里只拼路径、把原生结果映射成
+// 稳定错误码。
+// STAGING_SUFFIX 镜像 kStagingSuffix(scripts/check-constant-parity.js 断言)。
 export const STAGING_SUFFIX = '.staging';
-// 归档不得携带任何 `.pushy-` 前缀的条目(任意深度):这些名字保留给 SDK 自己
-// 写的记录,与 Android 的规则一致。
-export const RESERVED_ENTRY_PREFIX = '.pushy-';
 export const HARMONY_BUNDLE_FILE_NAME = 'bundle.harmony.js';
-
-export interface InstallRecordData {
-  schema?: number;
-  versionHash?: string;
-  bundleSha256?: string;
-  artifactSha256?: string;
-}
 
 export function stagingDirectoryFor(versionDir: string): string {
   return `${versionDir}${STAGING_SUFFIX}`;
 }
 
-export function isReservedEntryName(name: string): boolean {
-  return name.startsWith(RESERVED_ENTRY_PREFIX);
-}
-
-export function buildInstallRecord(
+/**
+ * 在 native 工作线程计算 staging 里 bundle 的摘要并原子写入完成记录
+ * (schema 1 的 bundleSha256 必填:算不出摘要就安装失败)。失败 = PATCH_FAILED。
+ */
+export async function sealInstallRecord(
+  stagingDir: string,
   versionHash: string,
-  bundleSha256: string,
   artifactSha256: string,
-): string {
-  // schema 1 的 bundleSha256 是必填:算不出摘要的版本必须安装失败,绝不能
-  // 写成一条无法复核的记录。
-  if (!bundleSha256) {
-    throw createPushyError(
-      ERROR_DELTA_FAILED,
-      `Bundle version ${versionHash} has no bundle digest.`,
-    );
-  }
-  const record: InstallRecordData = {
-    schema: INSTALL_RECORD_SCHEMA,
-    versionHash,
-    bundleSha256,
-  };
-  if (artifactSha256) {
-    record.artifactSha256 = artifactSha256;
-  }
-  return JSON.stringify(record);
-}
-
-/** 写入并 fsync:紧随其后的 rename 必须能在盘上看到它。 */
-export async function writeInstallRecord(
-  versionDir: string,
-  recordJson: string,
 ): Promise<void> {
-  const path = `${versionDir}/${INSTALL_RECORD_FILE_NAME}`;
-  if (fileIo.accessSync(path)) {
-    await fileIo.unlink(path);
-  }
-  const file = await fileIo.open(
-    path,
-    fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,
-  );
   try {
-    const bytes = new util.TextEncoder().encodeInto(recordJson);
-    await fileIo.write(file.fd, bytes.buffer as ArrayBuffer);
-    await fileIo.fsync(file.fd);
-  } finally {
-    await fileIo.close(file);
-  }
-}
-
-/**
- * 解析记录文本:空串(历史标记)返回 {};畸形/非对象返回 null。纯函数,
- * 供 readInstallRecord 与单测共用。
- */
-export function parseInstallRecord(text: string): InstallRecordData | null {
-  if (text.length === 0) {
-    return {};
-  }
-  try {
-    const parsed = JSON.parse(text) as InstallRecordData | null;
-    return parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)
-      ? parsed
-      : null;
+    await NativePatchCore.sealInstallRecord(
+      stagingDir,
+      versionHash,
+      HARMONY_BUNDLE_FILE_NAME,
+      artifactSha256,
+    );
   } catch (e) {
-    return null;
+    throw createPushyError(ERROR_DELTA_FAILED, getErrorMessage(e));
   }
 }
 
-/**
- * 读取记录:文件缺失/畸形返回 null;空文件(历史标记)返回 {}。
- */
-export function readInstallRecord(versionDir: string): InstallRecordData | null {
-  const path = `${versionDir}/${INSTALL_RECORD_FILE_NAME}`;
-  if (!fileIo.accessSync(path)) {
-    return null;
-  }
+/** staging rename 成版本目录(调用方先删掉已有的版本目录)。失败 = PATCH_FAILED。 */
+export async function promoteStaging(
+  stagingDir: string,
+  versionDir: string,
+): Promise<void> {
   try {
-    const stat = fileIo.statSync(path);
-    if (stat.size === 0) {
-      return {};
-    }
-    if (stat.size > 64 * 1024) {
-      return null;
-    }
-    return parseInstallRecord(fileIo.readTextSync(path));
+    await NativePatchCore.promoteStaging(stagingDir, versionDir);
   } catch (e) {
-    return null;
+    throw createPushyError(ERROR_DELTA_FAILED, getErrorMessage(e));
   }
 }
 
-/** 记录是否宣告本版本完整安装(历史空记录视为是)。纯函数。 */
-export function isRecordForVersion(
-  record: InstallRecordData | null,
-  versionHash: string,
-): boolean {
-  if (record === null) {
-    return false;
-  }
-  if (Object.keys(record).length === 0) {
-    return true;
-  }
-  return (
-    record.schema === INSTALL_RECORD_SCHEMA && record.versionHash === versionHash
-  );
-}
-
-/** 存在性判定(启动/去重路径,不算摘要):记录存在且(非历史空文件时)指向本版本。 */
+/** 存在性判定(启动/去重路径,不算摘要)。 */
 export function isInstallComplete(versionDir: string, versionHash: string): boolean {
-  return isRecordForVersion(readInstallRecord(versionDir), versionHash);
+  return NativePatchCore.isInstallComplete(
+    versionDir,
+    versionHash,
+    HARMONY_BUNDLE_FILE_NAME,
+  );
+}
+
+/** 记录里的 bundleSha256(崩溃归因);没有时为空串。 */
+export function recordedBundleSha256(versionDir: string): string {
+  return NativePatchCore.recordedBundleSha256(versionDir);
 }
 
 /**
- * 激活前的记录校验(不含摘要):返回需要复核的 bundle 摘要,仅历史空记录
- * 返回空串;记录缺失/不符或缺摘要(schema 1 必填)抛 SWITCH_VERSION_FAILED。
- * 纯函数。
- */
-export function expectedBundleSha256ForActivation(
-  record: InstallRecordData | null,
-  versionHash: string,
-): string {
-  if (record === null) {
-    throw createPushyError(
-      ERROR_SWITCH_VERSION_FAILED,
-      `Bundle version ${versionHash} has no valid completion record.`,
-    );
-  }
-  if (Object.keys(record).length === 0) {
-    return '';
-  }
-  if (
-    record.schema !== INSTALL_RECORD_SCHEMA ||
-    record.versionHash !== versionHash
-  ) {
-    throw createPushyError(
-      ERROR_SWITCH_VERSION_FAILED,
-      `Bundle version ${versionHash} completion record mismatch.`,
-    );
-  }
-  const expected = record.bundleSha256;
-  if (typeof expected !== 'string' || expected.length === 0) {
-    throw createPushyError(
-      ERROR_SWITCH_VERSION_FAILED,
-      `Bundle version ${versionHash} completion record mismatch.`,
-    );
-  }
-  return expected;
-}
-
-/**
- * 激活前校验:非历史空记录时在 native 工作线程重新计算 bundle 摘要(整包
- * 几十 MB,不能在 UI 线程同步算);不通过则抛错说明原因。
+ * 激活前校验:bundle 在盘上,且记录的摘要与盘上字节一致(整包几十 MB,在
+ * native 工作线程算)。无记录文件的目录只有是 current/last(grandfathered,
+ * 标记机制之前就激活过)时放行。不通过抛 SWITCH_VERSION_FAILED。
  */
 export async function verifyInstallForActivation(
   versionDir: string,
   versionHash: string,
-  bundlePath: string,
+  grandfathered: boolean,
 ): Promise<void> {
-  const expected = expectedBundleSha256ForActivation(
-    readInstallRecord(versionDir),
-    versionHash,
-  );
-  if (!expected) {
-    return;
-  }
-  const actual = await NativePatchCore.sha256HexFileAsync(bundlePath);
-  if (actual.toLowerCase() !== expected.toLowerCase()) {
-    throw createPushyError(
-      ERROR_SWITCH_VERSION_FAILED,
-      `Bundle version ${versionHash} bundle digest mismatch.`,
+  try {
+    await NativePatchCore.checkActivation(
+      versionDir,
+      versionHash,
+      HARMONY_BUNDLE_FILE_NAME,
+      grandfathered,
     );
+  } catch (e) {
+    throw createPushyError(ERROR_SWITCH_VERSION_FAILED, getErrorMessage(e));
   }
 }

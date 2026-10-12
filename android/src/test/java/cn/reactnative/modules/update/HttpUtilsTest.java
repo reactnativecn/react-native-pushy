@@ -54,15 +54,6 @@ public class HttpUtilsTest {
     }
 
     @Test
-    public void normalizeEndpointBaseStripsTrailingSlashes() {
-        assertEquals("https://update.example.com", HttpUtils.normalizeEndpointBase("https://update.example.com/"));
-        assertEquals("https://update.example.com", HttpUtils.normalizeEndpointBase("https://update.example.com///"));
-        assertEquals("https://update.example.com/api", HttpUtils.normalizeEndpointBase("https://update.example.com/api"));
-        assertEquals("", HttpUtils.normalizeEndpointBase(""));
-        assertEquals("", HttpUtils.normalizeEndpointBase("/"));
-    }
-
-    @Test
     public void isHttpsUrlIsCaseInsensitiveAndStrict() {
         assertTrue(HttpUtils.isHttpsUrl("https://example.com/app.apk"));
         assertTrue(HttpUtils.isHttpsUrl("HTTPS://example.com/app.apk"));
@@ -76,7 +67,7 @@ public class HttpUtilsTest {
     @Test
     public void revealDecodesEncodedText() {
         // Encoded with scripts/encode-native-text.ts.
-        assertEquals("/checkUpdate/", HttpUtils.QUERY_PATH);
+        assertEquals("/checkUpdate/", Texts.reveal("7514fcd4ad805d55263e08fc99"));
         assertEquals("https://update.react-native.cn/api",
             Texts.reveal("3203e0c1bdd1270a372f18f8c2b6de7f4f2607f5b3d5b9817b592947e5cdefbc8a7e"));
         assertEquals("", Texts.reveal(""));

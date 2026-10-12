@@ -1,6 +1,7 @@
 // Foundation-only host for the UNMODIFIED production methods extracted at build
 // time. The state lock, defaults transitions, launch resolution, restore window,
-// commit and reset bodies all come from RCTPushy.mm; see README.md for the seams.
+// commit, reset and switchVersion bodies all come from ios/RCTPushy; see
+// README.md for the seams.
 #import <Foundation/Foundation.h>
 #import <dispatch/dispatch.h>
 #import <os/lock.h>
@@ -16,7 +17,8 @@
 #include "cpp/patch_core/error_codes.h"
 #include "cpp/patch_core/digest.h"
 #include "cpp/patch_core/install_record.h"
-#include "ios/RCTPushy/RCTPushyConfiguration.h"
+#include "cpp/update_flow_core/native_config.h"
+#include "ios/RCTPushy/RCTPushyCommon.h"
 
 #undef TARGET_OS_TV
 #define TARGET_OS_TV 1
@@ -31,12 +33,9 @@ static void TestLog(NSString *, ...) {}
 #define RCTLogWarn TestLog
 #define RCTLogError TestLog
 
-// Pod-internal linkage (RCTPushyInternal.h); one translation unit here.
+// Pod-internal linkage (RCTPushyCommon.h); one translation unit here.
+#undef PUSHY_HIDDEN
 #define PUSHY_HIDDEN
-
-// RCTPushy.mm's own #define, not extracted; InstallRecordActivation checks it
-// against install_record.h.
-#define VERSION_COMPLETE_FILE_NAME_LITERAL ".pushy-complete"
 #include "globals.inc"
 
 static const char *testName = "setup";
@@ -165,9 +164,7 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
 }
 }}
 
-@interface RCTPushy : NSObject {
-    dispatch_queue_t _fileQueue;
-}
+@interface RCTPushy : NSObject
 + (NSURL *)bundleURL;
 + (NSURL *)resolveLaunchBundleURL:(NSString **)rolledBack purgedVersion:(NSString **)purged;
 + (NSURL *)binaryBundleURL;
@@ -175,7 +172,10 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
 + (NSString *)buildTime;
 + (NSString *)downloadDir;
 - (void)resetToPackagedBundle:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
-- (BOOL)switchVersion:(NSString *)hash error:(NSError **)error;
+@end
+
+@interface RCTPushyInstaller : NSObject
++ (BOOL)switchVersion:(NSString *)hash error:(NSError **)error;
 @end
 
 @interface RCTPushyOrchestrator : NSObject
@@ -188,10 +188,7 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
                  configGeneration:(uint64_t)configGeneration
                          hashInfo:(NSDictionary *)hashInfo
                          activate:(NSString *)hash
-                     responseText:(NSString *)response
-                          request:(NSString *)request
-                           config:(NSString *)config
-                       responseAt:(long long)responseAt
+                            cache:(NSString *)cache
                         activated:(BOOL *)activated;
 @end
 
@@ -273,16 +270,15 @@ static dispatch_time_t TestLaunchDeadline(dispatch_time_t when, int64_t delta) {
 }
 
 @implementation RCTPushy
-- (instancetype)init {
-    self = [super init];
-    if (self) { _fileQueue = dispatch_queue_create("pushy.test.files", DISPATCH_QUEUE_SERIAL); }
-    return self;
-}
 + (NSURL *)binaryBundleURL { return [NSURL fileURLWithPath:[root stringByAppendingPathComponent:@"packaged.bundle"]]; }
 + (NSString *)packageVersion { return @"1.0"; }
 + (NSString *)buildTime { return @"123"; }
 + (NSString *)downloadDir { return [root stringByAppendingPathComponent:@"updates"]; }
 #include "pushy.inc"
+@end
+
+@implementation RCTPushyInstaller
+#include "installer.inc"
 @end
 
 @implementation RCTPushyOrchestrator
@@ -302,8 +298,7 @@ static dispatch_time_t TestLaunchDeadline(dispatch_time_t when, int64_t delta) {
         roundCommitted = [self commitRoundWithGeneration:requestGeneration
             configGeneration:pushyNativeConfigGeneration.load()
             hashInfo:@{@"hash": @"B", @"info": @{@"name": @"B", @"forceBootRescue": @YES}}
-            activate:@"B" responseText:@"{\"update\":true,\"hash\":\"B\"}"
-            request:@"request" config:@"config" responseAt:123 activated:&roundActivated];
+            activate:@"B" cache:@"{\"ts\":123,\"body\":\"{}\"}" activated:&roundActivated];
         pushyHostRoundResult = @{@"status": @"test", @"reason": @"", @"hash": @"B"};
         Signal(commitFinished);
         actor = Actor::None;
@@ -518,10 +513,11 @@ static void DefaultsIsolation(void) {
     });
 }
 
-// Canonical config equality shared with JS/Android/Harmony: equal canonical
-// forms are the same config (persistConfiguration no-op, hasJsRound match).
-// Replays the cross-platform vectors every implementation consumes; the file
-// is located from this source file (<repo>/scripts/tests/ios-purge-restore/).
+// Canonical config equality (contract C1, flowcore::ConfigsEquivalent): equal
+// canonical forms are the same config (persistConfiguration no-op,
+// hasJsRound match). Replays the shared vectors through the NSString binding;
+// the file is located from this source file
+// (<repo>/scripts/tests/ios-purge-restore/).
 static void ConfigEquivalence(void) {
     NSString *repo = [[[[@__FILE__ stringByDeletingLastPathComponent]
         stringByDeletingLastPathComponent] stringByDeletingLastPathComponent]
@@ -544,9 +540,10 @@ static void ConfigEquivalence(void) {
     std::printf("[PASS] config_equivalence: %lu shared vectors\n", (unsigned long)cases.count);
 }
 
-// Two-phase install record (cpp/patch_core/install_record.h): the production
-// activation check against real files. Schema 1 makes bundleSha256 mandatory;
-// only the legacy EMPTY marker (SDK < 10.53) activates without a digest.
+// Two-phase install record (cpp/patch_core/install_record.h): the shared
+// activation check switchVersion:error: calls, against real files. Schema 1
+// makes bundleSha256 mandatory; only the legacy EMPTY marker (SDK < 10.53)
+// activates without a digest.
 static NSString *Sha256Hex(NSData *data) {
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
@@ -556,8 +553,6 @@ static NSString *Sha256Hex(NSData *data) {
 }
 
 static void InstallRecordActivation(void) {
-    Expect([VERSION_COMPLETE_FILE_NAME isEqualToString:@(pushy::install_record::kFileName)],
-           "record file name matches install_record.h");
     NSString *hash = @"0123456789abcdef";
     NSString *dir = [NSTemporaryDirectory() stringByAppendingPathComponent:
         [NSString stringWithFormat:@"pushy-install-record-%@", NSUUID.UUID.UUIDString]];
@@ -566,14 +561,19 @@ static void InstallRecordActivation(void) {
     NSData *bundle = [@"var a = 1;" dataUsingEncoding:NSUTF8StringEncoding];
     Expect([bundle writeToFile:[dir stringByAppendingPathComponent:BUNDLE_FILE_NAME] atomically:YES],
            "write bundle");
-    NSString *marker = [dir stringByAppendingPathComponent:VERSION_COMPLETE_FILE_NAME];
+    NSString *marker = [dir stringByAppendingPathComponent:@(pushy::install_record::kFileName)];
+    auto check = ^NSString *(void) {
+        pushy::install_record::Activation activation;
+        pushy::install_record::Status status = pushy::install_record::CheckActivation(
+            PushyToStdString(dir), PushyToStdString(hash), PushyToStdString(BUNDLE_FILE_NAME),
+            false, &activation);
+        return status.ok ? nil : PushyFromStdString(status.message);
+    };
     auto verify = ^NSString *(id record) {
         NSData *data = [record isKindOfClass:NSData.class]
             ? record : [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
         Expect([data writeToFile:marker atomically:YES], "write record");
-        NSDictionary *verified = nil;
-        PushyFileStamp stamp;
-        return PushyVerifyInstallForActivation(dir, hash, &verified, &stamp);
+        return check();
     };
     auto rejected = ^bool(NSString *reason, NSString *what) {
         return reason != nil && [reason containsString:what];
@@ -603,12 +603,11 @@ static void InstallRecordActivation(void) {
     Expect(rejected(verify(@{@"schema": schema, @"versionHash": @"other",
                              @"bundleSha256": Sha256Hex(bundle)}), @"completion record mismatch"),
            "record for another version must not activate");
-    [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
-    NSDictionary *verified = nil;
-    PushyFileStamp stamp;
-    Expect(rejected(PushyVerifyInstallForActivation(dir, hash, &verified, &stamp),
+    Expect(rejected(verify([@"{oops" dataUsingEncoding:NSUTF8StringEncoding]),
                     @"no valid completion record"),
-           "missing record must not activate");
+           "malformed record must not activate");
+    [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
+    Expect(rejected(check(), @"is incomplete"), "missing record must not activate");
     [NSFileManager.defaultManager removeItemAtPath:dir error:nil];
 }
 
@@ -625,7 +624,7 @@ static void SwitchVersionRecords(void) {
     NSData *bundle = [@"C" dataUsingEncoding:NSUTF8StringEncoding];
     Expect([bundle writeToFile:[dir stringByAppendingPathComponent:BUNDLE_FILE_NAME] atomically:YES],
            "write C bundle");
-    NSString *marker = [dir stringByAppendingPathComponent:VERSION_COMPLETE_FILE_NAME];
+    NSString *marker = [dir stringByAppendingPathComponent:@(pushy::install_record::kFileName)];
     NSNumber *schema = @(pushy::install_record::kSchema);
     auto setRecord = ^(NSDictionary *record) {
         [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
@@ -645,7 +644,7 @@ static void SwitchVersionRecords(void) {
     };
     auto rejection = ^NSString *(void) {
         NSError *error = nil;
-        if ([engine switchVersion:hash error:&error]) {
+        if ([RCTPushyInstaller switchVersion:hash error:&error]) {
             return nil;
         }
         Expect([error.domain isEqualToString:@(pushy::error_codes::kSwitchVersionFailed)],

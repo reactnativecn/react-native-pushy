@@ -1,7 +1,8 @@
 #include <napi/native_api.h>
 
 #include "flow_json.h"
-#include "update_flow_core.h"
+#include "native_config.h"
+#include "native_round.h"
 #include <js_native_api.h>
 #include <js_native_api_types.h>
 
@@ -9,17 +10,17 @@
 #include <cstdint>
 #include <string>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
+#include "archive_limits.h"
 #include "archive_patch_core.h"
 #include "digest.h"
+#include "install_record.h"
 #include "hbc_transform_wire.h"
 #include "patch_core.h"
 #include "state_core.h"
 #include "state_ops.h"
-
-extern "C" {
-}
 
 namespace {
 
@@ -317,7 +318,11 @@ napi_value NewBoolean(napi_env env, bool value) {
 
 napi_value NewString(napi_env env, const std::string& value) {
   napi_value result = nullptr;
-  napi_create_string_utf8(env, value.c_str(), value.size(), &result);
+  if (napi_create_string_utf8(env, value.c_str(), value.size(), &result) !=
+      napi_ok) {
+    ThrowError(env, "Failed to create string");
+    return nullptr;
+  }
   return result;
 }
 
@@ -340,14 +345,19 @@ void SetBoolProperty(
   napi_set_named_property(env, object, name, NewBoolean(env, value));
 }
 
+// Per-operation outputs reported next to the state; all default to "nothing".
+struct StateResultExtras {
+  bool changed = false;
+  std::string stale_version_to_delete;
+  std::string load_version;
+  bool did_rollback = false;
+  bool consumed_first_time = false;
+};
+
 napi_value NewStateResult(
     napi_env env,
     const pushy::state::State& state,
-    bool changed,
-    const std::string& stale_version_to_delete,
-    const std::string& load_version,
-    bool did_rollback,
-    bool consumed_first_time) {
+    const StateResultExtras& extras = StateResultExtras()) {
   napi_value result = nullptr;
   napi_create_object(env, &result);
 
@@ -358,21 +368,12 @@ napi_value NewStateResult(
   SetBoolProperty(env, result, "firstTime", state.first_time);
   SetBoolProperty(env, result, "firstTimeOk", state.first_time_ok);
   SetStringProperty(env, result, "rolledBackVersion", state.rolled_back_version);
-  SetBoolProperty(env, result, "changed", changed);
-  SetStringProperty(env, result, "staleVersionToDelete", stale_version_to_delete);
-  SetStringProperty(env, result, "loadVersion", load_version);
-  SetBoolProperty(env, result, "didRollback", did_rollback);
-  SetBoolProperty(env, result, "consumedFirstTime", consumed_first_time);
-  return result;
-}
-
-napi_value NewArchivePatchPlanResult(
-    napi_env env,
-    const pushy::archive_patch::ArchivePatchPlan& plan) {
-  napi_value result = nullptr;
-  napi_create_object(env, &result);
-  SetStringProperty(env, result, "mergeSourceSubdir", plan.merge_source_subdir);
-  SetBoolProperty(env, result, "enableMerge", plan.enable_merge);
+  SetBoolProperty(env, result, "changed", extras.changed);
+  SetStringProperty(
+      env, result, "staleVersionToDelete", extras.stale_version_to_delete);
+  SetStringProperty(env, result, "loadVersion", extras.load_version);
+  SetBoolProperty(env, result, "didRollback", extras.did_rollback);
+  SetBoolProperty(env, result, "consumedFirstTime", extras.consumed_first_time);
   return result;
 }
 
@@ -397,22 +398,16 @@ napi_value NewCopyGroupArray(
           NewString(env, groups[index].to_paths[target_index]));
     }
     napi_set_named_property(env, group, "toPaths", to_paths);
+    if (groups[index].has_expected_crc) {
+      // A CRC32 fits a double exactly, like the manifest's JSON number.
+      napi_value crc = nullptr;
+      napi_create_double(
+          env, static_cast<double>(groups[index].expected_crc), &crc);
+      napi_set_named_property(env, group, "expectedCrc", crc);
+    }
     napi_set_element(env, result, index, group);
   }
   return result;
-}
-
-pushy::delta::PatchManifest BuildManifest(
-    const std::vector<std::string>& copy_froms,
-    const std::vector<std::string>& copy_tos,
-    const std::vector<std::string>& deletes) {
-  pushy::delta::PatchManifest manifest;
-  for (size_t index = 0; index < copy_froms.size(); ++index) {
-    manifest.copies.push_back(
-        pushy::delta::CopyOperation{copy_froms[index], copy_tos[index]});
-  }
-  manifest.deletes = deletes;
-  return manifest;
 }
 
 napi_value SyncStateWithBinaryVersion(napi_env env, napi_callback_info info) {
@@ -439,7 +434,9 @@ napi_value SyncStateWithBinaryVersion(napi_env env, napi_callback_info info) {
 
   const pushy::state::BinaryVersionSyncResult result =
       pushy::state::SyncBinaryVersion(state, package_version, build_time);
-  return NewStateResult(env, result.state, result.changed, std::string(), std::string(), false, false);
+  StateResultExtras extras;
+  extras.changed = result.changed;
+  return NewStateResult(env, result.state, extras);
 }
 
 napi_value RunStateCore(napi_env env, napi_callback_info info) {
@@ -480,59 +477,32 @@ napi_value RunStateCore(napi_env env, napi_callback_info info) {
 
   switch (static_cast<StateOperation>(operation)) {
     case StateOperation::kSwitchVersion:
-      return NewStateResult(
-          env,
-          pushy::state::SwitchVersion(state, string_arg),
-          false,
-          std::string(),
-          std::string(),
-          false,
-          false);
+      return NewStateResult(env, pushy::state::SwitchVersion(state, string_arg));
     case StateOperation::kMarkSuccess: {
       const pushy::state::MarkSuccessResult result = pushy::state::MarkSuccess(state);
-      return NewStateResult(
-          env,
-          result.state,
-          false,
-          result.stale_version_to_delete,
-          std::string(),
-          false,
-          false);
+      StateResultExtras extras;
+      extras.stale_version_to_delete = result.stale_version_to_delete;
+      return NewStateResult(env, result.state, extras);
     }
     case StateOperation::kRollback: {
       const pushy::state::State next = pushy::state::Rollback(state);
-      return NewStateResult(
-          env, next, false, std::string(), next.current_version, true, false);
+      StateResultExtras extras;
+      extras.load_version = next.current_version;
+      extras.did_rollback = true;
+      return NewStateResult(env, next, extras);
     }
     case StateOperation::kClearFirstTime:
-      return NewStateResult(
-          env,
-          pushy::state::ClearFirstTime(state),
-          false,
-          std::string(),
-          std::string(),
-          false,
-          false);
+      return NewStateResult(env, pushy::state::ClearFirstTime(state));
     case StateOperation::kClearRollbackMark:
-      return NewStateResult(
-          env,
-          pushy::state::ClearRollbackMark(state),
-          false,
-          std::string(),
-          std::string(),
-          false,
-          false);
+      return NewStateResult(env, pushy::state::ClearRollbackMark(state));
     case StateOperation::kResolveLaunch: {
       const pushy::state::LaunchDecision decision =
           pushy::state::ResolveLaunchState(state, flag_a, flag_b);
-      return NewStateResult(
-          env,
-          decision.state,
-          false,
-          std::string(),
-          decision.load_version,
-          decision.did_rollback,
-          decision.consumed_first_time);
+      StateResultExtras extras;
+      extras.load_version = decision.load_version;
+      extras.did_rollback = decision.did_rollback;
+      extras.consumed_first_time = decision.consumed_first_time;
+      return NewStateResult(env, decision.state, extras);
     }
   }
 
@@ -540,105 +510,10 @@ napi_value RunStateCore(napi_env env, napi_callback_info info) {
   return nullptr;
 }
 
-napi_value BuildArchivePatchPlan(napi_env env, napi_callback_info info) {
-  napi_value args[6] = {nullptr, nullptr, nullptr, nullptr, nullptr, nullptr};
-  size_t argc = 6;
-  if (!GetArgCount(env, info, &argc, args) || argc < 5) {
-    ThrowError(env, "Wrong number of arguments");
-    return nullptr;
-  }
-
-  int32_t patch_type = 0;
-  if (!GetInt32(env, args[0], &patch_type)) {
-    return nullptr;
-  }
-
-  std::vector<std::string> entry_names;
-  std::vector<std::string> copy_froms;
-  std::vector<std::string> copy_tos;
-  std::vector<std::string> deletes;
-  if (!GetStringArray(env, args[1], &entry_names) ||
-      !GetStringArray(env, args[2], &copy_froms) ||
-      !GetStringArray(env, args[3], &copy_tos) ||
-      !GetStringArray(env, args[4], &deletes)) {
-    return nullptr;
-  }
-  if (copy_froms.size() != copy_tos.size()) {
-    ThrowError(env, "copyFroms and copyTos length mismatch");
-    return nullptr;
-  }
-
-  std::string bundle_patch_entry_name =
-      pushy::archive_patch::DefaultBundleDeltaEntryName();
-  if (argc >= 6) {
-    bool ok = false;
-    const std::string candidate = GetString(env, args[5], &ok);
-    if (!ok) {
-      return nullptr;
-    }
-    if (!candidate.empty()) {
-      bundle_patch_entry_name = candidate;
-    }
-  }
-
-  const pushy::delta::PatchManifest manifest =
-      BuildManifest(copy_froms, copy_tos, deletes);
-  pushy::archive_patch::ArchivePatchType archive_type;
-  if (!pushy::archive_patch::TryParseArchivePatchType(patch_type, &archive_type)) {
-    ThrowError(env, "Unknown archive delta type");
-    return nullptr;
-  }
-  pushy::archive_patch::ArchivePatchPlan plan;
-  const pushy::delta::Status status = pushy::archive_patch::BuildArchivePatchPlan(
-      archive_type,
-      manifest,
-      entry_names,
-      &plan,
-      bundle_patch_entry_name);
-  if (!status.ok) {
-    ThrowError(env, status.message);
-    return nullptr;
-  }
-
-  return NewArchivePatchPlanResult(env, plan);
-}
-
-napi_value BuildCopyGroups(napi_env env, napi_callback_info info) {
-  napi_value args[2] = {nullptr, nullptr};
-  size_t argc = 2;
-  if (!GetArgCount(env, info, &argc, args) || argc < 2) {
-    ThrowError(env, "Wrong number of arguments");
-    return nullptr;
-  }
-
-  std::vector<std::string> copy_froms;
-  std::vector<std::string> copy_tos;
-  if (!GetStringArray(env, args[0], &copy_froms) ||
-      !GetStringArray(env, args[1], &copy_tos)) {
-    return nullptr;
-  }
-  if (copy_froms.size() != copy_tos.size()) {
-    ThrowError(env, "copyFroms and copyTos length mismatch");
-    return nullptr;
-  }
-
-  const pushy::delta::PatchManifest manifest =
-      BuildManifest(copy_froms, copy_tos, std::vector<std::string>());
-  std::vector<pushy::archive_patch::CopyGroup> groups;
-  const pushy::delta::Status status =
-      pushy::archive_patch::BuildCopyGroups(manifest, &groups);
-  if (!status.ok) {
-    ThrowError(env, status.message);
-    return nullptr;
-  }
-
-  return NewCopyGroupArray(env, groups);
-}
-
 // ---------------------------------------------------------------------------
 // Async work plumbing for the heavy patch operations.
 //
-// applyDeltaFromSource and cleanupOldEntries run hdiff / recursive file IO
+// applyArchiveDelta and cleanupOldEntries run hdiff / recursive file IO
 // that can take hundreds of ms to seconds. The Pushy TurboModule executes on
 // the UI thread, so running these synchronously froze the UI. These are now
 // wrapped in napi_create_async_work: arguments are parsed on the JS thread, the
@@ -646,8 +521,7 @@ napi_value BuildCopyGroups(napi_env env, napi_callback_info info) {
 // back on the JS thread.
 // ---------------------------------------------------------------------------
 
-// Reject an already-created deferred with an Error(message). Used when async
-// work fails to be created/queued, so the Promise never hangs pending.
+// Reject an already-created deferred with an Error(message).
 void RejectDeferredWithMessage(
     napi_env env,
     napi_deferred deferred,
@@ -659,16 +533,102 @@ void RejectDeferredWithMessage(
   napi_reject_deferred(env, deferred, error);
 }
 
-struct ApplyPatchWork {
+void ResolveDeferredWithUndefined(napi_env env, napi_deferred deferred) {
+  napi_value undefined_value = nullptr;
+  napi_get_undefined(env, &undefined_value);
+  napi_resolve_deferred(env, deferred, undefined_value);
+}
+
+// Resolves with undefined, or rejects with the status message.
+void SettleWithStatus(
+    napi_env env,
+    napi_deferred deferred,
+    const pushy::delta::Status& status) {
+  if (status.ok) {
+    ResolveDeferredWithUndefined(env, deferred);
+  } else {
+    RejectDeferredWithMessage(env, deferred, status.message.c_str());
+  }
+}
+
+template <typename W>
+struct AsyncCall {
   napi_async_work work = nullptr;
   napi_deferred deferred = nullptr;
-  pushy::delta::FileSourcePatchOptions options;
+  W data;
+  void (*execute)(W&) = nullptr;
+  void (*settle)(napi_env, napi_deferred, const W&) = nullptr;
+};
+
+// Runs execute(data) on a libuv worker thread and returns a Promise that
+// settle(env, deferred, data) settles back on the JS thread. Every path
+// settles the promise exactly once and frees the call: a creation or queue
+// failure rejects immediately, and work that was cancelled or aborted before
+// it ran is rejected instead of settled from meaningless results.
+template <typename W>
+napi_value QueueWork(
+    napi_env env,
+    const char* name,
+    W data,
+    void (*execute)(W&),
+    void (*settle)(napi_env, napi_deferred, const W&)) {
+  auto* call = new AsyncCall<W>();
+  call->data = std::move(data);
+  call->execute = execute;
+  call->settle = settle;
+
+  napi_value promise = nullptr;
+  if (napi_create_promise(env, &call->deferred, &promise) != napi_ok) {
+    delete call;
+    ThrowError(env, "Unable to create promise");
+    return nullptr;
+  }
+
+  napi_value resource_name = nullptr;
+  napi_create_string_utf8(env, name, NAPI_AUTO_LENGTH, &resource_name);
+  if (napi_create_async_work(
+          env,
+          nullptr,
+          resource_name,
+          [](napi_env, void* raw) {
+            auto* c = static_cast<AsyncCall<W>*>(raw);
+            c->execute(c->data);
+          },
+          [](napi_env cb_env, napi_status status, void* raw) {
+            auto* c = static_cast<AsyncCall<W>*>(raw);
+            if (status != napi_ok) {
+              RejectDeferredWithMessage(cb_env, c->deferred, "async work aborted");
+            } else {
+              c->settle(cb_env, c->deferred, c->data);
+            }
+            napi_delete_async_work(cb_env, c->work);
+            delete c;
+          },
+          call,
+          &call->work) != napi_ok) {
+    // Work was never created: settle the promise and free the call so it
+    // neither leaks nor hangs pending forever.
+    RejectDeferredWithMessage(env, call->deferred, "Unable to create async work");
+    delete call;
+    return promise;
+  }
+  if (napi_queue_async_work(env, call->work) != napi_ok) {
+    // Queueing failed: the complete callback will never run, so clean up here.
+    napi_delete_async_work(env, call->work);
+    RejectDeferredWithMessage(env, call->deferred, "Unable to queue async work");
+    delete call;
+    return promise;
+  }
+  return promise;
+}
+
+struct ApplyArchiveDeltaWork {
+  pushy::archive_patch::ArchivePatchRequest request;
+  std::vector<pushy::archive_patch::CopyGroup> host_copies;
   pushy::delta::Status status{false, ""};
 };
 
 struct CleanupWork {
-  napi_async_work work = nullptr;
-  napi_deferred deferred = nullptr;
   std::string root_dir;
   // Every version that may still be in use: persisted current/last AND the
   // version this process booted from (two switches without a restart must not
@@ -682,8 +642,6 @@ struct CleanupWork {
 // of MB; hashing it synchronously on the UI thread (where the TurboModule
 // runs) froze the app for hundreds of ms per archive/bundle/activation.
 struct Sha256FileWork {
-  napi_async_work work = nullptr;
-  napi_deferred deferred = nullptr;
   std::string path;
   std::string hex;
 };
@@ -693,8 +651,6 @@ struct Sha256FileWork {
 // the HAP). The fd is never closed here; JS closes it after the promise
 // settles.
 struct Sha256RangeWork {
-  napi_async_work work = nullptr;
-  napi_deferred deferred = nullptr;
   int fd = -1;
   int64_t offset = 0;
   int64_t length = 0;
@@ -704,34 +660,34 @@ struct Sha256RangeWork {
 
 // pread loop (positioned: never moves a file offset the caller may share).
 // A short read before `length` bytes is an error, not EOF.
-void HashFdRange(Sha256RangeWork* w) {
+void HashFdRange(Sha256RangeWork& w) {
   pushy::digest::Sha256 hasher;
   std::vector<uint8_t> buffer(256 * 1024);
-  int64_t position = w->offset;
-  int64_t remaining = w->length;
+  int64_t position = w.offset;
+  int64_t remaining = w.length;
   while (remaining > 0) {
     const size_t want = static_cast<size_t>(
         remaining < static_cast<int64_t>(buffer.size())
             ? remaining
             : static_cast<int64_t>(buffer.size()));
-    const ssize_t read = pread(w->fd, buffer.data(), want, static_cast<off_t>(position));
+    const ssize_t read = pread(w.fd, buffer.data(), want, static_cast<off_t>(position));
     if (read < 0) {
       if (errno == EINTR) {
         continue;
       }
-      w->error = "sha256HexRawFdAsync: read failed (errno " +
+      w.error = "sha256HexRawFdAsync: read failed (errno " +
                  std::to_string(errno) + ")";
       return;
     }
     if (read == 0) {
-      w->error = "sha256HexRawFdAsync: unexpected end of file";
+      w.error = "sha256HexRawFdAsync: unexpected end of file";
       return;
     }
     hasher.Update(buffer.data(), static_cast<size_t>(read));
     position += read;
     remaining -= read;
   }
-  w->hex = hasher.HexDigest();
+  w.hex = hasher.HexDigest();
 }
 
 bool GetNonNegativeInt64(
@@ -751,7 +707,11 @@ bool GetNonNegativeInt64(
   return true;
 }
 
-napi_value ApplyPatchFromFileSource(napi_env env, napi_callback_info info) {
+// applyArchiveDelta(request) -> Promise<CopyGroupResult[]>. The manifest
+// text is parsed (with the rest of the patch) on the worker thread; the
+// promise resolves with the copies the caller still owes (empty unless
+// hostCopiesResources) and rejects with the core's message.
+napi_value ApplyArchiveDelta(napi_env env, napi_callback_info info) {
   napi_value args[1] = {nullptr};
   size_t argc = 1;
   if (!GetArgCount(env, info, &argc, args) || argc < 1) {
@@ -762,105 +722,60 @@ napi_value ApplyPatchFromFileSource(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
-  std::vector<std::string> copy_froms;
-  std::vector<std::string> copy_tos;
-  std::vector<std::string> deletes;
-  std::string source_root;
-  std::string target_root;
-  std::string origin_bundle_path;
-  std::string bundle_patch_path;
-  std::string bundle_output_path;
-  std::string merge_source_subdir;
-  std::string bundle_hbc_transform_meta;
-  bool enable_merge = true;
-
-  if (!GetOptionalStringArrayProperty(env, args[0], "copyFroms", &copy_froms) ||
-      !GetOptionalStringArrayProperty(env, args[0], "copyTos", &copy_tos) ||
-      !GetOptionalStringArrayProperty(env, args[0], "deletes", &deletes) ||
-      !GetOptionalStringProperty(env, args[0], "sourceRoot", &source_root) ||
-      !GetOptionalStringProperty(env, args[0], "targetRoot", &target_root) ||
-      !GetOptionalStringProperty(env, args[0], "originBundlePath", &origin_bundle_path) ||
-      !GetOptionalStringProperty(env, args[0], "bundleDeltaPath", &bundle_patch_path) ||
-      !GetOptionalStringProperty(env, args[0], "bundleOutputPath", &bundle_output_path) ||
-      !GetOptionalStringProperty(env, args[0], "mergeSourceSubdir", &merge_source_subdir) ||
+  ApplyArchiveDeltaWork work;
+  pushy::archive_patch::ArchivePatchRequest& request = work.request;
+  napi_value patch_type_value = nullptr;
+  int32_t patch_type = 0;
+  std::string bundle_patch_entry_name;
+  if (!GetNamedProperty(env, args[0], "archiveType", &patch_type_value) ||
+      !GetInt32(env, patch_type_value, &patch_type) ||
+      !GetOptionalStringArrayProperty(
+          env, args[0], "entryNames", &request.archive.entry_names) ||
       !GetOptionalStringProperty(
-          env, args[0], "bundleHbcTransformMeta", &bundle_hbc_transform_meta) ||
-      !GetOptionalBoolProperty(env, args[0], "enableMerge", true, &enable_merge)) {
+          env, args[0], "manifestJson", &request.archive.manifest_json) ||
+      !GetOptionalStringProperty(
+          env, args[0], "bundleDeltaEntry", &bundle_patch_entry_name) ||
+      !GetOptionalStringProperty(
+          env, args[0], "copySourcePrefix", &request.archive.copy_source_prefix) ||
+      !GetOptionalStringProperty(env, args[0], "sourceRoot", &request.source_root) ||
+      !GetOptionalStringProperty(env, args[0], "targetRoot", &request.target_root) ||
+      !GetOptionalStringProperty(
+          env, args[0], "originBundlePath", &request.origin_bundle_path) ||
+      !GetOptionalStringProperty(
+          env, args[0], "bundleDeltaPath", &request.bundle_patch_path) ||
+      !GetOptionalStringProperty(
+          env, args[0], "bundleOutputPath", &request.bundle_output_path) ||
+      !GetOptionalBoolProperty(
+          env, args[0], "hostCopiesResources", false,
+          &request.host_copies_resources)) {
     return nullptr;
   }
-  if (copy_froms.size() != copy_tos.size()) {
-    ThrowError(env, "copyFroms and copyTos length mismatch");
+  // The shared parser keeps Android and HarmonyOS in agreement on which
+  // integer values are valid; neither silently falls back to kFull.
+  if (!pushy::archive_patch::TryParseArchivePatchType(
+          patch_type, &request.archive.type)) {
+    ThrowError(env, "Unknown archive delta type");
     return nullptr;
   }
-
-  auto* work_data = new ApplyPatchWork();
-  work_data->options.manifest = BuildManifest(copy_froms, copy_tos, deletes);
-  work_data->options.source_root = source_root;
-  work_data->options.target_root = target_root;
-  work_data->options.origin_bundle_path = origin_bundle_path;
-  work_data->options.bundle_patch_path = bundle_patch_path;
-  work_data->options.bundle_output_path = bundle_output_path;
-  work_data->options.merge_source_subdir = merge_source_subdir;
-  work_data->options.bundle_hbc_transform_meta = bundle_hbc_transform_meta;
-  work_data->options.enable_merge = enable_merge;
-
-  napi_value promise = nullptr;
-  if (napi_create_promise(env, &work_data->deferred, &promise) != napi_ok) {
-    delete work_data;
-    ThrowError(env, "Unable to create promise");
-    return nullptr;
+  if (!bundle_patch_entry_name.empty()) {
+    request.archive.bundle_patch_entry_name = bundle_patch_entry_name;
   }
 
-  napi_value resource_name = nullptr;
-  napi_create_string_utf8(
-      env, "applyDeltaFromSource", NAPI_AUTO_LENGTH, &resource_name);
-  if (napi_create_async_work(
-          env,
-          nullptr,
-          resource_name,
-          [](napi_env, void* data) {
-            auto* w = static_cast<ApplyPatchWork*>(data);
-            w->status = pushy::delta::ApplyPatchFromFileSource(w->options);
-          },
-          [](napi_env cb_env, napi_status status, void* data) {
-            auto* w = static_cast<ApplyPatchWork*>(data);
-            if (status != napi_ok) {
-              // Cancelled/aborted before execute ran: w->status is
-              // meaningless; still settle the promise so it never hangs.
-              RejectDeferredWithMessage(cb_env, w->deferred, "async work aborted");
-            } else if (w->status.ok) {
-              napi_value undefined_value = nullptr;
-              napi_get_undefined(cb_env, &undefined_value);
-              napi_resolve_deferred(cb_env, w->deferred, undefined_value);
-            } else {
-              napi_value error = nullptr;
-              napi_value message = nullptr;
-              napi_create_string_utf8(
-                  cb_env, w->status.message.c_str(), NAPI_AUTO_LENGTH, &message);
-              napi_create_error(cb_env, nullptr, message, &error);
-              napi_reject_deferred(cb_env, w->deferred, error);
-            }
-            napi_delete_async_work(cb_env, w->work);
-            delete w;
-          },
-          work_data,
-          &work_data->work) != napi_ok) {
-    // Work was never created: settle the promise and free the data so it does
-    // not leak / hang pending forever.
-    RejectDeferredWithMessage(
-        env, work_data->deferred, "Unable to create async work");
-    delete work_data;
-    return promise;
-  }
-  if (napi_queue_async_work(env, work_data->work) != napi_ok) {
-    // Queued failed: the complete callback will never run, so clean up here.
-    napi_delete_async_work(env, work_data->work);
-    RejectDeferredWithMessage(
-        env, work_data->deferred, "Unable to queue async work");
-    delete work_data;
-    return promise;
-  }
-  return promise;
+  return QueueWork<ApplyArchiveDeltaWork>(
+      env,
+      "applyArchiveDelta",
+      std::move(work),
+      [](ApplyArchiveDeltaWork& w) {
+        w.status =
+            pushy::archive_patch::ApplyArchivePatch(w.request, &w.host_copies);
+      },
+      [](napi_env cb_env, napi_deferred deferred, const ApplyArchiveDeltaWork& w) {
+        if (!w.status.ok) {
+          RejectDeferredWithMessage(cb_env, deferred, w.status.message.c_str());
+          return;
+        }
+        napi_resolve_deferred(cb_env, deferred, NewCopyGroupArray(cb_env, w.host_copies));
+      });
 }
 
 // cleanupOldEntries(rootDir, keepNames: string[], maxAgeDays)
@@ -886,64 +801,22 @@ napi_value CleanupOldEntries(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
-  auto* work_data = new CleanupWork();
-  work_data->root_dir = root_dir;
-  work_data->keep_names = std::move(keep_names);
-  work_data->max_age_days = max_age_days;
+  CleanupWork work;
+  work.root_dir = root_dir;
+  work.keep_names = std::move(keep_names);
+  work.max_age_days = max_age_days;
 
-  napi_value promise = nullptr;
-  if (napi_create_promise(env, &work_data->deferred, &promise) != napi_ok) {
-    delete work_data;
-    ThrowError(env, "Unable to create promise");
-    return nullptr;
-  }
-
-  napi_value resource_name = nullptr;
-  napi_create_string_utf8(
-      env, "cleanupOldEntries", NAPI_AUTO_LENGTH, &resource_name);
-  if (napi_create_async_work(
-          env,
-          nullptr,
-          resource_name,
-          [](napi_env, void* data) {
-            auto* w = static_cast<CleanupWork*>(data);
-            w->status = pushy::delta::CleanupOldEntries(
-                w->root_dir, w->keep_names, w->max_age_days);
-          },
-          [](napi_env cb_env, napi_status status, void* data) {
-            auto* w = static_cast<CleanupWork*>(data);
-            if (status != napi_ok) {
-              RejectDeferredWithMessage(cb_env, w->deferred, "async work aborted");
-            } else if (w->status.ok) {
-              napi_value undefined_value = nullptr;
-              napi_get_undefined(cb_env, &undefined_value);
-              napi_resolve_deferred(cb_env, w->deferred, undefined_value);
-            } else {
-              napi_value error = nullptr;
-              napi_value message = nullptr;
-              napi_create_string_utf8(
-                  cb_env, w->status.message.c_str(), NAPI_AUTO_LENGTH, &message);
-              napi_create_error(cb_env, nullptr, message, &error);
-              napi_reject_deferred(cb_env, w->deferred, error);
-            }
-            napi_delete_async_work(cb_env, w->work);
-            delete w;
-          },
-          work_data,
-          &work_data->work) != napi_ok) {
-    RejectDeferredWithMessage(
-        env, work_data->deferred, "Unable to create async work");
-    delete work_data;
-    return promise;
-  }
-  if (napi_queue_async_work(env, work_data->work) != napi_ok) {
-    napi_delete_async_work(env, work_data->work);
-    RejectDeferredWithMessage(
-        env, work_data->deferred, "Unable to queue async work");
-    delete work_data;
-    return promise;
-  }
-  return promise;
+  return QueueWork<CleanupWork>(
+      env,
+      "cleanupOldEntries",
+      std::move(work),
+      [](CleanupWork& w) {
+        w.status = pushy::delta::CleanupOldEntries(
+            w.root_dir, w.keep_names, w.max_age_days);
+      },
+      [](napi_env cb_env, napi_deferred deferred, const CleanupWork& w) {
+        SettleWithStatus(cb_env, deferred, w.status);
+      });
 }
 
 // sha256HexFileAsync(path) -> Promise<hex>. Rejects when the file cannot be
@@ -965,55 +838,22 @@ napi_value Sha256HexFileAsync(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
-  auto* work_data = new Sha256FileWork();
-  work_data->path = std::move(path);
+  Sha256FileWork work;
+  work.path = std::move(path);
 
-  napi_value promise = nullptr;
-  if (napi_create_promise(env, &work_data->deferred, &promise) != napi_ok) {
-    delete work_data;
-    ThrowError(env, "Unable to create promise");
-    return nullptr;
-  }
-
-  napi_value resource_name = nullptr;
-  napi_create_string_utf8(
-      env, "sha256HexFileAsync", NAPI_AUTO_LENGTH, &resource_name);
-  if (napi_create_async_work(
-          env,
-          nullptr,
-          resource_name,
-          [](napi_env, void* data) {
-            auto* w = static_cast<Sha256FileWork*>(data);
-            w->hex = pushy::digest::Sha256File(w->path);
-          },
-          [](napi_env cb_env, napi_status status, void* data) {
-            auto* w = static_cast<Sha256FileWork*>(data);
-            if (status != napi_ok) {
-              RejectDeferredWithMessage(cb_env, w->deferred, "async work aborted");
-            } else if (w->hex.empty()) {
-              RejectDeferredWithMessage(
-                  cb_env, w->deferred, "sha256HexFileAsync: cannot read file");
-            } else {
-              napi_resolve_deferred(cb_env, w->deferred, NewString(cb_env, w->hex));
-            }
-            napi_delete_async_work(cb_env, w->work);
-            delete w;
-          },
-          work_data,
-          &work_data->work) != napi_ok) {
-    RejectDeferredWithMessage(
-        env, work_data->deferred, "Unable to create async work");
-    delete work_data;
-    return promise;
-  }
-  if (napi_queue_async_work(env, work_data->work) != napi_ok) {
-    napi_delete_async_work(env, work_data->work);
-    RejectDeferredWithMessage(
-        env, work_data->deferred, "Unable to queue async work");
-    delete work_data;
-    return promise;
-  }
-  return promise;
+  return QueueWork<Sha256FileWork>(
+      env,
+      "sha256HexFileAsync",
+      std::move(work),
+      [](Sha256FileWork& w) { w.hex = pushy::digest::Sha256File(w.path); },
+      [](napi_env cb_env, napi_deferred deferred, const Sha256FileWork& w) {
+        if (w.hex.empty()) {
+          RejectDeferredWithMessage(
+              cb_env, deferred, "sha256HexFileAsync: cannot read file");
+        } else {
+          napi_resolve_deferred(cb_env, deferred, NewString(cb_env, w.hex));
+        }
+      });
 }
 
 // sha256HexRawFdAsync(fd, offset, length) -> Promise<hex>, hashed on a libuv
@@ -1042,59 +882,266 @@ napi_value Sha256HexRawFdAsync(napi_env env, napi_callback_info info) {
     return nullptr;
   }
 
-  auto* work_data = new Sha256RangeWork();
-  work_data->fd = fd;
-  work_data->offset = offset;
-  work_data->length = length;
+  Sha256RangeWork work;
+  work.fd = fd;
+  work.offset = offset;
+  work.length = length;
 
-  napi_value promise = nullptr;
-  if (napi_create_promise(env, &work_data->deferred, &promise) != napi_ok) {
-    delete work_data;
-    ThrowError(env, "Unable to create promise");
+  return QueueWork<Sha256RangeWork>(
+      env,
+      "sha256HexRawFdAsync",
+      std::move(work),
+      HashFdRange,
+      [](napi_env cb_env, napi_deferred deferred, const Sha256RangeWork& w) {
+        if (!w.error.empty() || w.hex.empty()) {
+          RejectDeferredWithMessage(
+              cb_env,
+              deferred,
+              w.error.empty() ? "sha256HexRawFdAsync: no digest"
+                              : w.error.c_str());
+        } else {
+          napi_resolve_deferred(cb_env, deferred, NewString(cb_env, w.hex));
+        }
+      });
+}
+
+// ---- Completion records (cpp/patch_core/install_record.h) ----
+
+// Reads the first `count` arguments as strings, of which the first
+// `non_empty` must not be empty; throws and returns false otherwise.
+bool GetStringArgs(
+    napi_env env,
+    napi_callback_info info,
+    const char* name,
+    size_t count,
+    size_t non_empty,
+    std::string* out) {
+  napi_value args[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
+  size_t argc = count;
+  if (count > 5 || !GetArgCount(env, info, &argc, args) || argc < count) {
+    ThrowError(env, std::string(name) + ": wrong number of arguments");
+    return false;
+  }
+  for (size_t i = 0; i < count; i++) {
+    bool ok = false;
+    out[i] = GetString(env, args[i], &ok);
+    if (!ok) {
+      return false;
+    }
+    if (i < non_empty && out[i].empty()) {
+      ThrowError(env, std::string(name) + ": argument " + std::to_string(i) +
+                          " must be a non-empty string");
+      return false;
+    }
+  }
+  return true;
+}
+
+// isInstallComplete(versionDir, versionHash, bundleFileName) -> boolean.
+// Synchronous: a stat and a read of the (at most 64 KB) record, no digest.
+napi_value InstallRecordIsComplete(napi_env env, napi_callback_info info) {
+  std::string args[3];
+  if (!GetStringArgs(env, info, "isInstallComplete", 3, 3, args)) {
     return nullptr;
   }
+  return NewBoolean(env, pushy::install_record::IsComplete(args[0], args[1], args[2]));
+}
 
-  napi_value resource_name = nullptr;
-  napi_create_string_utf8(
-      env, "sha256HexRawFdAsync", NAPI_AUTO_LENGTH, &resource_name);
-  if (napi_create_async_work(
-          env,
-          nullptr,
-          resource_name,
-          [](napi_env, void* data) {
-            HashFdRange(static_cast<Sha256RangeWork*>(data));
-          },
-          [](napi_env cb_env, napi_status status, void* data) {
-            auto* w = static_cast<Sha256RangeWork*>(data);
-            if (status != napi_ok) {
-              RejectDeferredWithMessage(cb_env, w->deferred, "async work aborted");
-            } else if (!w->error.empty() || w->hex.empty()) {
-              RejectDeferredWithMessage(
-                  cb_env,
-                  w->deferred,
-                  w->error.empty() ? "sha256HexRawFdAsync: no digest"
-                                   : w->error.c_str());
-            } else {
-              napi_resolve_deferred(cb_env, w->deferred, NewString(cb_env, w->hex));
-            }
-            napi_delete_async_work(cb_env, w->work);
-            delete w;
-          },
-          work_data,
-          &work_data->work) != napi_ok) {
-    RejectDeferredWithMessage(
-        env, work_data->deferred, "Unable to create async work");
-    delete work_data;
-    return promise;
+// recordedBundleSha256(versionDir) -> string; "" when the record has none.
+// Synchronous like isInstallComplete.
+napi_value InstallRecordBundleSha256(napi_env env, napi_callback_info info) {
+  std::string args[1];
+  if (!GetStringArgs(env, info, "recordedBundleSha256", 1, 1, args)) {
+    return nullptr;
   }
-  if (napi_queue_async_work(env, work_data->work) != napi_ok) {
-    napi_delete_async_work(env, work_data->work);
-    RejectDeferredWithMessage(
-        env, work_data->deferred, "Unable to queue async work");
-    delete work_data;
-    return promise;
+  return NewString(env, pushy::install_record::RecordedBundleSha256(args[0]));
+}
+
+// One install_record call on a libuv worker thread: hashing a bundle (tens
+// of MB) or fsyncing must not block the JS thread.
+struct InstallRecordWork {
+  std::string args[4];
+  bool grandfathered = false;
+  pushy::delta::Status status{false, ""};
+};
+
+void SettleInstallRecordWork(
+    napi_env env,
+    napi_deferred deferred,
+    const InstallRecordWork& w) {
+  SettleWithStatus(env, deferred, w.status);
+}
+
+// sealInstallRecord(stagingDir, versionHash, bundleFileName, artifactSha256)
+// -> Promise<void>: hashes the staged bundle and writes the record.
+napi_value SealInstallRecord(napi_env env, napi_callback_info info) {
+  InstallRecordWork work;
+  if (!GetStringArgs(env, info, "sealInstallRecord", 4, 3, work.args)) {
+    return nullptr;
   }
-  return promise;
+  return QueueWork<InstallRecordWork>(
+      env,
+      "sealInstallRecord",
+      std::move(work),
+      [](InstallRecordWork& w) {
+        w.status = pushy::install_record::Seal(
+                       w.args[0], w.args[1], w.args[2], w.args[3], std::string())
+                       .status;
+      },
+      SettleInstallRecordWork);
+}
+
+// promoteStaging(stagingDir, versionDir) -> Promise<void>: renames the sealed
+// staging directory to the (removed) version directory.
+napi_value PromoteStaging(napi_env env, napi_callback_info info) {
+  InstallRecordWork work;
+  if (!GetStringArgs(env, info, "promoteStaging", 2, 2, work.args)) {
+    return nullptr;
+  }
+  return QueueWork<InstallRecordWork>(
+      env,
+      "promoteStaging",
+      std::move(work),
+      [](InstallRecordWork& w) {
+        w.status = pushy::install_record::Promote(w.args[0], w.args[1]);
+      },
+      SettleInstallRecordWork);
+}
+
+// checkActivation(versionDir, versionHash, bundleFileName, grandfathered)
+// -> Promise<void>, rejected with the reason the version must not be
+// activated.
+napi_value CheckActivation(napi_env env, napi_callback_info info) {
+  InstallRecordWork work;
+  if (!GetStringArgs(env, info, "checkActivation", 3, 3, work.args)) {
+    return nullptr;
+  }
+  napi_value args[4] = {nullptr, nullptr, nullptr, nullptr};
+  size_t argc = 4;
+  if (!GetArgCount(env, info, &argc, args) || argc < 4) {
+    ThrowError(env, "checkActivation: wrong number of arguments");
+    return nullptr;
+  }
+  if (!GetBoolean(env, args[3], &work.grandfathered)) {
+    return nullptr;
+  }
+  return QueueWork<InstallRecordWork>(
+      env,
+      "checkActivation",
+      std::move(work),
+      [](InstallRecordWork& w) {
+        pushy::install_record::Activation activation;
+        w.status = pushy::install_record::CheckActivation(
+            w.args[0], w.args[1], w.args[2], w.grandfathered, &activation);
+      },
+      SettleInstallRecordWork);
+}
+
+// ---- Archive extraction limits (cpp/patch_core/archive_limits.h) ----
+
+// Reads `count` number arguments (byte counts: integers below 2^53).
+bool GetInt64Args(
+    napi_env env,
+    napi_callback_info info,
+    const char* name,
+    size_t count,
+    int64_t* out) {
+  napi_value args[4] = {nullptr, nullptr, nullptr, nullptr};
+  size_t argc = count;
+  if (count > 4 || !GetArgCount(env, info, &argc, args) || argc < count) {
+    ThrowError(env, std::string(name) + ": wrong number of arguments");
+    return false;
+  }
+  for (size_t i = 0; i < count; i++) {
+    napi_valuetype type = napi_undefined;
+    if (!GetValueType(env, args[i], &type) || type != napi_number ||
+        napi_get_value_int64(env, args[i], &out[i]) != napi_ok) {
+      ThrowError(env, std::string(name) + ": argument " + std::to_string(i) +
+                          " must be a number");
+      return false;
+    }
+  }
+  return true;
+}
+
+// checkUncompressedSize(archiveBytes, uncompressedBytes) -> string | undefined:
+// the reason the whole archive's expansion is refused.
+napi_value CheckUncompressedSize(napi_env env, napi_callback_info info) {
+  int64_t args[2] = {0, 0};
+  if (!GetInt64Args(env, info, "checkUncompressedSize", 2, args)) {
+    return nullptr;
+  }
+  const pushy::delta::Status status =
+      pushy::archive_limits::CheckUncompressedSize(args[0], args[1]);
+  return status.ok ? nullptr : NewString(env, status.message);
+}
+
+// planFreeSpaceProbe(knownTotal, writtenBefore, chunkBytes, reservedUntil)
+// -> {probe, reserve, reservedUntil}, before one chunk of a download is
+// written.
+napi_value PlanFreeSpaceProbe(napi_env env, napi_callback_info info) {
+  int64_t args[4] = {0, 0, 0, 0};
+  if (!GetInt64Args(env, info, "planFreeSpaceProbe", 4, args)) {
+    return nullptr;
+  }
+  const pushy::archive_limits::FreeSpaceProbe plan =
+      pushy::archive_limits::PlanUnknownLengthFreeSpaceProbe(
+          args[0], args[1], args[2], args[3]);
+  napi_value result = nullptr;
+  napi_value reserve = nullptr;
+  napi_value reserved_until = nullptr;
+  if (napi_create_object(env, &result) != napi_ok ||
+      napi_create_int64(env, plan.reserve, &reserve) != napi_ok ||
+      napi_create_int64(env, plan.reserved_until, &reserved_until) != napi_ok) {
+    ThrowError(env, "planFreeSpaceProbe: cannot create the result");
+    return nullptr;
+  }
+  SetBoolProperty(env, result, "probe", plan.probe);
+  napi_set_named_property(env, result, "reserve", reserve);
+  napi_set_named_property(env, result, "reservedUntil", reserved_until);
+  return result;
+}
+
+struct ExtractedDirectoryWork {
+  std::string directory;
+  int64_t archive_bytes = 0;
+  pushy::delta::Status status{false, ""};
+};
+
+// checkExtractedDirectory(directory, archiveBytes) -> Promise<void>: walks
+// the freshly unpacked tree on a libuv worker thread and rejects with the
+// first violation.
+napi_value CheckExtractedDirectory(napi_env env, napi_callback_info info) {
+  napi_value args[2] = {nullptr, nullptr};
+  size_t argc = 2;
+  if (!GetArgCount(env, info, &argc, args) || argc < 2) {
+    ThrowError(env, "checkExtractedDirectory: wrong number of arguments");
+    return nullptr;
+  }
+  ExtractedDirectoryWork work;
+  bool ok = false;
+  work.directory = GetString(env, args[0], &ok);
+  if (!ok) {
+    return nullptr;
+  }
+  napi_valuetype type = napi_undefined;
+  if (work.directory.empty() || !GetValueType(env, args[1], &type) ||
+      type != napi_number ||
+      napi_get_value_int64(env, args[1], &work.archive_bytes) != napi_ok) {
+    ThrowError(env, "checkExtractedDirectory: expected a directory and a size");
+    return nullptr;
+  }
+  return QueueWork<ExtractedDirectoryWork>(
+      env,
+      "checkExtractedDirectory",
+      std::move(work),
+      [](ExtractedDirectoryWork& w) {
+        w.status = pushy::archive_limits::CheckExtractedDirectory(
+            w.directory, w.archive_bytes);
+      },
+      [](napi_env cb_env, napi_deferred deferred, const ExtractedDirectoryWork& w) {
+        SettleWithStatus(cb_env, deferred, w.status);
+      });
 }
 
 bool ExportFunction(
@@ -1175,138 +1222,187 @@ static napi_value GetSupportedDiffVersion(napi_env env, napi_callback_info) {
   return result;
 }
 
-// ---- update-flow decision layer (NATIVE_CHECKUPDATE_DESIGN §10) ----
-// String-in/string-out JSON, matching the decision layer's own boundary.
-// Returning undefined (nullptr without a pending exception) means "input did
-// not parse"; the ArkTS orchestrator skips the check round.
+// ---- native round (update_flow_core/native_round.h) ----
+// JSON text in and out. Returning undefined (nullptr without a pending
+// exception) means the core rejected the input; the ArkTS orchestrator fails
+// the round.
 
-static napi_value MakeUtf8String(napi_env env, const std::string& value) {
-  napi_value result = nullptr;
-  if (napi_create_string_utf8(env, value.c_str(), value.size(), &result) !=
-      napi_ok) {
-    ThrowError(env, "Failed to create string");
-    return nullptr;
+// Reads the first `count` arguments (at most 5) into `args`, and those of
+// them flagged in `strings` (bit i = argument i) as strings into `out[i]`
+// (null/undefined read as ""). False with an exception pending otherwise.
+bool GetFlowArgs(napi_env env, napi_callback_info info, const char* name,
+                 size_t count, unsigned strings, napi_value* args,
+                 std::string* out) {
+  size_t argc = count;
+  if (!GetArgCount(env, info, &argc, args) || argc < count) {
+    ThrowError(env, std::string(name) + ": missing arguments");
+    return false;
   }
-  return result;
+  for (size_t i = 0; i < count; i++) {
+    bool ok = true;
+    if ((strings >> i) & 1u) {
+      out[i] = GetString(env, args[i], &ok);
+    }
+    if (!ok) {
+      return false;
+    }
+  }
+  return true;
 }
 
-static napi_value FlowBuildRequestBody(napi_env env,
-                                            napi_callback_info info) {
-  size_t argc = 1;
-  napi_value args[1] = {nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
-    ThrowError(env, "buildRequestBody: missing input argument");
-    return nullptr;
+bool GetFlowNumber(napi_env env, napi_value value, const char* name,
+                   double* out) {
+  if (napi_get_value_double(env, value, out) != napi_ok) {
+    ThrowError(env, std::string(name) + ": expected number");
+    return false;
   }
+  return true;
+}
+
+// The parsed object, or Undefined (which the core rejects).
+flowjson::Value ParseFlowObject(const std::string& json) {
   bool ok = false;
-  std::string input_json = GetString(env, args[0], &ok);
-  if (!ok) {
-    return nullptr;
-  }
-  bool parsed = false;
-  flowjson::Value input = flowjson::Parse(input_json, &parsed);
-  if (!parsed || !input.IsObject()) {
-    return nullptr;
-  }
-  return MakeUtf8String(
-      env, flowjson::Stringify(flowcore::BuildRequestBody(input)));
+  flowjson::Value value = flowjson::Parse(json, &ok);
+  return ok && value.IsObject() ? value : flowjson::Value::Undefined();
 }
 
-static napi_value FlowOrderEndpointCandidates(napi_env env,
-                                              napi_callback_info info) {
+napi_value FlowJsonOrUndefined(napi_env env, const flowjson::Value& value) {
+  return value.IsUndefined() ? nullptr
+                             : NewString(env, flowjson::Stringify(value));
+}
+
+// prepareRound(configJson, envJson, randomSample)
+static napi_value FlowPrepareRound(napi_env env, napi_callback_info info) {
+  napi_value args[3] = {nullptr, nullptr, nullptr};
+  std::string text[3];
+  double sample = 0;
+  if (!GetFlowArgs(env, info, "prepareRound", 3, 0b011, args, text) ||
+      !GetFlowNumber(env, args[2], "prepareRound", &sample)) {
+    return nullptr;
+  }
+  return FlowJsonOrUndefined(
+      env, flowcore::PrepareRound(text[0], ParseFlowObject(text[1]), sample));
+}
+
+// nextQueryStep(stateJson, responseText?) — responseText undefined/null for
+// a failed (or no) request.
+static napi_value FlowNextQueryStep(napi_env env, napi_callback_info info) {
+  napi_value args[2] = {nullptr, nullptr};
+  std::string text[2];
+  if (!GetFlowArgs(env, info, "nextQueryStep", 2, 0b11, args, text)) {
+    return nullptr;
+  }
+  return FlowJsonOrUndefined(
+      env, flowcore::NextQueryStep(
+               ParseFlowObject(text[0]),
+               IsNullOrUndefined(env, args[1])
+                   ? flowjson::Value::Undefined()
+                   : flowjson::Value::String(std::move(text[1]))));
+}
+
+// handleResponse(responseText, configJson, envJson, requestBody,
+// responseAtSeconds)
+static napi_value FlowHandleResponse(napi_env env, napi_callback_info info) {
+  napi_value args[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
+  std::string text[5];
+  double responseAt = 0;
+  if (!GetFlowArgs(env, info, "handleResponse", 5, 0b01111, args, text) ||
+      !GetFlowNumber(env, args[4], "handleResponse", &responseAt)) {
+    return nullptr;
+  }
+  return FlowJsonOrUndefined(
+      env, flowcore::HandleRoundResponse(text[0], text[1],
+                                         ParseFlowObject(text[2]), text[3],
+                                         responseAt));
+}
+
+// ---- persisted native config (update_flow_core/native_config.h) ----
+// null/undefined arguments read as "" (an absent config): never equivalent,
+// not_configured at the gate, not an object for the normalizer.
+
+static napi_value FlowConfigsEquivalent(napi_env env, napi_callback_info info) {
   size_t argc = 2;
   napi_value args[2] = {nullptr, nullptr};
   if (!GetArgCount(env, info, &argc, args) || argc < 2) {
-    ThrowError(env, "orderEndpointCandidates: missing arguments");
+    ThrowError(env, "configsEquivalent: missing arguments");
     return nullptr;
   }
   bool ok = false;
-  std::string endpoints_json = GetString(env, args[0], &ok);
+  std::string a = GetString(env, args[0], &ok);
   if (!ok) {
     return nullptr;
   }
-  double sample = 0;
-  if (napi_get_value_double(env, args[1], &sample) != napi_ok) {
-    ThrowError(env, "orderEndpointCandidates: expected number sample");
-    return nullptr;
-  }
-  bool parsed = false;
-  flowjson::Value endpoints = flowjson::Parse(endpoints_json, &parsed);
-  if (!parsed || !endpoints.IsArray()) {
-    return nullptr;
-  }
-  return MakeUtf8String(env,
-                        flowjson::Stringify(flowcore::OrderEndpointCandidates(
-                            endpoints, sample)));
-}
-
-static napi_value FlowIsValidResponse(napi_env env,
-                                           napi_callback_info info) {
-  size_t argc = 1;
-  napi_value args[1] = {nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
-    ThrowError(env, "isValidResponse: missing arguments");
-    return nullptr;
-  }
-  bool ok = false;
-  std::string response_text = GetString(env, args[0], &ok);
+  std::string b = GetString(env, args[1], &ok);
   if (!ok) {
-    // Exception pending (non-string argument): propagate it as a throw
-    // instead of a boolean that the caller would treat as a verdict.
     return nullptr;
   }
   napi_value result = nullptr;
-  napi_get_boolean(env, flowcore::IsValidResponse(response_text),
-                   &result);
+  napi_get_boolean(env, flowcore::ConfigsEquivalent(a, b), &result);
   return result;
 }
 
-static napi_value FlowHandleResponse(napi_env env,
-                                          napi_callback_info info) {
-  size_t argc = 3;
-  napi_value args[3] = {nullptr, nullptr, nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 3) {
-    ThrowError(env, "handleResponse: missing arguments");
+static napi_value FlowRunnableConfig(napi_env env, napi_callback_info info) {
+  size_t argc = 1;
+  napi_value args[1] = {nullptr};
+  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
+    ThrowError(env, "runnableConfig: missing argument");
     return nullptr;
   }
   bool ok = false;
-  std::string response_text = GetString(env, args[0], &ok);
+  std::string config_json = GetString(env, args[0], &ok);
   if (!ok) {
     return nullptr;
   }
-  std::string identity_json = GetString(env, args[1], &ok);
+  return NewString(env, flowcore::RunnableConfigJson(config_json));
+}
+
+// Throws Error("Invalid native configuration: ...") for options the host
+// must fix.
+static napi_value FlowNormalizeConfiguration(napi_env env,
+                                             napi_callback_info info) {
+  size_t argc = 1;
+  napi_value args[1] = {nullptr};
+  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
+    ThrowError(env, "normalizeConfiguration: missing argument");
+    return nullptr;
+  }
+  bool ok = false;
+  std::string options_json = GetString(env, args[0], &ok);
   if (!ok) {
     return nullptr;
   }
-  std::string after_download = GetString(env, args[2], &ok);
-  if (!ok) {
+  std::string config;
+  std::string error;
+  if (!flowcore::NormalizeConfiguration(options_json, &config, &error)) {
+    ThrowError(env, error);
     return nullptr;
   }
-  bool parsed = false;
-  flowjson::Value identity = flowjson::Parse(identity_json, &parsed);
-  if (!parsed || !identity.IsObject()) {
-    return nullptr;
-  }
-  return MakeUtf8String(env,
-                        flowjson::Stringify(flowcore::HandleResponse(
-                            response_text, identity, false, after_download)));
+  return NewString(env, config);
 }
 
 napi_value Init(napi_env env, napi_value exports) {
   if (!ExportFunction(env, exports, "syncStateWithBinaryVersion", SyncStateWithBinaryVersion) ||
       !ExportFunction(env, exports, "runStateCore", RunStateCore) ||
-      !ExportFunction(env, exports, "buildArchivePlan", BuildArchivePatchPlan) ||
-      !ExportFunction(env, exports, "buildCopyGroups", BuildCopyGroups) ||
-      !ExportFunction(env, exports, "applyDeltaFromSource", ApplyPatchFromFileSource) ||
+      !ExportFunction(env, exports, "applyArchiveDelta", ApplyArchiveDelta) ||
       !ExportFunction(env, exports, "cleanupOldEntries", CleanupOldEntries) ||
       !ExportFunction(env, exports, "sha256HexFileAsync", Sha256HexFileAsync) ||
       !ExportFunction(env, exports, "sha256HexRawFdAsync", Sha256HexRawFdAsync) ||
+      !ExportFunction(env, exports, "isInstallComplete", InstallRecordIsComplete) ||
+      !ExportFunction(env, exports, "recordedBundleSha256", InstallRecordBundleSha256) ||
+      !ExportFunction(env, exports, "sealInstallRecord", SealInstallRecord) ||
+      !ExportFunction(env, exports, "promoteStaging", PromoteStaging) ||
+      !ExportFunction(env, exports, "checkActivation", CheckActivation) ||
+      !ExportFunction(env, exports, "checkUncompressedSize", CheckUncompressedSize) ||
+      !ExportFunction(env, exports, "planFreeSpaceProbe", PlanFreeSpaceProbe) ||
+      !ExportFunction(env, exports, "checkExtractedDirectory", CheckExtractedDirectory) ||
       !ExportFunction(env, exports, "crc32", Crc32) ||
       !ExportFunction(env, exports, "getSupportedDiffVersion", GetSupportedDiffVersion) ||
-      !ExportFunction(env, exports, "buildRequestBody", FlowBuildRequestBody) ||
-      !ExportFunction(env, exports, "orderEndpointCandidates", FlowOrderEndpointCandidates) ||
-      !ExportFunction(env, exports, "isValidResponse", FlowIsValidResponse) ||
-      !ExportFunction(env, exports, "handleResponse", FlowHandleResponse)) {
+      !ExportFunction(env, exports, "prepareRound", FlowPrepareRound) ||
+      !ExportFunction(env, exports, "nextQueryStep", FlowNextQueryStep) ||
+      !ExportFunction(env, exports, "handleResponse", FlowHandleResponse) ||
+      !ExportFunction(env, exports, "configsEquivalent", FlowConfigsEquivalent) ||
+      !ExportFunction(env, exports, "runnableConfig", FlowRunnableConfig) ||
+      !ExportFunction(env, exports, "normalizeConfiguration", FlowNormalizeConfiguration)) {
     return nullptr;
   }
   return exports;

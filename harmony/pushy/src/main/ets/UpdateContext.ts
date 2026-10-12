@@ -1,9 +1,9 @@
 import preferences from '@ohos.data.preferences';
 import fileIo from '@ohos.file.fs';
 import {
-  INSTALL_RECORD_FILE_NAME,
+  HARMONY_BUNDLE_FILE_NAME,
   isInstallComplete,
-  readInstallRecord,
+  recordedBundleSha256,
   verifyInstallForActivation,
 } from './InstallRecord';
 import { DownloadTask } from './DownloadTask';
@@ -19,7 +19,6 @@ import {
   scheduleNativeSync,
 } from './SyncCoordinator';
 import NativePatchCore, {
-  STATE_OP_CLEAR_FIRST_TIME,
   STATE_OP_CLEAR_ROLLBACK_MARK,
   STATE_OP_MARK_SUCCESS,
   STATE_OP_RESOLVE_LAUNCH,
@@ -31,7 +30,6 @@ import { assertSafePathComponent } from './PathUtils';
 import { withRawFd } from './SaveFile';
 import {
   ERROR_SWITCH_VERSION_FAILED,
-  createPushyError,
   getErrorMessage,
   toPushyError,
 } from './ErrorCodes';
@@ -43,94 +41,18 @@ const TAG = 'PushyContext';
 // 常规清理保留最近 3 天内触碰过的条目(续传 partial、staging 同样按 mtime)。
 const CLEANUP_MAX_AGE_DAYS = 3;
 
-// Preferences.flushSync 是 API 14 才有、getAllSync 老 SDK 声明里没有:HAR 兼容
-// API 12,按结构化视图探测(不用交叉类型——ArkTS 不支持)。
+// Preferences.flushSync 是 API 14 才有:HAR 兼容 API 12,按结构化视图探测
+// (不用交叉类型——ArkTS 不支持)。
 interface OptionalPreferencesApi {
   flushSync?: () => void;
-  getAllSync?: () => Record<string, unknown>;
 }
 
-// C1 跨平台配置等价(JS/Android/iOS 同一规则):缺省键补默认值、端点/
-// 发现地址去尾斜杠并保序去重、忽略键序。等价的配置不算"变更"——宿主重复
-// configure、或 JS 同步一份只差格式的同一配置,都不应取消在飞轮次或丢弃
-// 响应缓存。放在本文件(而非独立模块):本文件被测试原样求值,只能依赖
-// 自身源码。
-const NATIVE_CONFIG_DEFAULTS: Record<string, unknown> = {
-  disabled: false,
-  queryUrls: [],
-  rnu: '',
-  rn: '',
-  afterDownload: 'none',
-};
-const NATIVE_CONFIG_URL_LISTS: string[] = ['endpoints', 'queryUrls'];
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map(item => canonicalJson(item)).join(',')}]`;
-  }
-  if (value !== null && typeof value === 'object') {
-    const record = value as Record<string, unknown>;
-    const keys = Object.keys(record)
-      .filter(key => record[key] !== undefined)
-      .sort();
-    return `{${keys
-      .map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
-      .join(',')}}`;
-  }
-  return JSON.stringify(value) ?? 'null';
-}
-
-/** 配置 JSON 的规范形式;不是可解析的 JSON 对象时返回 undefined。 */
-export function canonicalNativeConfig(json: string): string | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(json);
-  } catch (e) {
-    return undefined;
-  }
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    return undefined;
-  }
-  const config: Record<string, unknown> = {};
-  const source = parsed as Record<string, unknown>;
-  for (const key of Object.keys(source)) {
-    config[key] = source[key];
-  }
-  for (const key of Object.keys(NATIVE_CONFIG_DEFAULTS)) {
-    if (config[key] === undefined) {
-      config[key] = NATIVE_CONFIG_DEFAULTS[key];
-    }
-  }
-  for (const key of NATIVE_CONFIG_URL_LISTS) {
-    const list = config[key];
-    if (!Array.isArray(list)) {
-      continue;
-    }
-    const seen = new Set<string>();
-    const normalized: unknown[] = [];
-    for (const item of list as unknown[]) {
-      const value = typeof item === 'string' ? item.replace(/\/+$/, '') : item;
-      const identity = canonicalJson(value);
-      if (!seen.has(identity)) {
-        seen.add(identity);
-        normalized.push(value);
-      }
-    }
-    config[key] = normalized;
-  }
-  return canonicalJson(config);
-}
-
-/** 两份配置 JSON 是否等价(C1)。任一不是可解析的 JSON 对象即不等价。 */
-export function nativeConfigsEquivalent(
-  a: string | undefined,
-  b: string | undefined,
-): boolean {
-  if (a === undefined || b === undefined) {
-    return false;
-  }
-  const left = canonicalNativeConfig(a);
-  return left !== undefined && left === canonicalNativeConfig(b);
+// C1 配置等价(cpp/update_flow_core ConfigsEquivalent,与 Android/iOS 共用):
+// 缺省键补默认值、端点/发现地址去尾斜杠并保序去重、忽略键序。等价的配置不算
+// "变更"——宿主重复 configure、或 JS 同步一份只差格式的同一配置,都不应取消
+// 在飞轮次或丢弃响应缓存。任一缺省即不等价。
+function nativeConfigsEquivalent(a: string | undefined, b: string | undefined): boolean {
+  return NativePatchCore.configsEquivalent(a, b);
 }
 
 interface PersistOptions {
@@ -405,7 +327,7 @@ export class UpdateContext {
   }
 
   private getBundlePath(hash: string): string {
-    return `${this.rootDir}/${hash}/bundle.harmony.js`;
+    return `${this.rootDir}/${hash}/${HARMONY_BUNDLE_FILE_NAME}`;
   }
 
   private getStateSnapshot(): StateCoreResult {
@@ -500,13 +422,9 @@ export class UpdateContext {
 
   private async executeTask(params: DownloadTaskParams): Promise<void> {
     await this.enqueueSerialTask(() => {
-      const isPatchTask =
-        params.type === DownloadTaskParams.TASK_TYPE_PATCH_FULL ||
-        params.type === DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP ||
-        params.type === DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
       // Re-check only when this queued job actually starts. A JS download may
       // have completed while the cold-start duplicate waited behind it.
-      if (isPatchTask && this.hasDownloadedVersion(params.hash)) {
+      if (this.hasDownloadedVersion(params.hash)) {
         return Promise.resolve();
       }
       const downloadTask = new DownloadTask(this.context);
@@ -594,10 +512,6 @@ export class UpdateContext {
     return this.flushPreferences(`remove key ${key}`);
   }
 
-  public isFirstTime(): boolean {
-    return this.getStateSnapshot().firstTime;
-  }
-
   public rolledBackVersion(): string {
     return this.getStateSnapshot().rolledBackVersion || '';
   }
@@ -612,14 +526,6 @@ export class UpdateContext {
       cleanUp: true,
     });
     await this.flushPreferences('mark success');
-  }
-
-  public async clearFirstTime(): Promise<void> {
-    this.runStateOperation(STATE_OP_CLEAR_FIRST_TIME, '', {
-      cleanUp: true,
-      clearFirstLoadMarker: true,
-    });
-    await this.flushPreferences('clear first time');
   }
 
   /** getConstants(同步)里调用:落盘失败只记日志。 */
@@ -657,23 +563,20 @@ export class UpdateContext {
     let flushed: Promise<void> = Promise.resolve();
     try {
       // 删除已下载版本的 hash_* 元信息（不走 clear()：它是异步的，且会连带清掉
-      // uuid —— 见 syncStateWithBinaryVersion 的注释）。getAllSync 在旧 SDK 上
-      // 可能不存在，此时残留的 hash_* 只是无害孤儿数据，不影响 reset 语义。
-      const api = this.optionalPreferencesApi();
-      if (typeof api.getAllSync === 'function') {
-        try {
-          const all = api.getAllSync();
-          for (const key of Object.keys(all)) {
-            if (key.startsWith('hash_')) {
-              this.preferences.deleteSync(key);
-            }
+      // uuid —— 见 syncStateWithBinaryVersion 的注释）。读取失败时残留的
+      // hash_* 只是无害孤儿数据，不影响 reset 语义。
+      try {
+        const all = this.preferences.getAllSync();
+        for (const key of Object.keys(all)) {
+          if (key.startsWith('hash_')) {
+            this.preferences.deleteSync(key);
           }
-        } catch (e) {
-          logger.error(
-            TAG,
-            `Failed to clear hash info on reset: ${getErrorMessage(e)}`,
-          );
         }
+      } catch (e) {
+        logger.error(
+          TAG,
+          `Failed to clear hash info on reset: ${getErrorMessage(e)}`,
+        );
       }
       this.writeState(resetState, { clearFirstLoadMarker: true });
       // 缓存里的响应仍在宣告本次 reset 刚删掉的版本,一并丢弃,避免 JS 侧复用。
@@ -754,20 +657,15 @@ export class UpdateContext {
     hash: string,
     deadlineUptimeMs: number = 0,
   ): Promise<void> {
-    try {
-      const params = this.createTaskParams(
-        DownloadTaskParams.TASK_TYPE_PATCH_FULL,
-        url,
-        hash,
-      );
-      params.targetFile = `${this.rootDir}/${hash}.ppk`;
-      params.unzipDirectory = `${this.rootDir}/${hash}`;
-      params.deadlineUptimeMs = deadlineUptimeMs;
-      await this.executeTask(params);
-    } catch (e) {
-      logger.error(TAG, `Failed to download full package: ${getErrorMessage(e)}`);
-      throw e;
-    }
+    const params = this.createTaskParams(
+      DownloadTaskParams.TASK_TYPE_PATCH_FULL,
+      url,
+      hash,
+    );
+    params.targetFile = `${this.rootDir}/${hash}.ppk`;
+    params.unzipDirectory = `${this.rootDir}/${hash}`;
+    params.deadlineUptimeMs = deadlineUptimeMs;
+    await this.executeTask(params);
   }
 
   public async downloadPatchFromPpk(
@@ -794,23 +692,15 @@ export class UpdateContext {
     hash: string,
     deadlineUptimeMs: number = 0,
   ): Promise<void> {
-    try {
-      const params = this.createTaskParams(
-        DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP,
-        url,
-        hash,
-      );
-      params.targetFile = `${this.rootDir}/${hash}${APP_DELTA_SUFFIX}`;
-      params.unzipDirectory = `${this.rootDir}/${hash}`;
-      params.deadlineUptimeMs = deadlineUptimeMs;
-      return await this.executeTask(params);
-    } catch (e) {
-      logger.error(
-        TAG,
-        `Failed to download package delta: ${getErrorMessage(e)}`,
-      );
-      throw e;
-    }
+    const params = this.createTaskParams(
+      DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP,
+      url,
+      hash,
+    );
+    params.targetFile = `${this.rootDir}/${hash}${APP_DELTA_SUFFIX}`;
+    params.unzipDirectory = `${this.rootDir}/${hash}`;
+    params.deadlineUptimeMs = deadlineUptimeMs;
+    await this.executeTask(params);
   }
 
   // 运行中热更版本安装记录里的 bundleSha256(崩溃归因用);内置 bundle /
@@ -820,10 +710,9 @@ export class UpdateContext {
       return '';
     }
     try {
-      const record = readInstallRecord(
+      return recordedBundleSha256(
         `${this.rootDir}/${assertSafePathComponent(hash)}`,
       );
-      return record?.bundleSha256 ?? '';
     } catch (e) {
       return '';
     }
@@ -834,53 +723,26 @@ export class UpdateContext {
   public hasDownloadedVersion(hash: string): boolean {
     try {
       const safeHash = assertSafePathComponent(hash);
-      return fileIo.accessSync(this.getBundlePath(safeHash))
-        && isInstallComplete(`${this.rootDir}/${safeHash}`, safeHash);
+      return isInstallComplete(`${this.rootDir}/${safeHash}`, safeHash);
     } catch (e) {
       return false;
     }
   }
 
   /**
-   * 激活前置校验(同步,不写任何东西):bundle 在盘上,且要么是本 SDK 记录为
-   * 完整安装的版本(bundle + 记录),要么是标记机制之前就激活过、目录里没有
-   * 记录文件的历史版本(current/last 里有它)。其他无记录的目录可能是崩溃
-   * 留下的半成品;有记录文件的目录即便是 current/last 也照常复核。
-   * 返回是否还需复核安装记录(无记录的历史版本无可核)。
-   */
-  private assertActivatable(safeHash: string): boolean {
-    if (!fileIo.accessSync(this.getBundlePath(safeHash))) {
-      throw createPushyError(
-        ERROR_SWITCH_VERSION_FAILED,
-        `Bundle version ${safeHash} not found.`,
-      );
-    }
-    const legacyActivated =
-      !fileIo.accessSync(`${this.rootDir}/${safeHash}/${INSTALL_RECORD_FILE_NAME}`) &&
-      (this.readString('currentVersion') === safeHash ||
-        this.readString('lastVersion') === safeHash);
-    if (!this.hasDownloadedVersion(safeHash) && !legacyActivated) {
-      throw createPushyError(
-        ERROR_SWITCH_VERSION_FAILED,
-        `Bundle version ${safeHash} is incomplete.`,
-      );
-    }
-    return !legacyActivated;
-  }
-
-  /**
-   * 完整的激活校验(含 native 工作线程上的 bundle 摘要复核),不写状态。
-   * 记录里的 bundle 摘要必须与盘上字节一致,才能把下次启动指向它。
+   * 完整的激活校验(含 native 工作线程上的 bundle 摘要复核),不写状态:
+   * bundle 在盘上,且记录里的 bundle 摘要与盘上字节一致,才能把下次启动指向
+   * 它。标记机制之前就激活过、目录里没有记录文件的历史版本(current/last
+   * 里有它)免检;有记录文件的目录即便是 current/last 也照常复核。
    */
   public async verifyActivation(hash: string): Promise<void> {
     const safeHash = assertSafePathComponent(hash);
-    if (this.assertActivatable(safeHash)) {
-      await verifyInstallForActivation(
-        `${this.rootDir}/${safeHash}`,
-        safeHash,
-        this.getBundlePath(safeHash),
-      );
-    }
+    await verifyInstallForActivation(
+      `${this.rootDir}/${safeHash}`,
+      safeHash,
+      this.readString('currentVersion') === safeHash ||
+        this.readString('lastVersion') === safeHash,
+    );
   }
 
   /** 内存里切换状态(不落盘);调用方负责 flush。 */
@@ -1092,7 +954,7 @@ export class UpdateContext {
       // fd 在 promise 落定后才关闭(withRawFd)。
       hash = await withRawFd(
         this.context.resourceManager,
-        'bundle.harmony.js',
+        HARMONY_BUNDLE_FILE_NAME,
         descriptor =>
           NativePatchCore.sha256HexRawFdAsync(
             descriptor.fd,
