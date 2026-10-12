@@ -10,14 +10,23 @@ final class FlowBridge {
     private FlowBridge() {
     }
 
-    static native String buildRequestBody(String inputJson);
+    // The cold-start round (cpp/update_flow_core/native_round.h), shared with
+    // iOS and Harmony. envJson describes this launch (see native_round.h).
 
-    static native String orderEndpointCandidates(String endpointsJson, double randomSample);
+    /** {"body": request text, "query": first query state}; null when not runnable. */
+    static native String prepareRound(String configJson, String envJson, double randomSample);
 
-    static native boolean isValidResponse(String responseText);
+    /**
+     * The next endpoint-query state: "url" (+ "post") to request next,
+     * "found" when the text passed in is the response, neither when the
+     * query is over. responseText is null for a failed (or no) request.
+     */
+    static native String nextQueryStep(String stateJson, String responseText);
 
+    /** The decision with planned attempts, hashInfo and the response-cache text. */
     static native String handleResponse(
-        String responseText, String identityJson, String afterDownload);
+        String responseText, String configJson, String envJson, String requestBody,
+        long responseAtSeconds);
 
     // Persisted-config layer (cpp/update_flow_core/native_config.h), shared
     // with iOS and Harmony.

@@ -49,13 +49,11 @@ const std::vector<NativeClass>& NativeClasses() {
    }},
   {"3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c86b19560762307efcfa0",  // FlowBridge
    {
-       {"3802fdddaab96d54373a0fedf4bc9474", "723bfed0b88a274923311bb6e5a7826444205fa8d2d1b98373002008e8c4ef8e8e655d3f09b0",
-        reinterpret_cast<void*>(&pushy::jni_natives::FlowBuildRequestBody)},
-       {"3505f0d4bcae6641323015f7c29091634e2e00e0eadeab", "723bfed0b88a274923311bb6e5a7826444205fc5b7f7b294644e6305e7cda7f2a963463800ec93",
-        reinterpret_cast<void*>(&pushy::jni_natives::FlowOrderEndpointCandidates)},
-       {"3304c2d0a2826c77272c0cf6d8a095", "723bfed0b88a274923311bb6e5a7826444205fa8c4",
-        reinterpret_cast<void*>(&pushy::jni_natives::FlowIsValidResponse)},
-       {"3216fad5a28e5a40312f13f7c5b6", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43bcfea58d7f476c0c1cf4d0fba27a59210be5a4",
+       {"2a05f1c1af996d772d2a12fd", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655cf8189889e6a58791ff1c3adc857554c3216f289",
+        reinterpret_cast<void*>(&pushy::jni_natives::FlowPrepareRound)},
+       {"3412ecc59f9e6d573b0c08fcc6", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655a2e4af83897d163a12fecae5b4705357351fae",
+        reinterpret_cast<void*>(&pushy::jni_natives::FlowNextQueryStep)},
+       {"3216fad5a28e5a40312f13f7c5b6", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43d9d8ae9a68092f0113fd9887857c422602b9d595959c72462c45ebc5afb9d44b412006e2cefd",
         reinterpret_cast<void*>(&pushy::jni_natives::FlowHandleResponse)},
        {"3918fad7a78c7b60332a15efd7bf95635e", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655a2f2",
         reinterpret_cast<void*>(&pushy::jni_natives::FlowConfigsEquivalent)},

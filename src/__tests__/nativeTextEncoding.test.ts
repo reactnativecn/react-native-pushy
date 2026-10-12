@@ -38,16 +38,17 @@ describe('native text encoding', () => {
     }
   });
 
-  // The request path is appended by each platform's HTTP glue; the default
-  // service addresses only live in the shared normalizer
-  // (cpp/update_flow_core/native_config.cpp).
-  test('the request path is encoded per platform, the addresses in cpp/', () => {
+  // The request path is appended by the shared round core
+  // (cpp/update_flow_core/native_round.cpp) and, until they move to it, by
+  // the platforms' own HTTP glue; the default service addresses only live in
+  // the shared normalizer (cpp/update_flow_core/native_config.cpp).
+  test('the request path and the addresses are encoded in cpp/', () => {
     const decodedIn = (prefix: string) =>
       paths
         .filter((path) => path.startsWith(prefix))
         .flatMap((path) => encodedIn(source(path)))
         .map(decodeNativeText);
-    for (const platform of ['android/', 'ios/', 'harmony/']) {
+    for (const platform of ['ios/', 'harmony/']) {
       expect({
         platform,
         found: decodedIn(platform).includes(plainTexts[0]),
@@ -57,7 +58,7 @@ describe('native text encoding', () => {
       });
     }
     const shared = decodedIn('cpp/');
-    for (const text of plainTexts.slice(1)) {
+    for (const text of plainTexts) {
       expect({ text, found: shared.includes(text) }).toEqual({
         text,
         found: true,

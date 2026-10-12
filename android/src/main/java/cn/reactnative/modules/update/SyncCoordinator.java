@@ -6,7 +6,6 @@ import androidx.annotation.Nullable;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.HashSet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -32,9 +31,8 @@ import org.json.JSONObject;
  * version blacklisting.
  */
 final class SyncCoordinator {
-    // Version-info flags read by JS (metadata.ts), stored encoded.
+    // Version-info flag read by JS (metadata.ts), stored encoded.
     private static final String INFO_CRASH_HOLD = Texts.reveal("3905f5c2a6b96d56212a19");
-    private static final String INFO_FORCE_BOOT = Texts.reveal("3c18e6d2aba9674a360d19ead5a695");
 
     static final String KEY_CONFIG = "nativeConfig";
     // Raw response cache for the JS side to reuse (§10.3), scoped to the
@@ -45,7 +43,6 @@ final class SyncCoordinator {
     // next launch means the previous process died mid-round (a crash rescue
     // was truncated): that launch resumes immediately instead of waiting 5s.
     static final String KEY_ROUND_INCOMPLETE = "nativeCheckIncomplete";
-    private static final int MAX_QUERY_HTTP_ATTEMPTS = 8;
     private static final long DOWNLOAD_PHASE_TIMEOUT_SECONDS = 600;
     // The check response (and a remote queryUrls list) is a small JSON
     // document; anything bigger is a broken or hijacked endpoint.
@@ -93,11 +90,11 @@ final class SyncCoordinator {
         if (!nativeReady || sContext != context || !context.getIsUsingBundleUrl()) {
             return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "not_initialized");
         }
-        RunnableConfig parsed = parseRunnableConfig(context.getKv(KEY_CONFIG));
-        if (parsed.rejection != null) {
-            return parsed.rejection;
+        String configJson = context.getKv(KEY_CONFIG);
+        BundlePreparationResult rejection = configRejection(configJson);
+        if (rejection != null) {
+            return rejection;
         }
-        String configJson = parsed.json;
         startRound(0);
         if (!roundStarted.get()) {
             return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "config_changed");
@@ -135,55 +132,27 @@ final class SyncCoordinator {
     }
 
     /**
-     * The persisted config, parsed and checked once for every entry point
-     * (prepareBundle, the automatic round's gate, the round itself), so they
-     * cannot disagree on what is runnable. Exactly one of {config, rejection}
-     * is set.
+     * The shared gate (FlowBridge.runnableConfig, update_flow_core) every
+     * entry point (prepareBundle, the automatic round's gate, the round
+     * itself) applies to the persisted config, so they cannot disagree on
+     * what is runnable: null when a round may run, otherwise the result —
+     * absent is skipped/not_configured, a non-object failed/invalid_config, a
+     * truthy disabled skipped/disabled, a blank appKey failed/invalid_config.
      */
-    static final class RunnableConfig {
-        @Nullable final String json;
-        @Nullable final JSONObject config;
-        // Trimmed, non-empty.
-        @Nullable final String appKey;
-        @Nullable final BundlePreparationResult rejection;
-
-        private RunnableConfig(String json, JSONObject config, String appKey,
-                               BundlePreparationResult rejection) {
-            this.json = json;
-            this.config = config;
-            this.appKey = appKey;
-            this.rejection = rejection;
-        }
-
-        static RunnableConfig rejected(String status, String reason) {
-            return new RunnableConfig(
-                null, null, null, BundlePreparationResult.of(status, reason));
-        }
-    }
-
-    /**
-     * The shared gate (FlowBridge.runnableConfig, update_flow_core): absent is
-     * skipped/not_configured, a non-object failed/invalid_config, a truthy
-     * disabled skipped/disabled, a blank appKey failed/invalid_config.
-     */
-    static RunnableConfig parseRunnableConfig(@Nullable String json) {
-        JSONObject verdict;
-        JSONObject config;
+    @Nullable
+    static BundlePreparationResult configRejection(@Nullable String json) {
         try {
             String result = FlowBridge.runnableConfig(json);
             if (result == null) {
-                return RunnableConfig.rejected(BundlePreparationResult.FAILED, "internal_error");
+                return BundlePreparationResult.of(BundlePreparationResult.FAILED, "internal_error");
             }
-            verdict = new JSONObject(result);
-            if (verdict.has("status")) {
-                return RunnableConfig.rejected(
-                    verdict.getString("status"), verdict.getString("reason"));
-            }
-            config = new JSONObject(json);
+            JSONObject verdict = new JSONObject(result);
+            return verdict.has("status")
+                ? BundlePreparationResult.of(verdict.getString("status"), verdict.getString("reason"))
+                : null;
         } catch (JSONException e) {
-            return RunnableConfig.rejected(BundlePreparationResult.FAILED, "invalid_config");
+            return BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_config");
         }
-        return new RunnableConfig(json, config, verdict.optString("appKey"), null);
     }
 
     private SyncCoordinator() {
@@ -232,8 +201,7 @@ final class SyncCoordinator {
     }
 
     private static boolean hasRunnableConfig(UpdateContext context) {
-        return context != null
-            && parseRunnableConfig(context.getKv(KEY_CONFIG)).rejection == null;
+        return context != null && configRejection(context.getKv(KEY_CONFIG)) == null;
     }
 
     static void onConfigured(UpdateContext context) {
@@ -340,13 +308,11 @@ final class SyncCoordinator {
         roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "check_failed");
         String configJson = context.getKv(KEY_CONFIG);
         roundConfigJson = configJson;
-        RunnableConfig parsed = parseRunnableConfig(configJson);
-        if (parsed.rejection != null) {
-            roundResult = parsed.rejection;
+        BundlePreparationResult rejection = configRejection(configJson);
+        if (rejection != null) {
+            roundResult = rejection;
             return;
         }
-        JSONObject config = parsed.config;
-        String appKey = parsed.appKey;
         // Keep the existing interrupted-round breadcrumb and reset generation.
         try {
             context.setKv(KEY_ROUND_INCOMPLETE, "1");
@@ -354,8 +320,7 @@ final class SyncCoordinator {
         }
         try {
             runConfiguredRound(
-                context, launchRolledBackVersion, deadlineNanos,
-                resetGeneration, configJson, config, appKey);
+                context, launchRolledBackVersion, deadlineNanos, resetGeneration, configJson);
         } finally {
             // A committed round already cleared the breadcrumb in its own
             // commit (UpdateContext.commitSyncResult); only rounds that ended
@@ -374,65 +339,37 @@ final class SyncCoordinator {
         String launchRolledBackVersion,
         long deadlineNanos,
         long resetGeneration,
-        String configJson,
-        JSONObject config,
-        String appKey
+        String configJson
     ) throws JSONException {
-        String packageVersion = config.optString(
-            "packageVersion", context.getPackageVersion());
-        if (packageVersion.isEmpty()) {
-            packageVersion = context.getPackageVersion();
-        }
-
         String currentVersion = context.getCurrentVersion();
+        // This launch as the shared core sees it (native_round.h). Absent
+        // values (null) are left out.
+        JSONObject env = new JSONObject();
+        env.put("packageVersion", context.getPackageVersion());
+        // The JS constant's form, so JS can reuse the response cache.
+        env.put("currentVersion", currentVersion == null ? JSONObject.NULL : currentVersion);
+        env.put("uuid", context.getKv("uuid"));
         // Snapshot captured on the launch path before getConstants consumes
         // the one-shot rollback marker. Reading SharedPreferences here, five
         // seconds later, would lose the guard and could forceBoot the version
         // that this very launch just rolled back.
-        String rolledBackVersion = launchRolledBackVersion;
-        String uuid = context.getKv("uuid");
-        if (uuid == null) {
-            uuid = "";
-        }
-
-        JSONObject identity = new JSONObject();
-        identity.put("packageVersion", packageVersion);
-        identity.put(
-            "currentVersion",
-            currentVersion == null ? JSONObject.NULL : currentVersion
-        );
-        identity.put("uuid", uuid);
-        if (rolledBackVersion != null) {
-            identity.put("rolledBackVersion", rolledBackVersion);
-        }
-
-        JSONObject cInfo = new JSONObject();
-        cInfo.put("rnu", config.optString("rnu", ""));
-        cInfo.put("rn", config.optString("rn", ""));
+        env.put("rolledBackVersion", launchRolledBackVersion);
+        env.put("buildTime", context.getBuildTime());
         // React Native's Platform.Version is the Android SDK integer; use the
         // same value so this request can be fingerprinted against the JS one.
-        cInfo.put("os", "android " + Build.VERSION.SDK_INT);
-        cInfo.put("uuid", uuid);
+        env.put("os", "android " + Build.VERSION.SDK_INT);
+        env.put("bundleHash", context.computeBundleHash());
+        String envJson = env.toString();
 
-        JSONObject input = new JSONObject();
-        input.put("packageVersion", packageVersion);
-        input.put(
-            "currentVersion",
-            currentVersion == null ? JSONObject.NULL : currentVersion
-        );
-        input.put("buildTime", context.getBuildTime());
-        input.put("cInfo", cInfo);
-        input.put("supportedDiffVersion", NativeCore.supportedDiffVersion());
-        input.put("bundleHash", context.computeBundleHash());
-
-        String body = FlowBridge.buildRequestBody(input.toString());
-        if (body == null) {
+        String preparedJson = FlowBridge.prepareRound(configJson, envJson, Math.random());
+        if (preparedJson == null) {
             roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_request");
             return;
         }
-
-        boolean httpsOnly = isHttpsOnly(config.optJSONArray("endpoints"));
-        String responseText = runQueryRequest(config, appKey, body, httpsOnly, deadlineNanos);
+        JSONObject prepared = new JSONObject(preparedJson);
+        String body = prepared.getString("body");
+        String responseText =
+            runQueryRequest(prepared.getJSONObject("query").toString(), body, deadlineNanos);
         if (responseText == null) {
             Log.i(Texts.LOG_TAG,
                 "native sync: no endpoint reachable, giving up until next launch");
@@ -440,18 +377,15 @@ final class SyncCoordinator {
         }
         // Cache freshness is anchored to when the server response arrived,
         // not to when a potentially long download/patch/activation finished.
-        final long responseAtSeconds = System.currentTimeMillis() / 1000;
-        // Built once; every commit below caches it for JS.
-        final String responseCacheJson =
-            buildResponseCacheJson(configJson, body, responseText, responseAtSeconds);
-
         String decisionJson = FlowBridge.handleResponse(
-            responseText, identity.toString(), config.optString("afterDownload", ""));
+            responseText, configJson, envJson, body, System.currentTimeMillis() / 1000);
         if (decisionJson == null) {
             roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_response");
             return;
         }
         JSONObject decision = new JSONObject(decisionJson);
+        // Built once; every commit below caches it for JS.
+        final String responseCacheJson = decision.getString("cache");
         if (!"download".equals(decision.optString("action"))) {
             boolean committed = context.commitSyncResult(
                 resetGeneration, null, null, false, responseCacheJson);
@@ -471,7 +405,7 @@ final class SyncCoordinator {
         boolean downloaded = context.hasCompletedVersion(hash);
         if (!downloaded) {
             downloaded = performAttempts(
-                decision.optJSONArray("attempts"), currentVersion, httpsOnly, deadlineNanos,
+                decision.optJSONArray("attempts"), deadlineNanos,
                 downloadStarter(context, hash, currentVersion));
         }
         if (!downloaded) {
@@ -485,32 +419,15 @@ final class SyncCoordinator {
             return;
         }
 
-        // Version info (mirroring the JS side's setLocalHashInfo), the
-        // activation and the response cache all land in one atomic commit —
-        // see UpdateContext.commitSyncResult.
-        String hashInfoJson = null;
-        JSONObject info = decision.optJSONObject("info");
-        if (info != null) {
-            JSONObject hashInfo = new JSONObject();
-            for (String key : new String[] {"name", "description", "metaInfo"}) {
-                Object value = info.opt(key);
-                if (value instanceof String) {
-                    hashInfo.put(key, value);
-                }
-            }
-            // A forceBoot activation is the brick-rescue path: mark it in the
-            // persisted info so JS can report force_boot_rescue when this
-            // version survives to markSuccess. Only the server-sent directive
-            // counts — a silent-strategy activation is ordinary delivery.
-            JSONObject infoConfig = info.optJSONObject("config");
-            if (infoConfig != null && infoConfig.optBoolean("forceBoot", false)) {
-                hashInfo.put(INFO_FORCE_BOOT, true);
-            }
-            if (crashHoldActive) {
-                hashInfo.put(INFO_CRASH_HOLD, true);
-            }
-            hashInfoJson = hashInfo.toString();
+        // Version info (mirroring the JS side's setLocalHashInfo, the
+        // forceBoot rescue marked by the core), the activation and the
+        // response cache all land in one atomic commit — see
+        // UpdateContext.commitSyncResult.
+        JSONObject hashInfo = decision.getJSONObject("hashInfo");
+        if (crashHoldActive) {
+            hashInfo.put(INFO_CRASH_HOLD, true);
         }
+        String hashInfoJson = hashInfo.toString();
         // Silent strategies or a server-marked forceBoot version (per-version
         // remote override — the brick rescue) activate for the next launch;
         // otherwise activation stays with the JS side. Unless a crash is
@@ -547,20 +464,6 @@ final class SyncCoordinator {
         roundResult = committed
             ? BundlePreparationResult.downloaded(hash, activate)
             : BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "reset");
-    }
-
-    private static String buildResponseCacheJson(
-        String configJson,
-        String requestBody,
-        String responseText,
-        long responseAtSeconds
-    ) throws JSONException {
-        JSONObject cacheEntry = new JSONObject();
-        cacheEntry.put("ts", responseAtSeconds);
-        cacheEntry.put("body", responseText);
-        cacheEntry.put("request", requestBody);
-        cacheEntry.put("config", configJson);
-        return cacheEntry.toString();
     }
 
     private static final OkHttpClient httpClient = HttpClients.base().newBuilder()
@@ -621,120 +524,31 @@ final class SyncCoordinator {
         return source.readString(charset == null ? StandardCharsets.UTF_8 : charset);
     }
 
-    // Shared schema rule (update_flow_core::IsValidResponse): a 200 with
-    // `{"error": ...}` is a failed endpoint, not a verdict, and must not stop
-    // the endpoint fallback.
-    private static boolean isValidResponse(String responseText) {
-        return responseText != null && FlowBridge.isValidResponse(responseText);
-    }
-
     /**
-     * Sequential fallback over the ordered candidates (§5.1): one request at
-     * a time with its own timeout; after the configured round fails,
-     * queryUrls discovery merges remote candidates (excluding the
-     * already-tried) for one more round. No hedged race on purpose — this
+     * Sequential fallback over the endpoints (§5.1), one request at a time
+     * with its own timeout, as the shared core walks it
+     * (FlowBridge.nextQueryStep: order, list discovery, https-only remote
+     * bases, budget, response validity). No hedged race on purpose — this
      * path is latency-insensitive.
      */
-    private static String runQueryRequest(
-        JSONObject config, String appKey, String body, boolean httpsOnly, long deadlineNanos
-    ) {
-        JSONArray endpoints = config.optJSONArray("endpoints");
-        String orderedJson = FlowBridge.orderEndpointCandidates(
-            endpoints == null ? "[]" : endpoints.toString(), Math.random());
-        JSONArray ordered;
-        try {
-            ordered = orderedJson == null ? new JSONArray() : new JSONArray(orderedJson);
-        } catch (JSONException e) {
-            return null;
-        }
-        QueryRun run = new QueryRun(appKey, body, deadlineNanos);
-        for (int i = 0; i < ordered.length(); i++) {
-            String response = run.tryEndpoint(ordered.optString(i, ""), false);
-            if (response != null || run.exhausted) {
-                return response;
-            }
-        }
-        JSONArray queryUrls = config.optJSONArray("queryUrls");
-        if (queryUrls == null) {
-            return null;
-        }
-        for (int i = 0; i < queryUrls.length(); i++) {
-            String listUrl = queryUrls.optString(i, "");
-            if (listUrl.isEmpty()) {
-                continue;
-            }
-            if (!run.spendAttempt()) {
+    @Nullable
+    private static String runQueryRequest(String state, String body, long deadlineNanos)
+        throws JSONException {
+        String text = null;
+        while (true) {
+            state = FlowBridge.nextQueryStep(state, text);
+            if (state == null) {
                 return null;
             }
-            String listText = httpRequest(listUrl, null, deadlineNanos);
-            if (listText == null) {
-                continue;
+            JSONObject step = new JSONObject(state);
+            if (step.optBoolean("found")) {
+                return text;
             }
-            JSONArray remote;
-            try {
-                remote = new JSONArray(listText);
-            } catch (JSONException e) {
-                continue;
-            }
-            for (int j = 0; j < remote.length(); j++) {
-                // A remotely injected endpoint must not downgrade an https
-                // configuration to plaintext.
-                String response = run.tryEndpoint(remote.optString(j, ""), httpsOnly);
-                if (response != null || run.exhausted) {
-                    return response;
-                }
-            }
-            // One successfully fetched remote list is enough.
-            break;
-        }
-        return null;
-    }
-
-    /** One query's shared state: the bases already tried and the HTTP budget. */
-    private static final class QueryRun {
-        private final String appKey;
-        private final String body;
-        private final long deadlineNanos;
-        private final HashSet<String> tried = new HashSet<>();
-        private int httpAttempts;
-        // Set once MAX_QUERY_HTTP_ATTEMPTS is spent: the whole query gives up.
-        boolean exhausted;
-
-        QueryRun(String appKey, String body, long deadlineNanos) {
-            this.appKey = appKey;
-            this.body = body;
-            this.deadlineNanos = deadlineNanos;
-        }
-
-        boolean spendAttempt() {
-            if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
-                exhausted = true;
-                return false;
-            }
-            return true;
-        }
-
-        /**
-         * Queries one endpoint base unless it is empty, already tried or (with
-         * httpsOnly) not https. Returns the valid response, or null to move on
-         * (check {@link #exhausted}).
-         */
-        @Nullable
-        String tryEndpoint(String rawBase, boolean httpsOnly) {
-            String base = HttpUtils.stripTrailingSlashes(rawBase);
-            if (base.isEmpty() || tried.contains(base)) {
+            String url = step.optString("url", "");
+            if (url.isEmpty()) {
                 return null;
             }
-            if (httpsOnly && !HttpUtils.isHttpsUrl(base)) {
-                Log.w(Texts.LOG_TAG, "native sync: ignoring non-https remote endpoint " + base);
-                return null;
-            }
-            if (!spendAttempt()) {
-                return null;
-            }
-            tried.add(base);
-            String response = httpRequest(base + HttpUtils.QUERY_PATH + appKey, body, deadlineNanos);
-            return isValidResponse(response) ? response : null;
+            text = httpRequest(url, step.optBoolean("post") ? body : null, deadlineNanos);
         }
     }
 
@@ -767,26 +581,13 @@ final class SyncCoordinator {
     }
 
     /**
-     * Shared https rule (SyncCoordinator.ts isHttpsOnly): when every
-     * configured endpoint is https, server-provided endpoints and artifact
-     * URLs must not downgrade the round to plaintext.
+     * Strategies in the core's order (diff, pdiff, full), each over its
+     * mirrors, already planned for this device (FlowBridge.handleResponse:
+     * no diff without a running version, no cleartext URL under an
+     * https-only config).
      */
-    static boolean isHttpsOnly(@Nullable JSONArray endpoints) {
-        if (endpoints == null || endpoints.length() == 0) {
-            return false;
-        }
-        for (int i = 0; i < endpoints.length(); i++) {
-            Object endpoint = endpoints.opt(i);
-            if (!(endpoint instanceof String) || !HttpUtils.isHttpsUrl((String) endpoint)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     static boolean performAttempts(
-        @Nullable JSONArray attempts, @Nullable String originHash, boolean httpsOnly,
-        long holdDeadlineNanos, DownloadStarter starter
+        @Nullable JSONArray attempts, long holdDeadlineNanos, DownloadStarter starter
     ) {
         if (attempts == null) {
             return false;
@@ -801,10 +602,6 @@ final class SyncCoordinator {
                 continue;
             }
             String type = attempt.optString("type");
-            if ("diff".equals(type) && (originHash == null || originHash.isEmpty())) {
-                // diff patches from the running version; none is running.
-                continue;
-            }
             final boolean isFullAttempt = !"diff".equals(type) && !"pdiff".equals(type);
             if (isFullAttempt && fullDeadlineNanos == 0) {
                 // Incremental failures must not consume the last-resort full
@@ -822,13 +619,6 @@ final class SyncCoordinator {
             }
             for (int j = 0; j < urls.length(); j++) {
                 String url = urls.optString(j, "");
-                if (url.isEmpty()) {
-                    continue;
-                }
-                if (httpsOnly && HttpUtils.isCleartextUrl(url)) {
-                    Log.w(Texts.LOG_TAG, "native sync: ignoring cleartext " + type + " url " + url);
-                    continue;
-                }
                 // Check before enqueueing: once the phase budget is gone we
                 // must not launch an orphan download that outlives the round.
                 long remainingNanos = deadlineNanos - System.nanoTime();

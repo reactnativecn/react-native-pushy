@@ -13,71 +13,71 @@
 #include "jni_util.h"
 #include "../update_flow_core/flow_json.h"
 #include "../update_flow_core/native_config.h"
-#include "../update_flow_core/update_flow_core.h"
+#include "../update_flow_core/native_round.h"
 
 using pushy::jni_util::ToJString;
 
-jstring pushy::jni_natives::FlowBuildRequestBody(
-    JNIEnv* env, jclass, jstring inputJson) {
+namespace {
+
+// Parses a JSON object argument; Undefined (-> null result) otherwise.
+flowjson::Value ParseObject(JNIEnv* env, jstring json) {
+  bool ok = false;
+  flowjson::Value value =
+      flowjson::Parse(pushy::jni_util::JStringToString(env, json), &ok);
+  return ok && value.IsObject() ? value : flowjson::Value::Undefined();
+}
+
+// Stringify, or null for an Undefined result (input the core rejected).
+jstring ToJsonOrNull(JNIEnv* env, const flowjson::Value& value) {
+  return value.IsUndefined() ? nullptr
+                             : ToJString(env, flowjson::Stringify(value));
+}
+
+}  // namespace
+
+// Native round (update_flow_core/native_round.h).
+jstring pushy::jni_natives::FlowPrepareRound(JNIEnv* env, jclass,
+                                             jstring configJson,
+                                             jstring envJson,
+                                             jdouble randomSample) {
   try {
-    bool ok = false;
-    flowjson::Value input = flowjson::Parse(
-        pushy::jni_util::JStringToString(env, inputJson), &ok);
-    if (!ok || !input.IsObject()) {
-      return nullptr;
-    }
-    return ToJString(
-        env, flowjson::Stringify(flowcore::BuildRequestBody(input)));
+    return ToJsonOrNull(
+        env, flowcore::PrepareRound(
+                 pushy::jni_util::JStringToString(env, configJson),
+                 ParseObject(env, envJson), randomSample));
   } catch (...) {
     return nullptr;
   }
 }
 
-jstring pushy::jni_natives::FlowOrderEndpointCandidates(
-    JNIEnv* env, jclass, jstring endpointsJson, jdouble randomSample) {
+// A null responseText is a failed request (or none made yet).
+jstring pushy::jni_natives::FlowNextQueryStep(JNIEnv* env, jclass,
+                                              jstring stateJson,
+                                              jstring responseText) {
   try {
-    bool ok = false;
-    flowjson::Value endpoints = flowjson::Parse(
-        pushy::jni_util::JStringToString(env, endpointsJson), &ok);
-    if (!ok || !endpoints.IsArray()) {
-      return nullptr;
-    }
-    return ToJString(env, flowjson::Stringify(flowcore::OrderEndpointCandidates(
-                              endpoints, randomSample)));
+    return ToJsonOrNull(
+        env, flowcore::NextQueryStep(
+                 ParseObject(env, stateJson),
+                 responseText == nullptr
+                     ? flowjson::Value::Undefined()
+                     : flowjson::Value::String(pushy::jni_util::JStringToString(
+                           env, responseText))));
   } catch (...) {
     return nullptr;
-  }
-}
-
-jboolean pushy::jni_natives::FlowIsValidResponse(
-    JNIEnv* env, jclass, jstring responseText) {
-  if (responseText == nullptr) {
-    return JNI_FALSE;
-  }
-  try {
-    return flowcore::IsValidResponse(
-               pushy::jni_util::JStringToString(env, responseText))
-               ? JNI_TRUE
-               : JNI_FALSE;
-  } catch (...) {
-    return JNI_FALSE;
   }
 }
 
 jstring pushy::jni_natives::FlowHandleResponse(
-    JNIEnv* env, jclass, jstring responseText, jstring identityJson,
-    jstring afterDownload) {
+    JNIEnv* env, jclass, jstring responseText, jstring configJson,
+    jstring envJson, jstring requestBody, jlong responseAtSeconds) {
   try {
-    bool ok = false;
-    flowjson::Value identity = flowjson::Parse(
-        pushy::jni_util::JStringToString(env, identityJson), &ok);
-    if (!ok || !identity.IsObject()) {
-      return nullptr;
-    }
-    return ToJString(env, flowjson::Stringify(flowcore::HandleResponse(
-                              pushy::jni_util::JStringToString(env, responseText),
-                              identity, false,
-                              pushy::jni_util::JStringToString(env, afterDownload))));
+    return ToJsonOrNull(
+        env, flowcore::HandleRoundResponse(
+                 pushy::jni_util::JStringToString(env, responseText),
+                 pushy::jni_util::JStringToString(env, configJson),
+                 ParseObject(env, envJson),
+                 pushy::jni_util::JStringToString(env, requestBody),
+                 static_cast<double>(responseAtSeconds)));
   } catch (...) {
     return nullptr;
   }

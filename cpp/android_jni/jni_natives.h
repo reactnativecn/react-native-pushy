@@ -20,10 +20,9 @@ jobject SyncStateWithBinaryVersion(JNIEnv* env, jclass, jstring package_version,
 jobject RunStateCore(JNIEnv* env, jclass, jint operation, jobject state_result, jstring string_arg, jboolean flag_a, jboolean flag_b);
 jobjectArray ApplyArchiveDelta(JNIEnv* env, jclass, jint patch_type, jobjectArray entry_names, jbyteArray manifest_json, jstring source_root, jstring target_root, jstring origin_bundle_path, jstring bundle_patch_path, jstring bundle_output_path, jboolean host_copies_resources);
 void CleanupOldEntries(JNIEnv* env, jclass, jstring root_dir, jobjectArray keep_names, jint max_age_days, jstring trash_dir);
-jstring FlowBuildRequestBody(JNIEnv* env, jclass, jstring inputJson);
-jstring FlowOrderEndpointCandidates(JNIEnv* env, jclass, jstring endpointsJson, jdouble randomSample);
-jboolean FlowIsValidResponse(JNIEnv* env, jclass, jstring responseText);
-jstring FlowHandleResponse(JNIEnv* env, jclass, jstring responseText, jstring identityJson, jstring afterDownload);
+jstring FlowPrepareRound(JNIEnv* env, jclass, jstring configJson, jstring envJson, jdouble randomSample);
+jstring FlowNextQueryStep(JNIEnv* env, jclass, jstring stateJson, jstring responseText);
+jstring FlowHandleResponse(JNIEnv* env, jclass, jstring responseText, jstring configJson, jstring envJson, jstring requestBody, jlong responseAtSeconds);
 jboolean FlowConfigsEquivalent(JNIEnv* env, jclass, jstring a, jstring b);
 jstring FlowRunnableConfig(JNIEnv* env, jclass, jstring configJson);
 jstring FlowNormalizeConfiguration(JNIEnv* env, jclass, jstring optionsJson);

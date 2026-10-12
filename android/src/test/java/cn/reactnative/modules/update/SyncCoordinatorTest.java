@@ -62,7 +62,7 @@ public class SyncCoordinatorTest {
             attempts(
                 new Object[] {"diff", "https://a/diff", "https://b/diff"},
                 new Object[] {"full", "https://a/full", "https://b/full"}),
-            "origin", true, 0, starter);
+            0, starter);
 
         assertTrue(downloaded);
         assertEquals(
@@ -77,46 +77,16 @@ public class SyncCoordinatorTest {
             .fail("https://b/full", new FileOperationException("refused"));
         boolean downloaded = SyncCoordinator.performAttempts(
             attempts(new Object[] {"full", "https://a/full", "https://b/full"}),
-            "", true, 0, starter);
+            0, starter);
 
         assertFalse(downloaded);
         assertEquals(
             Arrays.asList("full https://a/full", "full https://b/full"), starter.started);
     }
 
-    @Test
-    public void httpsOnlyRoundsSkipCleartextArtifactUrls() throws Exception {
-        ScriptedStarter starter = new ScriptedStarter();
-        assertTrue(SyncCoordinator.performAttempts(
-            attempts(new Object[] {"full", "http://a/full", "HTTP://b/full", "https://c/full"}),
-            "", true, 0, starter));
-        assertEquals(Arrays.asList("full https://c/full"), starter.started);
-
-        ScriptedStarter plain = new ScriptedStarter();
-        assertTrue(SyncCoordinator.performAttempts(
-            attempts(new Object[] {"full", "http://a/full"}), "", false, 0, plain));
-        assertEquals(Arrays.asList("full http://a/full"), plain.started);
-    }
-
-    @Test
-    public void diffNeedsARunningVersion() throws Exception {
-        ScriptedStarter starter = new ScriptedStarter();
-        assertTrue(SyncCoordinator.performAttempts(
-            attempts(
-                new Object[] {"diff", "https://a/diff"},
-                new Object[] {"pdiff", "https://a/pdiff"}),
-            "", true, 0, starter));
-        assertEquals(Arrays.asList("pdiff https://a/pdiff"), starter.started);
-    }
-
-    @Test
-    public void httpsOnlyRequiresEveryConfiguredEndpointToBeHttps() {
-        assertTrue(SyncCoordinator.isHttpsOnly(new JSONArray(Arrays.asList("https://a", "HTTPS://b"))));
-        assertFalse(SyncCoordinator.isHttpsOnly(new JSONArray(Arrays.asList("https://a", "http://b"))));
-        assertFalse(SyncCoordinator.isHttpsOnly(new JSONArray()));
-        assertFalse(SyncCoordinator.isHttpsOnly(null));
-        assertFalse(SyncCoordinator.isHttpsOnly(new JSONArray(Arrays.asList(1))));
-    }
+    // Attempt planning (diff needs a running version, https-only rounds drop
+    // cleartext URLs) and the https-only rule live in the shared core:
+    // cpp/update_flow_core/tests/native-round-vectors.json.
 
     @Test
     public void onlyPatchFailuresAreNotMirrorRetryable() {
