@@ -1869,11 +1869,13 @@ void TestArchiveLimitsExtractedDirectory() {
   }
   {
     TempDir temp;
-    // 20001 entries: 200 directories of 99 files + their own entry, plus one.
+    // 20001 entries: 200 directories of 100 files (directories themselves
+    // are not counted, as iOS/Android count only declared zip entries), plus
+    // one.
     for (int d = 0; d < 200; d++) {
       const std::string dir = temp.path + "/d" + std::to_string(d);
       EnsureDirectory(dir);
-      for (int f = 0; f < 99; f++) {
+      for (int f = 0; f < 100; f++) {
         WriteFile(dir + "/f" + std::to_string(f), "");
       }
     }

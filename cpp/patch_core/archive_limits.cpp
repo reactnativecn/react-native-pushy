@@ -152,13 +152,18 @@ Status CheckExtractedDirectory(const std::string& dir, long long archive_bytes) 
         status = Status::Error("cannot stat extracted entry " + child);
         break;
       }
-      const bool is_directory = S_ISDIR(st.st_mode);
-      status = accumulator.AcceptExtracted(
-          is_directory ? 0 : static_cast<long long>(st.st_size),
-          S_ISLNK(st.st_mode), child);
-      if (status.ok && is_directory) {
-        pending.push_back(child);
+      // Directories are walked but not counted: the zip may omit directory
+      // entries, and iOS/Android count only what the archive declares.
+      if (S_ISDIR(st.st_mode)) {
+        if (IsReservedEntryName(child)) {
+          status = Status::Error("archive contains reserved entry " + child);
+        } else {
+          pending.push_back(child);
+        }
+        continue;
       }
+      status = accumulator.AcceptExtracted(static_cast<long long>(st.st_size),
+                                           S_ISLNK(st.st_mode), child);
     }
     closedir(handle);
     if (!status.ok) {

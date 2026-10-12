@@ -350,11 +350,15 @@ class DownloadTask implements Runnable {
                     new FileOutputStream(writePath, append), digest)))
             ) {
                 while ((bytesRead = source.read(sink.buffer(), UpdateFileUtils.BUFFER_SIZE)) != -1) {
-                    long[] probe = ArchiveLimits.planFreeSpaceProbe(
+                    // A known length was reserved up front: no per-chunk plan
+                    // (and no JNI round trip on this hot loop).
+                    long[] probe = totalAll > 0 ? null : ArchiveLimits.planFreeSpaceProbe(
                         totalAll, received, bytesRead, freeSpaceReservedUntil);
                     received += bytesRead;
-                    freeSpaceReservedUntil = probe[1];
-                    if (probe[0] > 0) {
+                    if (probe != null) {
+                        freeSpaceReservedUntil = probe[1];
+                    }
+                    if (probe != null && probe[0] > 0) {
                         try {
                             ArchiveLimits.ensureFreeSpace(writePath, probe[0]);
                         } catch (IOException e) {

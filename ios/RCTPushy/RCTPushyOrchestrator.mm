@@ -732,6 +732,10 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     flowjson::Value decision = flowcore::HandleRoundResponse(
         PushyToStdString(responseText), config, env, PushyToStdString(body),
         (long long)[[NSDate date] timeIntervalSince1970]);
+    if (!decision.IsObject()) {
+        pushyHostRoundResult = PushyHostResult(@"failed", @"invalid_response");
+        return;
+    }
     NSString *cache = PushyFromStdString(decision.Get("cache").AsString());
     NSDictionary *cancelledByReset = PushyHostResult(@"cancelled", @"reset");
     // Commits only the response cache (nothing to install or activate) and
