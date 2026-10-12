@@ -4,6 +4,7 @@
 #pragma once
 
 #import "RCTPushy.h"
+#import "RCTPushyCommon.h"
 #import <React/RCTBridgeModule.h>
 #import <React/RCTLog.h>
 
@@ -18,10 +19,6 @@
 #undef _RCTLog
 #define _RCTLog(lvl, ...) _RCTLogNativeInternal(lvl, __FILE_NAME__, __LINE__, __VA_ARGS__)
 #endif
-
-// Shared across the pod's translation units, never exported from a dynamic
-// framework.
-#define PUSHY_HIDDEN __attribute__((visibility("hidden")))
 
 typedef NS_ENUM(NSInteger, PushyType) {
     PushyTypeFullDownload = 1,

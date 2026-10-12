@@ -16,7 +16,7 @@
 #include "cpp/patch_core/error_codes.h"
 #include "cpp/patch_core/digest.h"
 #include "cpp/patch_core/install_record.h"
-#include "ios/RCTPushy/RCTPushyConfiguration.h"
+#include "ios/RCTPushy/RCTPushyCommon.h"
 
 #undef TARGET_OS_TV
 #define TARGET_OS_TV 1
@@ -31,7 +31,8 @@ static void TestLog(NSString *, ...) {}
 #define RCTLogWarn TestLog
 #define RCTLogError TestLog
 
-// Pod-internal linkage (RCTPushyInternal.h); one translation unit here.
+// Pod-internal linkage (RCTPushyCommon.h); one translation unit here.
+#undef PUSHY_HIDDEN
 #define PUSHY_HIDDEN
 
 // RCTPushy.mm's own #define, not extracted; InstallRecordActivation checks it

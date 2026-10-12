@@ -215,10 +215,10 @@ Pod::Spec.new do |s|
     ss.public_header_files = ['ios/RCTPushy/RCTPushy.h',
                               'ios/RCTPushy/RCTPushyConfiguration.h',
                               'ios/RCTPushy/RCTPushyDownloader.h']
-    # RCTPushyInternal.h is shared between RCTPushy.mm and
-    # RCTPushyOrchestrator.mm only; it pulls in C++ headers, so it must stay
-    # out of the module umbrella.
-    ss.private_header_files = ['ios/RCTPushy/RCTPushyInternal.h']
+    # Shared by the pod's own sources only (RCTPushyInternal.h pulls in C++
+    # headers), so they must stay out of the module umbrella.
+    ss.private_header_files = ['ios/RCTPushy/RCTPushyCommon.h',
+                               'ios/RCTPushy/RCTPushyInternal.h']
   end
 
   # Conditionally add Expo subspec and check ExpoModulesCore version

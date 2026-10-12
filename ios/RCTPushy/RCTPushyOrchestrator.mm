@@ -1,5 +1,4 @@
 #import "RCTPushyInternal.h"
-#import "RCTPushyConfiguration.h"
 #include "../../cpp/patch_core/error_codes.h"
 #include "../../cpp/patch_core/hbc_transform_wire.h"
 #include "../../cpp/update_flow_core/flow_json.h"
@@ -216,7 +215,8 @@ static void PushyInstallCrashHoldHandler(void) {
 // it the POST body (appKey, uuid, versions) — leaves the device. The shared
 // session would follow first and only the response could be rejected; ATS
 // blocks plaintext by default, this covers apps that opted out with
-// NSAllowsArbitraryLoads. Same rule as RCTPushyDownloader. Returning nil
+// NSAllowsArbitraryLoads. Same rule as RCTPushyDownloader
+// (RCTPushyIsHttpsDowngrade). Returning nil
 // delivers the 3xx itself as the final response, which the status check in
 // PushyHttpRequest then treats as a failed endpoint.
 @interface PushyRequestRedirectGuard : NSObject <NSURLSessionTaskDelegate>
@@ -229,13 +229,7 @@ willPerformHTTPRedirection:(NSHTTPURLResponse *)response
         newRequest:(NSURLRequest *)request
  completionHandler:(void (^)(NSURLRequest *))completionHandler
 {
-    NSString *originalScheme = [task.originalRequest.URL.scheme lowercaseString];
-    NSString *nextScheme = [request.URL.scheme lowercaseString];
-    if ([originalScheme isEqualToString:@"https"] && [nextScheme isEqualToString:@"http"]) {
-        completionHandler(nil);
-        return;
-    }
-    completionHandler(request);
+    completionHandler(RCTPushyIsHttpsDowngrade(task.originalRequest.URL, request.URL) ? nil : request);
 }
 
 @end

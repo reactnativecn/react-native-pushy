@@ -93,7 +93,6 @@ PUSHY_HIDDEN NSString *const keyNativeCheckCache = @"REACTNATIVECN_PUSHY_NATIVE_
 // on the next launch means the previous process died mid-round (a crash
 // rescue was truncated): that launch resumes immediately instead of waiting.
 PUSHY_HIDDEN NSString *const keyNativeCheckIncomplete = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY";
-static NSString *const PushyErrorDomain = @"cn.reactnative.pushy";
 
 // file def
 static NSString * const BUNDLE_FILE_NAME = @"index.bundlejs";
@@ -124,10 +123,9 @@ static NSString *PushyPpkDeltaSuffix(void) {
 static NSString * const VERSION_COMPLETE_FILE_NAME = @VERSION_COMPLETE_FILE_NAME_LITERAL;
 
 // error def — messages are human-readable; the stable cross-platform codes
-// live in cpp/patch_core/error_codes.h and travel in PushyErrorCodeKey.
+// live in cpp/patch_core/error_codes.h and travel in RCTPushyErrorCodeKey.
 static NSString * const ERROR_OPTIONS = @"options error";
 static NSString * const ERROR_FILE_OPERATION = @"file operation error";
-static NSString * const PushyErrorCodeKey = @"PushyErrorCode";
 
 static NSString *PushyCode(const char *code) {
     return [NSString stringWithUTF8String:code];
@@ -370,11 +368,11 @@ static NSError *PushyEnsureFreeSpace(NSString *path, long long bytesToWrite) {
 @end
 
 static NSError *PushyDownloadDeadlineExpiredError(void) {
-    return [NSError errorWithDomain:PushyErrorDomain
+    return [NSError errorWithDomain:RCTPushyErrorDomain
                                code:-1
                            userInfo:@{
         NSLocalizedDescriptionKey: @"download deadline expired before start",
-        PushyErrorCodeKey: PushyCode(pushy::error_codes::kDownloadFailed),
+        RCTPushyErrorCodeKey: PushyCode(pushy::error_codes::kDownloadFailed),
     }];
 }
 
@@ -547,11 +545,11 @@ PUSHY_HIDDEN std::string PushyToStdString(NSString *value) {
 }
 
 static NSError *PushyNSErrorFromStatus(const pushy::delta::Status &status) {
-    return [NSError errorWithDomain:PushyErrorDomain
+    return [NSError errorWithDomain:RCTPushyErrorDomain
                                code:-1
                            userInfo:@{
                                NSLocalizedDescriptionKey: [NSString stringWithUTF8String:status.message.c_str()],
-                               PushyErrorCodeKey: PushyCode(pushy::error_codes::kDeltaFailed),
+                               RCTPushyErrorCodeKey: PushyCode(pushy::error_codes::kDeltaFailed),
                            }];
 }
 
@@ -611,7 +609,7 @@ PUSHY_HIDDEN BOOL PushyIsSafePathComponent(NSString *value) {
 static void PushyRejectError(RCTPromiseRejectBlock reject, NSError *error) {
     // Prefer the stable cross-platform code (error_codes.h); fall back to the
     // numeric NSError code for system errors that were not classified.
-    NSString *code = error.userInfo[PushyErrorCodeKey];
+    NSString *code = error.userInfo[RCTPushyErrorCodeKey];
     if (code == nil) {
         code = [NSString stringWithFormat:@"%ld", (long)error.code];
     }
@@ -619,11 +617,11 @@ static void PushyRejectError(RCTPromiseRejectBlock reject, NSError *error) {
 }
 
 static NSError *PushyErrorWithCode(const char *code, NSString *message) {
-    return [NSError errorWithDomain:PushyErrorDomain
+    return [NSError errorWithDomain:RCTPushyErrorDomain
                                code:-1
                            userInfo:@{
                                NSLocalizedDescriptionKey: message ?: @"unknown error",
-                               PushyErrorCodeKey: PushyCode(code),
+                               RCTPushyErrorCodeKey: PushyCode(code),
                            }];
 }
 
@@ -1450,7 +1448,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
 {
     [self performFetch:type options:options callback:^(NSError *error) {
         if (error != nil) {
-            if (error.userInfo[PushyErrorCodeKey] == nil) {
+            if (error.userInfo[RCTPushyErrorCodeKey] == nil) {
                 // Unclassified (system/network) errors from the download
                 // pipeline; keep the original message.
                 error = PushyErrorWithCode(pushy::error_codes::kDownloadFailed,
@@ -2023,7 +2021,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
                 unzipError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed, guard.violation);
             } else if (!succeeded && unzipError == nil) {
                 unzipError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed, @"unzip failed");
-            } else if (unzipError != nil && unzipError.userInfo[PushyErrorCodeKey] == nil) {
+            } else if (unzipError != nil && unzipError.userInfo[RCTPushyErrorCodeKey] == nil) {
                 // SSZipArchive's own NSError (corrupt zip, bad magic, ...) has
                 // no stable code; without one, fetchPackage's fallback would
                 // classify it as DOWNLOAD_FAILED even though the download
