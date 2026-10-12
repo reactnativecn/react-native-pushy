@@ -264,73 +264,6 @@ static void PushyFinishDownload(NSString *hash, NSError *error) {
     }
 }
 
-static BOOL PushyJsonIsAbsent(id value) {
-    return value == nil || [value isKindOfClass:[NSNull class]];
-}
-
-// Builds the patch-core manifest from a parsed __diff.json. Every field is
-// type-checked: this runs inside a GCD block on the file queue, where the
-// unrecognized-selector exception a `copies` array or a numeric `from` would
-// raise takes the whole app down (and trips the crash rescue) instead of
-// failing the patch. NO with `reason` set for a malformed manifest.
-static BOOL PushyPatchManifestFromJson(NSDictionary *json,
-                                       pushy::delta::PatchManifest *manifest,
-                                       NSString **reason) {
-    id copies = json[@"copies"];
-    if (!PushyJsonIsAbsent(copies)) {
-        if (![copies isKindOfClass:[NSDictionary class]]) {
-            *reason = @"delta manifest: copies is not an object";
-            return NO;
-        }
-        // Content checksum per copy target ("copiesCrc", pdiff manifests
-        // from CLI >= 2.21.2). The patch core verifies the copy source
-        // against it and fails the patch on mismatch, so the JS strategy
-        // chain falls back to the full package instead of copying drifted
-        // bytes from a rebuilt binary.
-        NSDictionary *copiesCrc = json[@"copiesCrc"];
-        if (![copiesCrc isKindOfClass:[NSDictionary class]]) {
-            copiesCrc = nil;
-        }
-        for (id to in (NSDictionary *)copies) {
-            id from = ((NSDictionary *)copies)[to];
-            if (![to isKindOfClass:[NSString class]] || ![from isKindOfClass:[NSString class]]) {
-                *reason = @"delta manifest: copies entry is not a string";
-                return NO;
-            }
-            if ([from length] == 0) {
-                from = to;
-            }
-            pushy::delta::CopyOperation operation;
-            operation.from = PushyToStdString(from);
-            operation.to = PushyToStdString(to);
-            NSNumber *expectedCrc = copiesCrc[to];
-            if ([expectedCrc isKindOfClass:[NSNumber class]]) {
-                operation.has_expected_crc = true;
-                operation.expected_crc = (uint32_t)[expectedCrc unsignedLongLongValue];
-            }
-            manifest->copies.push_back(operation);
-        }
-    }
-
-    // The CLI emits `deletes` as an object keyed by path (Android reads its
-    // keys); a plain array of paths is accepted as well, like Harmony.
-    id deletes = json[@"deletes"];
-    if (!PushyJsonIsAbsent(deletes)) {
-        if (![deletes isKindOfClass:[NSDictionary class]] && ![deletes isKindOfClass:[NSArray class]]) {
-            *reason = @"delta manifest: deletes is not an object or array";
-            return NO;
-        }
-        for (id path in deletes) {
-            if (![path isKindOfClass:[NSString class]]) {
-                *reason = @"delta manifest: deletes entry is not a string";
-                return NO;
-            }
-            manifest->deletes.push_back(PushyToStdString(path));
-        }
-    }
-    return YES;
-}
-
 // Everything under rctpushy is re-downloadable, and Application Support is
 // backed up to iCloud by default — Apple requires such content to be
 // excluded from backups.
@@ -541,7 +474,8 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
 }
 
 // Applies the unpacked patch in the staging directory (two-phase install);
-// nil on success, a PATCH_FAILED error otherwise.
+// nil on success, a PATCH_FAILED error otherwise. __diff.json is handed to
+// the patch core as text (cpp/patch_core/patch_manifest.h parses it).
 + (NSError *)applyDeltaForHash:(NSString *)hash
                           type:(PushyType)type
                     fromBundle:(NSString *)bundleOrigin
@@ -550,87 +484,38 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
     NSString *unzipDir = PushyStagingDir(hash);
     NSString *sourcePatch = [unzipDir stringByAppendingPathComponent:SOURCE_PATCH_NAME];
     NSString *bundlePatch = [unzipDir stringByAppendingPathComponent:BUNDLE_PATCH_NAME()];
+    NSFileManager *fileManager = [NSFileManager defaultManager];
 
-    NSString *destination = [unzipDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-    long long manifestBytes = RCTPushyFileSize(sourcePatch);
-    if (manifestBytes > pushy::archive_limits::kMaxManifestBytes) {
-        return PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
-            [NSString stringWithFormat:@"delta manifest too large: %lld bytes", manifestBytes]);
-    }
-    NSData *data = [NSData dataWithContentsOfFile:sourcePatch];
-    if (data == nil) {
-        return PushyErrorWithCode(pushy::error_codes::kDeltaFailed, @"missing delta manifest");
-    }
-
-    // A parse failure is a patch failure like the sibling manifest branches;
-    // unclassified errors would otherwise be tagged DOWNLOAD_FAILED by the
-    // fetchPackage fallback even though the download itself succeeded.
-    NSError *error = nil;
-    NSDictionary *json = PushyJsonDictionary(data, &error);
-    if (json == nil) {
-        return PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
-                                  error != nil ? error.localizedDescription : @"invalid delta manifest");
-    }
-    pushy::delta::PatchManifest manifest;
-    NSString *manifestReason = nil;
-    if (!PushyPatchManifestFromJson(json, &manifest, &manifestReason)) {
-        return PushyErrorWithCode(pushy::error_codes::kDeltaFailed, manifestReason);
-    }
-
-    std::vector<std::string> entryNames;
-    if ([[NSFileManager defaultManager] fileExistsAtPath:sourcePatch isDirectory:NULL]) {
-        entryNames.push_back(PushyToStdString(SOURCE_PATCH_NAME));
-    }
-    if ([[NSFileManager defaultManager] fileExistsAtPath:bundlePatch isDirectory:NULL]) {
-        entryNames.push_back(PushyToStdString(BUNDLE_PATCH_NAME()));
-    }
-
-    NSError *(^statusError)(const pushy::delta::Status &) = ^NSError *(const pushy::delta::Status &status) {
-        return PushyErrorWithCode(pushy::error_codes::kDeltaFailed, @(status.message.c_str()));
-    };
-    pushy::archive_patch::ArchivePatchPlan plan;
-    pushy::delta::Status planStatus = pushy::archive_patch::BuildArchivePatchPlan(
-        type == PushyTypePatchFromPackage
-            ? pushy::archive_patch::ArchivePatchType::kPatchFromPackage
-            : pushy::archive_patch::ArchivePatchType::kPatchFromPpk,
-        manifest,
-        entryNames,
-        &plan
-    );
-    if (!planStatus.ok) {
-        return statusError(planStatus);
-    }
-
-    pushy::delta::FileSourcePatchOptions options;
-    pushy::delta::Status optionStatus = pushy::archive_patch::BuildFileSourcePatchOptions(
-        plan,
-        PushyToStdString(sourceOrigin),
-        PushyToStdString(unzipDir),
-        PushyToStdString(bundleOrigin),
-        PushyToStdString(bundlePatch),
-        PushyToStdString(destination),
-        &options
-    );
-    if (!optionStatus.ok) {
-        return statusError(optionStatus);
-    }
-
-    // __diff.json 的 hbcTransform 元数据(HBC 变换域 patch,hdiffv2 轨道):
-    // 存在时透传给 patch 内核执行 T(origin) → hpatch → T⁻¹;缺失走现状路径。
-    NSDictionary *hbcTransform = json[@"hbcTransform"];
-    if ([hbcTransform isKindOfClass:[NSDictionary class]]) {
-        NSDictionary *meta = hbcTransform[BUNDLE_PATCH_NAME()];
-        if ([meta isKindOfClass:[NSDictionary class]]) {
-            NSString *metaString = PushyJsonString(meta);
-            if (metaString != nil) {
-                options.manifest.bundle_hbc_transform_meta = PushyToStdString(metaString);
-            }
+    pushy::archive_patch::ArchivePatchRequest request;
+    request.archive.type = type == PushyTypePatchFromPackage
+        ? pushy::archive_patch::ArchivePatchType::kPatchFromPackage
+        : pushy::archive_patch::ArchivePatchType::kPatchFromPpk;
+    if ([fileManager fileExistsAtPath:sourcePatch isDirectory:NULL]) {
+        long long manifestBytes = RCTPushyFileSize(sourcePatch);
+        if (manifestBytes > pushy::archive_limits::kMaxManifestBytes) {
+            return PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
+                [NSString stringWithFormat:@"delta manifest too large: %lld bytes", manifestBytes]);
         }
+        NSData *data = [NSData dataWithContentsOfFile:sourcePatch];
+        if (data == nil) {
+            return PushyErrorWithCode(pushy::error_codes::kDeltaFailed, @"unreadable delta manifest");
+        }
+        request.archive.entry_names.push_back(PushyToStdString(SOURCE_PATCH_NAME));
+        request.archive.manifest_json.assign(static_cast<const char *>(data.bytes), data.length);
     }
+    if ([fileManager fileExistsAtPath:bundlePatch isDirectory:NULL]) {
+        request.archive.entry_names.push_back(PushyToStdString(BUNDLE_PATCH_NAME()));
+    }
+    request.source_root = PushyToStdString(sourceOrigin);
+    request.target_root = PushyToStdString(unzipDir);
+    request.origin_bundle_path = PushyToStdString(bundleOrigin);
+    request.bundle_patch_path = PushyToStdString(bundlePatch);
+    request.bundle_output_path = PushyToStdString(
+        [unzipDir stringByAppendingPathComponent:BUNDLE_FILE_NAME]);
 
-    pushy::delta::Status status = pushy::delta::ApplyPatchFromFileSource(options);
+    pushy::delta::Status status = pushy::archive_patch::ApplyArchivePatch(request, nullptr);
     if (!status.ok) {
-        return statusError(status);
+        return PushyErrorWithCode(pushy::error_codes::kDeltaFailed, @(status.message.c_str()));
     }
     return nil;
 }
