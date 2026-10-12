@@ -5,7 +5,7 @@ import { evalHarmonyModule } from './nativeSources';
 
 // The pure parsers of Harmony DownloadTask.ts, evaluated from source with its
 // platform imports stripped (the download/patch class itself needs a device).
-// InstallRecord.ts imports @ohos modules, so its bundle name is inlined.
+// InstallRecord.ts imports the NAPI module, so its bundle name is inlined.
 // __diff.json is parsed by the native core only
 // (cpp/patch_core/tests/patch-manifest-vectors.json).
 const HARMONY_BUNDLE_FILE_NAME = 'bundle.harmony.js';

@@ -29,9 +29,9 @@ import {
 } from './ArchiveLimits';
 import {
   HARMONY_BUNDLE_FILE_NAME,
-  buildInstallRecord,
+  promoteStaging,
+  sealInstallRecord,
   stagingDirectoryFor,
-  writeInstallRecord,
 } from './InstallRecord';
 import {
   ERROR_DOWNLOAD_FAILED,
@@ -124,23 +124,12 @@ export class DownloadTask {
 
   private async promoteStaging(params: DownloadTaskParams): Promise<void> {
     const work = this.stagingDirectory(params);
-    const bundlePath = `${work}/${HARMONY_BUNDLE_FILE_NAME}`;
-    if (!fileIo.accessSync(bundlePath)) {
-      throw createPushyError(
-        ERROR_DELTA_FAILED,
-        `bundle missing after install: ${bundlePath}`,
-      );
-    }
-    // 整 bundle 几十 MB:摘要在 native 工作线程算,不冻结 UI 线程。
-    const bundleSha256 = await NativePatchCore.sha256HexFileAsync(bundlePath);
-    await writeInstallRecord(
-      work,
-      buildInstallRecord(params.hash, bundleSha256, this.artifactSha256),
-    );
+    // 整 bundle 几十 MB:摘要与记录写入在 native 工作线程完成,不冻结 UI 线程。
+    await sealInstallRecord(work, params.hash, this.artifactSha256);
     if (fileIo.accessSync(params.unzipDirectory)) {
       await this.removeDirectory(params.unzipDirectory);
     }
-    await fileIo.rename(work, params.unzipDirectory);
+    await promoteStaging(work, params.unzipDirectory);
   }
 
   constructor(context: common.Context) {

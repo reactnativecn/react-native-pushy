@@ -85,6 +85,34 @@ interface NativePatchCoreBindings {
   // pread 流式计算(内嵌 bundle 走 resourceManager.getRawFd)。fd 由调用方
   // 持有,promise 落定前不得关闭;读失败/提前 EOF 时 reject。
   sha256HexRawFdAsync(fd: number, offset: number, length: number): Promise<string>;
+  // 完成记录(cpp/patch_core/install_record.h,与 Android/iOS 共用)。
+  /** 存在性判定(启动/去重路径,不算摘要):bundle 在盘上且记录指向本版本 */
+  isInstallComplete(
+    versionDir: string,
+    versionHash: string,
+    bundleFileName: string,
+  ): boolean;
+  /** 记录里的 bundleSha256(崩溃归因);没有时为空串 */
+  recordedBundleSha256(versionDir: string): string;
+  /** 工作线程上计算 staging 里 bundle 的摘要并原子写入完成记录 */
+  sealInstallRecord(
+    stagingDir: string,
+    versionHash: string,
+    bundleFileName: string,
+    artifactSha256: string,
+  ): Promise<void>;
+  /** 把已写完记录的 staging 目录 rename 成版本目录(调用方先删掉旧目录) */
+  promoteStaging(stagingDir: string, versionDir: string): Promise<void>;
+  /**
+   * 激活前校验(工作线程重算 bundle 摘要);不可激活时以原因 reject。
+   * grandfathered = 该版本是持久化的 current/last。
+   */
+  checkActivation(
+    versionDir: string,
+    versionHash: string,
+    bundleFileName: string,
+    grandfathered: boolean,
+  ): Promise<void>;
   /** CRC32(zip/zlib 多项式)。pdiff 拷贝前与 copiesCrc 比对用 */
   crc32(data: Uint8Array | ArrayBuffer): number;
   /** 原生 patch 内核可消费的 diff 轨道版本(2 = hdiffv2 轨道) */

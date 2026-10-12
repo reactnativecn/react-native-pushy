@@ -1,196 +1,185 @@
 import { describe, expect, test } from 'bun:test';
-import { evalHarmonyModule } from './nativeSources';
+import {
+  createPushyError,
+  ERROR_DELTA_FAILED,
+  ERROR_SWITCH_VERSION_FAILED,
+  getErrorMessage,
+  type PushyError,
+} from '../../harmony/pushy/src/main/ets/ErrorCodes';
+import { evalHarmonyModule, source, stripComments } from './nativeSources';
 
-// Harmony InstallRecord.ts (ArkTS mirror of cpp/patch_core/install_record.h)
-// imports @ohos modules, so it is evaluated with its imports stripped and its
-// collaborators (file system, native digest, error factory) supplied as
-// in-memory stubs. This covers the disk-backed activation path; the pure
-// record logic is in harmonyInstallRecordLogic.test.ts.
-
-class PushyError extends Error {
-  code: string;
-  constructor(code: string, message: string) {
-    super(`[${code}] ${message}`);
-    this.code = code;
-  }
-}
+// Harmony InstallRecord.ts is a thin binding over the shared completion
+// record core (cpp/patch_core/install_record.h, replayed against
+// tests/install-record-vectors.json by the C++ test). What is left to test
+// here: the paths it builds, what it hands the NAPI module, the stable error
+// codes it maps rejections to, and that every NAPI binding it relies on is
+// exported by pushy.cpp.
 
 interface InstallRecordModule {
-  buildInstallRecord(
-    versionHash: string,
-    bundleSha256: string,
-    artifactSha256: string
-  ): string;
-  expectedBundleSha256ForActivation(
-    record: Record<string, unknown> | null,
-    versionHash: string
-  ): string;
+  STAGING_SUFFIX: string;
+  HARMONY_BUNDLE_FILE_NAME: string;
+  stagingDirectoryFor(versionDir: string): string;
+  isReservedEntryName(name: string): boolean;
+  sealInstallRecord(dir: string, hash: string, artifact: string): Promise<void>;
+  promoteStaging(staging: string, version: string): Promise<void>;
+  isInstallComplete(dir: string, hash: string): boolean;
+  recordedBundleSha256(dir: string): string;
   verifyInstallForActivation(
-    versionDir: string,
-    versionHash: string,
-    bundlePath: string
+    dir: string,
+    hash: string,
+    grandfathered: boolean
   ): Promise<void>;
 }
 
-function loadInstallRecord(
-  files: Map<string, string>,
-  digests: Map<string, string>
-): InstallRecordModule {
-  const fileIo = {
-    accessSync: (path: string) => files.has(path),
-    statSync: (path: string) => ({ size: files.get(path)?.length ?? 0 }),
-    readTextSync: (path: string) => files.get(path) ?? '',
-  };
-  const NativePatchCore = {
-    sha256HexFileAsync: async (path: string) => {
-      const digest = digests.get(path);
-      if (digest === undefined) {
-        throw new Error('sha256HexFileAsync: cannot read file');
+function load(rejection?: string) {
+  const calls: Array<[string, unknown[]]> = [];
+  const call =
+    (name: string, result: unknown) =>
+    (...args: unknown[]) => {
+      calls.push([name, args]);
+      return result;
+    };
+  const settle =
+    (name: string) =>
+    async (...args: unknown[]) => {
+      calls.push([name, args]);
+      if (rejection !== undefined) {
+        throw new Error(rejection);
       }
-      return digest;
-    },
+    };
+  const NativePatchCore = {
+    sealInstallRecord: settle('sealInstallRecord'),
+    promoteStaging: settle('promoteStaging'),
+    checkActivation: settle('checkActivation'),
+    isInstallComplete: call('isInstallComplete', true),
+    recordedBundleSha256: call('recordedBundleSha256', 'ab'),
   };
-  return evalHarmonyModule(
+  const module = evalHarmonyModule(
     'InstallRecord.ts',
-    '({ buildInstallRecord, expectedBundleSha256ForActivation, verifyInstallForActivation });',
+    `({ STAGING_SUFFIX, HARMONY_BUNDLE_FILE_NAME, stagingDirectoryFor,
+       isReservedEntryName, sealInstallRecord, promoteStaging,
+       isInstallComplete, recordedBundleSha256, verifyInstallForActivation });`,
     {
-      fileIo,
       NativePatchCore,
-      ERROR_DELTA_FAILED: 'PATCH_FAILED',
-      ERROR_SWITCH_VERSION_FAILED: 'SWITCH_VERSION_FAILED',
-      createPushyError: (code: string, message: string) =>
-        new PushyError(code, message),
-      util: {},
+      ERROR_DELTA_FAILED,
+      ERROR_SWITCH_VERSION_FAILED,
+      createPushyError,
+      getErrorMessage,
     }
-  );
+  ) as InstallRecordModule;
+  return { module, calls };
 }
 
-const HASH = 'abc';
-const DIR = `/data/_update/${HASH}`;
-const RECORD = `${DIR}/.pushy-complete`;
-const BUNDLE = `${DIR}/bundle.harmony.js`;
-const DIGEST = 'ab'.repeat(32);
+const DIR = '/data/_update/abc';
+const BUNDLE = 'bundle.harmony.js';
 
-function captureError(fn: () => unknown): PushyError {
+async function rejectionOf(promise: Promise<void>): Promise<PushyError> {
   try {
-    fn();
+    await promise;
   } catch (e) {
     return e as PushyError;
   }
-  throw new Error('expected a throw');
+  throw new Error('expected a rejection');
 }
 
-describe('harmony install record writer', () => {
-  const { buildInstallRecord } = loadInstallRecord(new Map(), new Map());
+describe('harmony install record paths', () => {
+  const { module } = load();
 
-  test('writes the mandatory bundle digest', () => {
-    expect(JSON.parse(buildInstallRecord(HASH, DIGEST, 'ff'))).toEqual({
-      schema: 1,
-      versionHash: HASH,
-      bundleSha256: DIGEST,
-      artifactSha256: 'ff',
-    });
-    expect(JSON.parse(buildInstallRecord(HASH, DIGEST, ''))).toEqual({
-      schema: 1,
-      versionHash: HASH,
-      bundleSha256: DIGEST,
-    });
+  test('the staging directory is a sibling of the version directory', () => {
+    expect(module.stagingDirectoryFor(DIR)).toBe(
+      `${DIR}${module.STAGING_SUFFIX}`
+    );
+    expect(module.HARMONY_BUNDLE_FILE_NAME).toBe(BUNDLE);
   });
 
-  test('refuses a record without a bundle digest (install fails)', () => {
-    const error = captureError(() => buildInstallRecord(HASH, '', 'ff'));
-    expect(error.code).toBe('PATCH_FAILED');
-    expect(error.message).toContain('no bundle digest');
+  test('every .pushy- prefixed archive entry is reserved', () => {
+    for (const name of ['.pushy-complete', '.pushy-complete.tmp', '.pushy-x']) {
+      expect(module.isReservedEntryName(name)).toBe(true);
+    }
+    for (const name of [BUNDLE, '.pushyx', 'pushy-complete']) {
+      expect(module.isReservedEntryName(name)).toBe(false);
+    }
   });
 });
 
-describe('harmony install record activation', () => {
-  test('a legacy empty record stays trusted without hashing', async () => {
-    const files = new Map([[RECORD, '']]);
-    const { verifyInstallForActivation } = loadInstallRecord(files, new Map());
-    await verifyInstallForActivation(DIR, HASH, BUNDLE);
-  });
-
-  test('a matching digest activates, case-insensitively', async () => {
-    const files = new Map([
-      [
-        RECORD,
-        JSON.stringify({
-          schema: 1,
-          versionHash: HASH,
-          bundleSha256: DIGEST.toUpperCase(),
-        }),
-      ],
+describe('harmony install record bindings', () => {
+  test('presence and crash attribution are synchronous pass-throughs', () => {
+    const { module, calls } = load();
+    expect(module.isInstallComplete(DIR, 'abc')).toBe(true);
+    expect(module.recordedBundleSha256(DIR)).toBe('ab');
+    expect(calls).toEqual([
+      ['isInstallComplete', [DIR, 'abc', BUNDLE]],
+      ['recordedBundleSha256', [DIR]],
     ]);
-    const { verifyInstallForActivation } = loadInstallRecord(
-      files,
-      new Map([[BUNDLE, DIGEST]])
-    );
-    await verifyInstallForActivation(DIR, HASH, BUNDLE);
   });
 
-  test('a tampered bundle is rejected', async () => {
-    const files = new Map([
-      [
-        RECORD,
-        JSON.stringify({ schema: 1, versionHash: HASH, bundleSha256: DIGEST }),
-      ],
+  test('seal, promote and activation hand the core the Harmony bundle name', async () => {
+    const { module, calls } = load();
+    await module.sealInstallRecord(`${DIR}.staging`, 'abc', 'ff');
+    await module.promoteStaging(`${DIR}.staging`, DIR);
+    await module.verifyInstallForActivation(DIR, 'abc', true);
+    expect(calls).toEqual([
+      ['sealInstallRecord', [`${DIR}.staging`, 'abc', BUNDLE, 'ff']],
+      ['promoteStaging', [`${DIR}.staging`, DIR]],
+      ['checkActivation', [DIR, 'abc', BUNDLE, true]],
     ]);
-    const { verifyInstallForActivation } = loadInstallRecord(
-      files,
-      new Map([[BUNDLE, 'cd'.repeat(32)]])
-    );
-    await expect(verifyInstallForActivation(DIR, HASH, BUNDLE)).rejects.toThrow(
-      'bundle digest mismatch'
-    );
   });
 
-  for (const [name, record] of [
-    ['no', { schema: 1, versionHash: HASH }],
-    ['an empty', { schema: 1, versionHash: HASH, bundleSha256: '' }],
-    ['a null', { schema: 1, versionHash: HASH, bundleSha256: null }],
-    ['a non-string', { schema: 1, versionHash: HASH, bundleSha256: 123 }],
-    [
-      'only an artifact',
-      { schema: 1, versionHash: HASH, artifactSha256: DIGEST },
-    ],
-  ] as const) {
-    test(`a schema 1 record with ${name} bundle digest is rejected`, async () => {
-      const files = new Map([[RECORD, JSON.stringify(record)]]);
-      // The bundle hashes fine: rejection must come from the record alone.
-      const { verifyInstallForActivation, expectedBundleSha256ForActivation } =
-        loadInstallRecord(files, new Map([[BUNDLE, DIGEST]]));
-      const error = captureError(() =>
-        expectedBundleSha256ForActivation(record, HASH)
+  test('install failures are PATCH_FAILED with the core message', async () => {
+    const { module } = load('Bundle version abc has no bundle digest.');
+    for (const promise of [
+      module.sealInstallRecord(`${DIR}.staging`, 'abc', ''),
+      module.promoteStaging(`${DIR}.staging`, DIR),
+    ]) {
+      const error = await rejectionOf(promise);
+      expect(error.code).toBe(ERROR_DELTA_FAILED);
+      expect(error.message).toBe(
+        `[${ERROR_DELTA_FAILED}] Bundle version abc has no bundle digest.`
       );
-      expect(error.code).toBe('SWITCH_VERSION_FAILED');
-      expect(error.message).toContain('completion record mismatch');
-      await expect(
-        verifyInstallForActivation(DIR, HASH, BUNDLE)
-      ).rejects.toThrow('completion record mismatch');
-    });
-  }
+    }
+  });
 
-  test('a missing or foreign record is rejected', async () => {
-    const { verifyInstallForActivation } = loadInstallRecord(
-      new Map(),
-      new Map()
+  test('activation failures are SWITCH_VERSION_FAILED with the core reason', async () => {
+    const { module } = load('Bundle version abc completion record mismatch.');
+    const error = await rejectionOf(
+      module.verifyInstallForActivation(DIR, 'abc', false)
     );
-    await expect(verifyInstallForActivation(DIR, HASH, BUNDLE)).rejects.toThrow(
-      'no valid completion record'
+    expect(error.code).toBe(ERROR_SWITCH_VERSION_FAILED);
+    expect(error.message).toBe(
+      `[${ERROR_SWITCH_VERSION_FAILED}] Bundle version abc completion record mismatch.`
     );
-    const foreign = new Map([
-      [
-        RECORD,
-        JSON.stringify({ schema: 1, versionHash: 'def', bundleSha256: DIGEST }),
-      ],
-    ]);
-    await expect(
-      loadInstallRecord(foreign, new Map()).verifyInstallForActivation(
-        DIR,
-        HASH,
-        BUNDLE
+  });
+
+  test('NativePatchCore declares exactly what pushy.cpp exports', () => {
+    const typings = stripComments(
+      source('harmony/pushy/src/main/ets/NativePatchCore.ts')
+    );
+    const body = typings.slice(
+      typings.indexOf('interface NativePatchCoreBindings {'),
+      typings.indexOf(
+        '\n}\n',
+        typings.indexOf('interface NativePatchCoreBindings {')
       )
-    ).rejects.toThrow('completion record mismatch');
+    );
+    const declared = [...body.matchAll(/^ {2}(\w+)\(/gm)]
+      .map((m) => m[1])
+      .sort();
+    const exported = [
+      ...source('harmony/pushy/src/main/cpp/pushy.cpp').matchAll(
+        /ExportFunction\(env, exports, "(\w+)"/g
+      ),
+    ]
+      .map((m) => m[1])
+      .sort();
+    expect(declared).toEqual(exported);
+    for (const name of [
+      'isInstallComplete',
+      'recordedBundleSha256',
+      'sealInstallRecord',
+      'promoteStaging',
+      'checkActivation',
+    ]) {
+      expect(exported).toContain(name);
+    }
   });
 });

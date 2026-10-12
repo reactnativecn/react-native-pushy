@@ -2,9 +2,8 @@ import preferences from '@ohos.data.preferences';
 import fileIo from '@ohos.file.fs';
 import {
   HARMONY_BUNDLE_FILE_NAME,
-  INSTALL_RECORD_FILE_NAME,
   isInstallComplete,
-  readInstallRecord,
+  recordedBundleSha256,
   verifyInstallForActivation,
 } from './InstallRecord';
 import { DownloadTask } from './DownloadTask';
@@ -31,7 +30,6 @@ import { assertSafePathComponent } from './PathUtils';
 import { withRawFd } from './SaveFile';
 import {
   ERROR_SWITCH_VERSION_FAILED,
-  createPushyError,
   getErrorMessage,
   toPushyError,
 } from './ErrorCodes';
@@ -712,10 +710,9 @@ export class UpdateContext {
       return '';
     }
     try {
-      const record = readInstallRecord(
+      return recordedBundleSha256(
         `${this.rootDir}/${assertSafePathComponent(hash)}`,
       );
-      return record?.bundleSha256 ?? '';
     } catch (e) {
       return '';
     }
@@ -726,53 +723,26 @@ export class UpdateContext {
   public hasDownloadedVersion(hash: string): boolean {
     try {
       const safeHash = assertSafePathComponent(hash);
-      return fileIo.accessSync(this.getBundlePath(safeHash))
-        && isInstallComplete(`${this.rootDir}/${safeHash}`, safeHash);
+      return isInstallComplete(`${this.rootDir}/${safeHash}`, safeHash);
     } catch (e) {
       return false;
     }
   }
 
   /**
-   * 激活前置校验(同步,不写任何东西):bundle 在盘上,且要么是本 SDK 记录为
-   * 完整安装的版本(bundle + 记录),要么是标记机制之前就激活过、目录里没有
-   * 记录文件的历史版本(current/last 里有它)。其他无记录的目录可能是崩溃
-   * 留下的半成品;有记录文件的目录即便是 current/last 也照常复核。
-   * 返回是否还需复核安装记录(无记录的历史版本无可核)。
-   */
-  private assertActivatable(safeHash: string): boolean {
-    if (!fileIo.accessSync(this.getBundlePath(safeHash))) {
-      throw createPushyError(
-        ERROR_SWITCH_VERSION_FAILED,
-        `Bundle version ${safeHash} not found.`,
-      );
-    }
-    const legacyActivated =
-      !fileIo.accessSync(`${this.rootDir}/${safeHash}/${INSTALL_RECORD_FILE_NAME}`) &&
-      (this.readString('currentVersion') === safeHash ||
-        this.readString('lastVersion') === safeHash);
-    if (!this.hasDownloadedVersion(safeHash) && !legacyActivated) {
-      throw createPushyError(
-        ERROR_SWITCH_VERSION_FAILED,
-        `Bundle version ${safeHash} is incomplete.`,
-      );
-    }
-    return !legacyActivated;
-  }
-
-  /**
-   * 完整的激活校验(含 native 工作线程上的 bundle 摘要复核),不写状态。
-   * 记录里的 bundle 摘要必须与盘上字节一致,才能把下次启动指向它。
+   * 完整的激活校验(含 native 工作线程上的 bundle 摘要复核),不写状态:
+   * bundle 在盘上,且记录里的 bundle 摘要与盘上字节一致,才能把下次启动指向
+   * 它。标记机制之前就激活过、目录里没有记录文件的历史版本(current/last
+   * 里有它)免检;有记录文件的目录即便是 current/last 也照常复核。
    */
   public async verifyActivation(hash: string): Promise<void> {
     const safeHash = assertSafePathComponent(hash);
-    if (this.assertActivatable(safeHash)) {
-      await verifyInstallForActivation(
-        `${this.rootDir}/${safeHash}`,
-        safeHash,
-        this.getBundlePath(safeHash),
-      );
-    }
+    await verifyInstallForActivation(
+      `${this.rootDir}/${safeHash}`,
+      safeHash,
+      this.readString('currentVersion') === safeHash ||
+        this.readString('lastVersion') === safeHash,
+    );
   }
 
   /** 内存里切换状态(不落盘);调用方负责 flush。 */

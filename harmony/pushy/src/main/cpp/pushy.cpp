@@ -15,6 +15,7 @@
 
 #include "archive_patch_core.h"
 #include "digest.h"
+#include "install_record.h"
 #include "hbc_transform_wire.h"
 #include "patch_core.h"
 #include "state_core.h"
@@ -903,6 +904,138 @@ napi_value Sha256HexRawFdAsync(napi_env env, napi_callback_info info) {
       });
 }
 
+// ---- Completion records (cpp/patch_core/install_record.h) ----
+
+// Reads the first `count` arguments as strings, of which the first
+// `non_empty` must not be empty; throws and returns false otherwise.
+bool GetStringArgs(
+    napi_env env,
+    napi_callback_info info,
+    const char* name,
+    size_t count,
+    size_t non_empty,
+    std::string* out) {
+  napi_value args[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};
+  size_t argc = count;
+  if (count > 5 || !GetArgCount(env, info, &argc, args) || argc < count) {
+    ThrowError(env, std::string(name) + ": wrong number of arguments");
+    return false;
+  }
+  for (size_t i = 0; i < count; i++) {
+    bool ok = false;
+    out[i] = GetString(env, args[i], &ok);
+    if (!ok) {
+      return false;
+    }
+    if (i < non_empty && out[i].empty()) {
+      ThrowError(env, std::string(name) + ": argument " + std::to_string(i) +
+                          " must be a non-empty string");
+      return false;
+    }
+  }
+  return true;
+}
+
+// isInstallComplete(versionDir, versionHash, bundleFileName) -> boolean.
+// Synchronous: a stat and a read of the (at most 64 KB) record, no digest.
+napi_value InstallRecordIsComplete(napi_env env, napi_callback_info info) {
+  std::string args[3];
+  if (!GetStringArgs(env, info, "isInstallComplete", 3, 3, args)) {
+    return nullptr;
+  }
+  return NewBoolean(env, pushy::install_record::IsComplete(args[0], args[1], args[2]));
+}
+
+// recordedBundleSha256(versionDir) -> string; "" when the record has none.
+// Synchronous like isInstallComplete.
+napi_value InstallRecordBundleSha256(napi_env env, napi_callback_info info) {
+  std::string args[1];
+  if (!GetStringArgs(env, info, "recordedBundleSha256", 1, 1, args)) {
+    return nullptr;
+  }
+  return NewString(env, pushy::install_record::RecordedBundleSha256(args[0]));
+}
+
+// One install_record call on a libuv worker thread: hashing a bundle (tens
+// of MB) or fsyncing must not block the JS thread.
+struct InstallRecordWork {
+  std::string args[4];
+  bool grandfathered = false;
+  pushy::delta::Status status{false, ""};
+};
+
+void SettleInstallRecordWork(
+    napi_env env,
+    napi_deferred deferred,
+    const InstallRecordWork& w) {
+  SettleWithStatus(env, deferred, w.status);
+}
+
+// sealInstallRecord(stagingDir, versionHash, bundleFileName, artifactSha256)
+// -> Promise<void>: hashes the staged bundle and writes the record.
+napi_value SealInstallRecord(napi_env env, napi_callback_info info) {
+  InstallRecordWork work;
+  if (!GetStringArgs(env, info, "sealInstallRecord", 4, 3, work.args)) {
+    return nullptr;
+  }
+  return QueueWork<InstallRecordWork>(
+      env,
+      "sealInstallRecord",
+      std::move(work),
+      [](InstallRecordWork& w) {
+        w.status = pushy::install_record::Seal(
+                       w.args[0], w.args[1], w.args[2], w.args[3], std::string())
+                       .status;
+      },
+      SettleInstallRecordWork);
+}
+
+// promoteStaging(stagingDir, versionDir) -> Promise<void>: renames the sealed
+// staging directory to the (removed) version directory.
+napi_value PromoteStaging(napi_env env, napi_callback_info info) {
+  InstallRecordWork work;
+  if (!GetStringArgs(env, info, "promoteStaging", 2, 2, work.args)) {
+    return nullptr;
+  }
+  return QueueWork<InstallRecordWork>(
+      env,
+      "promoteStaging",
+      std::move(work),
+      [](InstallRecordWork& w) {
+        w.status = pushy::install_record::Promote(w.args[0], w.args[1]);
+      },
+      SettleInstallRecordWork);
+}
+
+// checkActivation(versionDir, versionHash, bundleFileName, grandfathered)
+// -> Promise<void>, rejected with the reason the version must not be
+// activated.
+napi_value CheckActivation(napi_env env, napi_callback_info info) {
+  InstallRecordWork work;
+  if (!GetStringArgs(env, info, "checkActivation", 3, 3, work.args)) {
+    return nullptr;
+  }
+  napi_value args[4] = {nullptr, nullptr, nullptr, nullptr};
+  size_t argc = 4;
+  if (!GetArgCount(env, info, &argc, args) || argc < 4) {
+    ThrowError(env, "checkActivation: wrong number of arguments");
+    return nullptr;
+  }
+  if (!GetBoolean(env, args[3], &work.grandfathered)) {
+    return nullptr;
+  }
+  return QueueWork<InstallRecordWork>(
+      env,
+      "checkActivation",
+      std::move(work),
+      [](InstallRecordWork& w) {
+        pushy::install_record::Activation activation;
+        w.status = pushy::install_record::CheckActivation(
+            w.args[0], w.args[1], w.args[2], w.grandfathered, &activation);
+      },
+      SettleInstallRecordWork);
+}
+
 bool ExportFunction(
     napi_env env,
     napi_value exports,
@@ -1159,6 +1292,11 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "cleanupOldEntries", CleanupOldEntries) ||
       !ExportFunction(env, exports, "sha256HexFileAsync", Sha256HexFileAsync) ||
       !ExportFunction(env, exports, "sha256HexRawFdAsync", Sha256HexRawFdAsync) ||
+      !ExportFunction(env, exports, "isInstallComplete", InstallRecordIsComplete) ||
+      !ExportFunction(env, exports, "recordedBundleSha256", InstallRecordBundleSha256) ||
+      !ExportFunction(env, exports, "sealInstallRecord", SealInstallRecord) ||
+      !ExportFunction(env, exports, "promoteStaging", PromoteStaging) ||
+      !ExportFunction(env, exports, "checkActivation", CheckActivation) ||
       !ExportFunction(env, exports, "crc32", Crc32) ||
       !ExportFunction(env, exports, "getSupportedDiffVersion", GetSupportedDiffVersion) ||
       !ExportFunction(env, exports, "buildRequestBody", FlowBuildRequestBody) ||

@@ -117,8 +117,8 @@ const javaDir = 'android/src/main/java/cn/reactnative/modules/update';
 const archiveLimitsRequired = ['UnknownLengthFreeSpaceProbeBytes', 'MaxArchiveBytes'];
 const errorCodesRequired = ['DeltaFailed', 'InvalidOptions'];
 // The record logic itself lives in install_record.cpp; the hosts only mirror
-// the names they still build paths from.
-const installRecordMirrored = ['Schema', 'FileName', 'StagingSuffix'];
+// the staging suffix they still build their unpack directory from.
+const installRecordMirrored = ['StagingSuffix'];
 
 const pairs = [
   {
@@ -139,12 +139,7 @@ const pairs = [
     header: 'cpp/patch_core/install_record.h',
     mirror: 'harmony/pushy/src/main/ets/InstallRecord.ts',
     parse: parseArkTsConstants,
-    mirrorName: (cppName) =>
-      ({
-        Schema: 'INSTALL_RECORD_SCHEMA',
-        FileName: 'INSTALL_RECORD_FILE_NAME',
-        StagingSuffix: 'STAGING_SUFFIX',
-      })[cppName] || screamingSnake(cppName),
+    mirrorName: screamingSnake,
     only: installRecordMirrored,
   },
   {
@@ -152,7 +147,7 @@ const pairs = [
     mirror: `${javaDir}/InstallRecord.java`,
     parse: parseJavaConstants,
     mirrorName: screamingSnake,
-    only: ['StagingSuffix'],
+    only: installRecordMirrored,
   },
   {
     header: 'cpp/patch_core/error_codes.h',
