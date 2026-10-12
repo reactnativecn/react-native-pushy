@@ -50,19 +50,19 @@ jobs:
     container: ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image:latest@sha256:2836142b7b6ae8837ad0e36cacc650f00e8c88f55b4e9f34be66cc98a731c5da
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Configure git safe.directory
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git submodule foreach --recursive 'git config --global --add safe.directory "$toplevel/$sm_path"'
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.0
       # The container ships no node; the check scripts and build-harmony-har
       # (npm run) need one, exactly as publish.yml sets it up.
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
       - run: bun install --frozen-lockfile
