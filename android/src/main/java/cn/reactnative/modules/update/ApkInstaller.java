@@ -20,7 +20,6 @@ import java.io.OutputStream;
 import java.util.concurrent.ConcurrentHashMap;
 
 final class ApkInstaller {
-    private static final int COPY_BUFFER_SIZE = 64 * 1024;
     private static final String SESSION_ID_EXTRA =
         Texts.reveal("3919bac3ab8a6b512c3e08f0c0b6de60452311edfbc8f680624b2d1de38da5a58e65557f3ecaeb8ea3b859661f3dc3f98bab48646c042bd0e19ca546681c2939");
     private static final ConcurrentHashMap<Integer, Promise> pendingPromises =
@@ -177,11 +176,7 @@ final class ApkInstaller {
                     FileInputStream input = new FileInputStream(apkFile);
                     OutputStream output = session.openWrite("base.apk", 0, apkFile.length())
                 ) {
-                    byte[] buffer = new byte[COPY_BUFFER_SIZE];
-                    int count;
-                    while ((count = input.read(buffer)) != -1) {
-                        output.write(buffer, 0, count);
-                    }
+                    UpdateFileUtils.copy(input, output);
                     session.fsync(output);
                 }
 

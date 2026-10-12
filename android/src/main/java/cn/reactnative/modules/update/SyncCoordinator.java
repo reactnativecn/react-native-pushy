@@ -572,25 +572,13 @@ final class SyncCoordinator {
                 builder.post(RequestBody.create(
                     postBody, MediaType.parse("application/json; charset=utf-8")));
             }
-            OkHttpClient client = httpClient;
-            if (deadlineNanos > 0) {
-                // Crash-rescue budget: never let a single request outlive the
-                // handler's hold window.
-                long remainingMillis = TimeUnit.NANOSECONDS.toMillis(
-                    deadlineNanos - System.nanoTime());
-                if (remainingMillis <= 0) {
-                    return null;
-                }
-                if (remainingMillis < 15000) {
-                    client = httpClient.newBuilder()
-                        .callTimeout(remainingMillis, TimeUnit.MILLISECONDS)
-                        .build();
-                }
-            }
+            // Crash-rescue budget: never let a single request outlive the
+            // handler's hold window.
+            OkHttpClient client = HttpClients.withDeadline(httpClient, deadlineNanos);
             try (Response response = client.newCall(builder.build()).execute()) {
                 // Same rule as the artifact download: an https endpoint that
                 // redirects to plaintext http is a failed endpoint.
-                DownloadTask.rejectProtocolDowngrade(url, response);
+                HttpClients.rejectProtocolDowngrade(url, response);
                 ResponseBody body = response.body();
                 if (!response.isSuccessful() || body == null) {
                     return null;

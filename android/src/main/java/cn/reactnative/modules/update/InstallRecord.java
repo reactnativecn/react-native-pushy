@@ -3,7 +3,6 @@ package cn.reactnative.modules.update;
 import android.os.Build;
 import android.util.Log;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +18,8 @@ final class InstallRecord {
     static final int SCHEMA = 1;
     static final String FILE_NAME = ".pushy-complete";
     static final String STAGING_SUFFIX = ".staging";
+    // A record is a few hundred bytes; anything larger is not one.
+    private static final long MAX_RECORD_BYTES = 64 * 1024;
     /** The JS bundle inside a version directory. */
     static final String BUNDLE_FILE_NAME = "index.bundlejs";
 
@@ -98,20 +99,8 @@ final class InstallRecord {
         if (file.length() == 0) {
             return new JSONObject();
         }
-        if (file.length() > 64 * 1024) {
-            return null;
-        }
-        try (FileInputStream in = new FileInputStream(file)) {
-            byte[] bytes = new byte[(int) file.length()];
-            int offset = 0;
-            while (offset < bytes.length) {
-                int read = in.read(bytes, offset, bytes.length - offset);
-                if (read < 0) {
-                    break;
-                }
-                offset += read;
-            }
-            return new JSONObject(new String(bytes, 0, offset, StandardCharsets.UTF_8));
+        try {
+            return new JSONObject(UpdateFileUtils.readSmallUtf8(file, MAX_RECORD_BYTES));
         } catch (IOException | JSONException e) {
             return null;
         }

@@ -11,7 +11,6 @@ import java.io.File;
 import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
-import java.security.MessageDigest;
 import java.util.concurrent.Executor;
 
 public class UpdateContext {
@@ -302,13 +301,7 @@ public class UpdateContext {
 
     private String sha256OfBundledAsset(String assetName) {
         try (InputStream in = context.getAssets().open(assetName)) {
-            MessageDigest md = UpdateFileUtils.newSha256();
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                md.update(buffer, 0, read);
-            }
-            return UpdateFileUtils.toHex(md.digest());
+            return UpdateFileUtils.sha256Hex(in);
         } catch (IOException e) {
             // Expected when there is no embedded bundle (custom name, no
             // release bundle); "unknown" is a valid answer, not an error.

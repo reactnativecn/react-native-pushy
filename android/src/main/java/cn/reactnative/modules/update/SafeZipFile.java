@@ -18,8 +18,6 @@ public class SafeZipFile extends ZipFile {
         super(file);
     }
 
-    private static final int BUFFER_SIZE = 64 * 1024;
-
     // Bytes written by unzipToFile across the archive: the sum of the central
     // directory's declared sizes is checked up front (inspect), the actual
     // stream is re-checked here — headers can lie.
@@ -155,10 +153,7 @@ public class SafeZipFile extends ZipFile {
     }
 
     private void unzipToFile(ZipEntry ze, File target, MessageDigest digest) throws IOException {
-        File parent = target.getParentFile();
-        if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
-            throw new IOException("Failed to create parent dir for " + target);
-        }
+        UpdateFileUtils.ensureParentDirectory(target);
 
         // The declared size is the budget when known; otherwise the global
         // per-entry cap. Either way the stream may not exceed it.
@@ -173,9 +168,9 @@ public class SafeZipFile extends ZipFile {
             try (OutputStream output = digest == null
                      ? new FileOutputStream(target)
                      : new DigestOutputStream(new FileOutputStream(target), digest)) {
-                byte[] buffer = new byte[BUFFER_SIZE];
+                byte[] buffer = new byte[UpdateFileUtils.BUFFER_SIZE];
                 int n;
-                while ((n = input.read(buffer, 0, BUFFER_SIZE)) >= 0) {
+                while ((n = input.read(buffer, 0, buffer.length)) >= 0) {
                     written += n;
                     totalWritten += n;
                     if (written > budget) {

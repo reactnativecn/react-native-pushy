@@ -7,7 +7,6 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -37,9 +36,8 @@ class DownloadTask implements Runnable {
     private static final String BUNDLE_DELTA_ENTRY =
         Texts.reveal("3319f0d4b6c56a502c3b10fcdca0de7d4b3307e9");
 
-    // Read size per loop iteration (and the buffer for small in-memory
-    // reads); progress events are throttled separately.
-    private static final int DOWNLOAD_CHUNK_SIZE = 64 * 1024;
+    // Resume sidecars are a few hundred bytes of JSON.
+    private static final long MAX_SIDECAR_BYTES = 64 * 1024;
     // When the server does not report Content-Length we cannot key progress
     // events on percentage change, so throttle by bytes to avoid flooding the
     // bridge (e.g. a 20MB chunked download would otherwise emit ~5000 events).
@@ -124,7 +122,6 @@ class DownloadTask implements Runnable {
     private final Context context;
     private final DownloadTaskParams params;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final byte[] buffer = new byte[DOWNLOAD_CHUNK_SIZE];
     private final BundledResourceCopier bundledResourceCopier;
     private String hash;
     // Set once downloadFile() returns: failures after this point in a patch
@@ -170,9 +167,8 @@ class DownloadTask implements Runnable {
             return null;
         }
         try {
-            byte[] bytes = readBytes(new java.io.FileInputStream(sidecar));
             JSONObject meta = (JSONObject) new JSONTokener(
-                new String(bytes, StandardCharsets.UTF_8)).nextValue();
+                UpdateFileUtils.readSmallUtf8(sidecar, MAX_SIDECAR_BYTES)).nextValue();
             if (url.equals(meta.optString("url"))) {
                 return meta;
             }
@@ -296,27 +292,13 @@ class DownloadTask implements Runnable {
             }
         }
 
-        OkHttpClient requestClient = HTTP_CLIENT;
-        if (params.deadlineNanos > 0) {
-            long remainingNanos = params.deadlineNanos - System.nanoTime();
-            if (remainingNanos <= 0) {
-                throw new IOException("Download deadline expired before start");
-            }
-            long remainingMillis = Math.max(
-                1L,
-                java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(remainingNanos)
-            );
-            requestClient = HTTP_CLIENT.newBuilder()
-                .callTimeout(remainingMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
-                .build();
-        }
-
-        Call call = requestClient.newCall(builder.build());
+        Call call = HttpClients.withDeadline(HTTP_CLIENT, params.deadlineNanos)
+            .newCall(builder.build());
         // Registered so an orchestrated phase timeout can cancel it
         // (CODE_AUDIT 2.12); cleared once the transfer is over.
         params.attachCall(call);
         try (Response response = call.execute()) {
-            rejectProtocolDowngrade(url, response);
+            HttpClients.rejectProtocolDowngrade(url, response);
             if (response.code() == 416) {
                 long total = resumeMeta == null ? 0 : resumeMeta.optLong("total", 0);
                 if (total > 0 && writePath.length() == total) {
@@ -406,7 +388,7 @@ class DownloadTask implements Runnable {
                 BufferedSink sink = Okio.buffer(Okio.sink(new DigestOutputStream(
                     new FileOutputStream(writePath, append), digest)))
             ) {
-                while ((bytesRead = source.read(sink.buffer(), DOWNLOAD_CHUNK_SIZE)) != -1) {
+                while ((bytesRead = source.read(sink.buffer(), UpdateFileUtils.BUFFER_SIZE)) != -1) {
                     received += bytesRead;
                     if (totalAll <= 0 && received > freeSpaceReservedUntil) {
                         long reserve = Math.max(
@@ -464,28 +446,6 @@ class DownloadTask implements Runnable {
             params.attachCall(null);
         }
         return true;
-    }
-
-    private byte[] readBytes(InputStream input) throws IOException {
-        return readBytes(input, Long.MAX_VALUE);
-    }
-
-    private byte[] readBytes(InputStream input, long maxBytes) throws IOException {
-        try (
-            InputStream in = input;
-            ByteArrayOutputStream out = new ByteArrayOutputStream()
-        ) {
-            int count;
-            long total = 0;
-            while ((count = in.read(buffer)) != -1) {
-                total += count;
-                if (total > maxBytes) {
-                    throw new IOException("content exceeds " + maxBytes + " bytes");
-                }
-                out.write(buffer, 0, count);
-            }
-            return out.toByteArray();
-        }
     }
 
     private void appendManifestEntries(
@@ -582,7 +542,7 @@ class DownloadTask implements Runnable {
                     if (entry.getSize() > ArchiveLimits.MAX_MANIFEST_BYTES) {
                         throw new IOException("delta manifest too large: " + entry.getSize());
                     }
-                    byte[] bytes = readBytes(
+                    byte[] bytes = UpdateFileUtils.readBytes(
                         zipFile.getInputStream(entry), ArchiveLimits.MAX_MANIFEST_BYTES);
                     String json = new String(bytes, StandardCharsets.UTF_8);
                     JSONObject manifest = (JSONObject) new JSONTokener(json).nextValue();
@@ -818,21 +778,6 @@ class DownloadTask implements Runnable {
                 break;
             default:
                 break;
-        }
-    }
-
-    /**
-     * An https artifact URL must stay on https through every redirect: the
-     * package is the supply-chain boundary and TLS is what authenticates
-     * it. OkHttp follows cross-scheme redirects by default, so the final
-     * request is checked here (the redirected bytes are discarded).
-     */
-    static void rejectProtocolDowngrade(String requestedUrl, Response response)
-        throws IOException {
-        if (HttpUtils.isHttpsUrl(requestedUrl) && !response.request().url().isHttps()) {
-            throw new IOException(
-                "https download redirected to plaintext http: "
-                    + response.request().url());
         }
     }
 
