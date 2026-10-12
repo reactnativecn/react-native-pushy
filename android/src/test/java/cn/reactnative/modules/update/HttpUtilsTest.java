@@ -74,6 +74,16 @@ public class HttpUtilsTest {
     }
 
     @Test
+    public void isCleartextUrlMatchesOnlyPlainHttp() {
+        assertTrue(HttpUtils.isCleartextUrl("http://example.com/a.ppk"));
+        assertTrue(HttpUtils.isCleartextUrl("HTTP://example.com/a.ppk"));
+        assertFalse(HttpUtils.isCleartextUrl("https://example.com/a.ppk"));
+        assertFalse(HttpUtils.isCleartextUrl("ftp://example.com"));
+        assertFalse(HttpUtils.isCleartextUrl("http:/example.com"));
+        assertFalse(HttpUtils.isCleartextUrl(null));
+    }
+
+    @Test
     public void revealDecodesEncodedText() {
         // Encoded with scripts/encode-native-text.ts.
         assertEquals("/checkUpdate/", HttpUtils.QUERY_PATH);

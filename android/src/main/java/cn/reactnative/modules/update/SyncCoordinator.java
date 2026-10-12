@@ -433,7 +433,8 @@ final class SyncCoordinator {
             return;
         }
 
-        String responseText = runQueryRequest(config, appKey, body, deadlineNanos);
+        boolean httpsOnly = isHttpsOnly(config.optJSONArray("endpoints"));
+        String responseText = runQueryRequest(config, appKey, body, httpsOnly, deadlineNanos);
         if (responseText == null) {
             Log.i(Texts.LOG_TAG,
                 "native sync: no endpoint reachable, giving up until next launch");
@@ -470,7 +471,7 @@ final class SyncCoordinator {
         boolean downloaded = context.hasCompletedVersion(hash);
         if (!downloaded) {
             downloaded = performAttempts(
-                decision.optJSONArray("attempts"), currentVersion, deadlineNanos,
+                decision.optJSONArray("attempts"), currentVersion, httpsOnly, deadlineNanos,
                 downloadStarter(context, hash, currentVersion));
         }
         if (!downloaded) {
@@ -648,7 +649,7 @@ final class SyncCoordinator {
      * path is latency-insensitive.
      */
     private static String runQueryRequest(
-        JSONObject config, String appKey, String body, long deadlineNanos
+        JSONObject config, String appKey, String body, boolean httpsOnly, long deadlineNanos
     ) {
         JSONArray endpoints = config.optJSONArray("endpoints");
         String orderedJson = FlowBridge.orderEndpointCandidates(
@@ -702,6 +703,12 @@ final class SyncCoordinator {
                 if (base.isEmpty() || tried.contains(base)) {
                     continue;
                 }
+                if (httpsOnly && !HttpUtils.isHttpsUrl(base)) {
+                    // A remotely injected endpoint must not downgrade an
+                    // https configuration to plaintext.
+                    Log.w(Texts.LOG_TAG, "native sync: ignoring non-https remote endpoint " + base);
+                    continue;
+                }
                 if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
                     return null;
                 }
@@ -746,8 +753,27 @@ final class SyncCoordinator {
         };
     }
 
+    /**
+     * Shared https rule (SyncCoordinator.ts isHttpsOnly): when every
+     * configured endpoint is https, server-provided endpoints and artifact
+     * URLs must not downgrade the round to plaintext.
+     */
+    static boolean isHttpsOnly(@Nullable JSONArray endpoints) {
+        if (endpoints == null || endpoints.length() == 0) {
+            return false;
+        }
+        for (int i = 0; i < endpoints.length(); i++) {
+            Object endpoint = endpoints.opt(i);
+            if (!(endpoint instanceof String) || !HttpUtils.isHttpsUrl((String) endpoint)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     static boolean performAttempts(
-        @Nullable JSONArray attempts, @Nullable String originHash, long holdDeadlineNanos, DownloadStarter starter
+        @Nullable JSONArray attempts, @Nullable String originHash, boolean httpsOnly,
+        long holdDeadlineNanos, DownloadStarter starter
     ) {
         if (attempts == null) {
             return false;
@@ -784,6 +810,10 @@ final class SyncCoordinator {
             for (int j = 0; j < urls.length(); j++) {
                 String url = urls.optString(j, "");
                 if (url.isEmpty()) {
+                    continue;
+                }
+                if (httpsOnly && HttpUtils.isCleartextUrl(url)) {
+                    Log.w(Texts.LOG_TAG, "native sync: ignoring cleartext " + type + " url " + url);
                     continue;
                 }
                 // Check before enqueueing: once the phase budget is gone we

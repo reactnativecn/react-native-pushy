@@ -15,6 +15,11 @@ final class HttpUtils {
         return url != null && url.regionMatches(true, 0, "https://", 0, 8);
     }
 
+    /** True for a plaintext "http:" URL, case-insensitively; false for anything else (incl. null). */
+    static boolean isCleartextUrl(String url) {
+        return url != null && url.regionMatches(true, 0, "http://", 0, 7);
+    }
+
     /** Request path appended to an endpoint base, kept out of the plain string table. */
     static final String QUERY_PATH = Texts.reveal("7514fcd4ad805d55263e08fc99");
 
