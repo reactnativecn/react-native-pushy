@@ -17,6 +17,7 @@
 #include "cpp/patch_core/error_codes.h"
 #include "cpp/patch_core/digest.h"
 #include "cpp/patch_core/install_record.h"
+#include "cpp/update_flow_core/native_config.h"
 #include "ios/RCTPushy/RCTPushyCommon.h"
 
 #undef TARGET_OS_TV
@@ -516,10 +517,11 @@ static void DefaultsIsolation(void) {
     });
 }
 
-// Canonical config equality shared with JS/Android/Harmony: equal canonical
-// forms are the same config (persistConfiguration no-op, hasJsRound match).
-// Replays the cross-platform vectors every implementation consumes; the file
-// is located from this source file (<repo>/scripts/tests/ios-purge-restore/).
+// Canonical config equality (contract C1, flowcore::ConfigsEquivalent): equal
+// canonical forms are the same config (persistConfiguration no-op,
+// hasJsRound match). Replays the shared vectors through the NSString binding;
+// the file is located from this source file
+// (<repo>/scripts/tests/ios-purge-restore/).
 static void ConfigEquivalence(void) {
     NSString *repo = [[[[@__FILE__ stringByDeletingLastPathComponent]
         stringByDeletingLastPathComponent] stringByDeletingLastPathComponent]

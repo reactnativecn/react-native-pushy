@@ -96,9 +96,9 @@ HELPERS = [
     'PushyJsonDictionary', 'PushyJsonString', 'PushyRejectException', 'PushyFileQueue',
     'PushySetNullableString', 'PushyHashInfoKey', 'PushyBinaryIdentityValue',
     'PushyStateFromDefaults', 'PushyApplyStateToDefaults', 'PushySwitchVersionLocked',
-    # Canonical config equality (cross-platform contract), tested directly.
-    'PushyNormalizeEndpointBase', 'PushyJsonIsBool', 'PushyJsonEqual',
-    'PushyCanonicalUrlList', 'PushyCanonicalConfig', 'PushyConfigsEquivalent',
+    # Canonical config equality (contract C1): the binding over
+    # flowcore::ConfigsEquivalent, tested directly.
+    'PushyConfigsEquivalent',
     # Install record activation check (cpp/patch_core/install_record.h) and
     # what switchVersion:error: needs around it.
     'PushyInstallRecordFileName', 'PushyVersionDir', 'PushyReadInstallRecord', 'PushyInstallRecordMatches', 'PushyHasInstallRecordFile',

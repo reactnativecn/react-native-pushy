@@ -2,6 +2,7 @@
 #include "../../cpp/patch_core/error_codes.h"
 #include "../../cpp/patch_core/hbc_transform_wire.h"
 #include "../../cpp/update_flow_core/flow_json.h"
+#include "../../cpp/update_flow_core/native_config.h"
 #include "../../cpp/update_flow_core/update_flow_core.h"
 
 #if TARGET_OS_TV
@@ -352,144 +353,43 @@ static BOOL PushyIsValidResponse(NSString *responseText) {
     return flowcore::IsValidResponse(PushyToStdString(responseText)) ? YES : NO;
 }
 
-// Canonical config equality, shared with the JS, Android and Harmony sides:
-// two config JSON strings are equivalent iff their canonical forms deep-equal.
-// Canonical form: the parsed object with absent keys defaulted
-// (disabled:false, queryUrls:[], rnu:"", rn:"", afterDownload:"none") and the
-// endpoints/queryUrls entries stripped of trailing '/' and deduplicated in
-// first-occurrence order; key order is irrelevant. Unparseable is never
-// equivalent. Lets a host-owned config (sorted keys) and the same config as JS
-// serializes it count as one, instead of a "change" that cancels the round.
-static BOOL PushyJsonIsBool(id value) {
-    return [value isKindOfClass:NSNumber.class]
-        && CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID();
-}
-
-static BOOL PushyJsonEqual(id a, id b) {
-    if (PushyJsonIsBool(a) != PushyJsonIsBool(b)) {
-        return NO;  // false is not 0
-    }
-    if ([a isKindOfClass:NSDictionary.class] && [b isKindOfClass:NSDictionary.class]) {
-        if ([a count] != [b count]) {
-            return NO;
-        }
-        for (id key in (NSDictionary *)a) {
-            id other = ((NSDictionary *)b)[key];
-            if (other == nil || !PushyJsonEqual(((NSDictionary *)a)[key], other)) {
-                return NO;
-            }
-        }
-        return YES;
-    }
-    if ([a isKindOfClass:NSArray.class] && [b isKindOfClass:NSArray.class]) {
-        if ([a count] != [b count]) {
-            return NO;
-        }
-        for (NSUInteger i = 0; i < [a count]; i++) {
-            if (!PushyJsonEqual(((NSArray *)a)[i], ((NSArray *)b)[i])) {
-                return NO;
-            }
-        }
-        return YES;
-    }
-    return [a isEqual:b];
-}
-
-static id PushyCanonicalUrlList(id value) {
-    if (![value isKindOfClass:NSArray.class]) {
-        return value;
-    }
-    NSMutableArray *result = [NSMutableArray array];
-    for (id item in (NSArray *)value) {
-        id entry = [item isKindOfClass:NSString.class] ? PushyNormalizeEndpointBase(item) : item;
-        BOOL seen = NO;
-        for (id existing in result) {
-            if (PushyJsonEqual(existing, entry)) {
-                seen = YES;
-                break;
-            }
-        }
-        if (!seen) {
-            [result addObject:entry];
-        }
-    }
-    return result;
-}
-
-static NSDictionary *PushyCanonicalConfig(NSString *json) {
-    NSMutableDictionary *config = [PushyJsonDictionary(json, NULL) mutableCopy];
-    if (config == nil) {
-        return nil;
-    }
-    NSDictionary *defaults = @{@"disabled": @NO, @"queryUrls": @[], @"rnu": @"",
-                               @"rn": @"", @"afterDownload": @"none"};
-    for (NSString *key in defaults) {
-        if (config[key] == nil) {
-            config[key] = defaults[key];
-        }
-    }
-    for (NSString *key in @[@"endpoints", @"queryUrls"]) {
-        if (config[key] != nil) {
-            config[key] = PushyCanonicalUrlList(config[key]);
-        }
-    }
-    return config;
-}
-
+// Contract C1 (flowcore::ConfigsEquivalent, shared with Android and Harmony;
+// JS has its own copy): the same config in another serialization — key order,
+// trailing slashes, defaulted keys — is not a change. Lets a host-owned
+// config and the same config as JS serializes it count as one, instead of a
+// "change" that cancels the round. nil (no stored config) never matches.
 static BOOL PushyConfigsEquivalent(NSString *a, NSString *b) {
-    NSDictionary *left = a == nil ? nil : PushyCanonicalConfig(a);
-    NSDictionary *right = b == nil ? nil : PushyCanonicalConfig(b);
-    return left != nil && right != nil && PushyJsonEqual(left, right);
+    return a != nil && b != nil
+        && flowcore::ConfigsEquivalent(PushyToStdString(a), PushyToStdString(b));
 }
 
 // The persisted config a round may run with. Every gate (crash-hold handler
 // install, round start, prepareBundle, the round itself) reads it through
-// PushyLoadRunnableConfig, so they agree on what "configured" and "disabled"
-// mean. disabled follows JS truthiness, like the flow core; appKey is trimmed
-// like Android and Harmony do.
+// PushyLoadRunnableConfig, which applies the shared gate
+// (flowcore::ParseRunnableConfig), so they agree on what "configured" and
+// "disabled" mean.
 struct PushyRunnableConfig {
     NSString *json;
     flowjson::Value value;
     NSString *appKey;
 };
 
-// YES when a round may run; otherwise *reason is not_configured, disabled or
-// invalid_config.
-static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSString **reason) {
-    NSString *failure = nil;
+// YES when a round may run; otherwise *rejection is the host-facing result
+// (skipped: not_configured/disabled, failed: invalid_config).
+static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **rejection) {
     NSString *json = [PushyDefaults() stringForKey:keyNativeConfig];
     config->json = [json copy];
-    if (json.length == 0) {
-        failure = @"not_configured";
-    } else {
-        bool ok = false;
-        flowjson::Value value = flowjson::Parse(PushyToStdString(json), &ok);
-        NSString *appKey = ok && value.IsObject()
-            ? [PushyFromStdString(value.Get("appKey").AsString())
-                  stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]]
-            : nil;
-        if (!ok || !value.IsObject()) {
-            failure = @"invalid_config";
-        } else if (value.Get("disabled").Truthy()) {
-            failure = @"disabled";
-        } else if (appKey.length == 0) {
-            failure = @"invalid_config";
-        } else {
-            config->value = value;
-            config->appKey = appKey;
+    flowcore::RunnableConfig gate = flowcore::ParseRunnableConfig(PushyToStdString(json));
+    if (!gate.runnable()) {
+        if (rejection != NULL) {
+            *rejection = PushyHostResult(PushyFromStdString(gate.status),
+                                         PushyFromStdString(gate.reason));
         }
+        return NO;
     }
-    if (reason != NULL) {
-        *reason = failure;
-    }
-    return failure == nil;
-}
-
-// Host-facing result for a config that cannot run: absent or disabled is a
-// skip, a malformed one a failure.
-static NSDictionary *PushyUnrunnableConfigResult(NSString *reason) {
-    BOOL skip = [reason isEqualToString:@"not_configured"] || [reason isEqualToString:@"disabled"];
-    return PushyHostResult(skip ? @"skipped" : @"failed", reason);
+    config->value = std::move(gate.config);
+    config->appKey = PushyFromStdString(gate.appKey);
+    return YES;
 }
 
 @implementation RCTPushyOrchestrator
@@ -650,9 +550,9 @@ static NSDictionary *PushyUnrunnableConfigResult(NSString *reason) {
         return PushyHostResult(@"skipped", @"not_initialized");
     }
     PushyRunnableConfig runnable;
-    NSString *reason = nil;
-    if (!PushyLoadRunnableConfig(&runnable, &reason)) {
-        return PushyUnrunnableConfigResult(reason);
+    NSDictionary *rejection = nil;
+    if (!PushyLoadRunnableConfig(&runnable, &rejection)) {
+        return rejection;
     }
     NSString *configJson = runnable.json;
     // Run the round on its own queue rather than this caller's thread, so the
@@ -818,11 +718,11 @@ static NSDictionary *PushyUnrunnableConfigResult(NSString *reason) {
     pushyHostRoundResult = PushyHostResult(@"failed", @"check_failed");
     NSUserDefaults *defaults = PushyDefaults();
     PushyRunnableConfig config;
-    NSString *reason = nil;
-    BOOL runnable = PushyLoadRunnableConfig(&config, &reason);
+    NSDictionary *rejection = nil;
+    BOOL runnable = PushyLoadRunnableConfig(&config, &rejection);
     pushyHostRoundConfig = config.json;
     if (!runnable) {
-        pushyHostRoundResult = PushyUnrunnableConfigResult(reason);
+        pushyHostRoundResult = rejection;
         return;
     }
     // Preserve the interrupted-round breadcrumb and reset-safe atomic commit.

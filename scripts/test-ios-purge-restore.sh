@@ -36,6 +36,7 @@ build() {
     -I"$ROOT_DIR" -I"$destination" \
     "$TEST_DIR/purge_restore_test.mm" "$ROOT_DIR/cpp/patch_core/state_core.cpp" \
     "$ROOT_DIR/cpp/patch_core/digest.cpp" \
+    "$ROOT_DIR"/cpp/update_flow_core/*.cpp \
     "$ROOT_DIR/ios/RCTPushy/RCTPushyConfiguration.mm" \
     -framework Foundation -o "$destination/purge_restore_test"
 }

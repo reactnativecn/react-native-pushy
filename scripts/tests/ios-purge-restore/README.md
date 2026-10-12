@@ -91,8 +91,9 @@ preferences domain.
 
 `config_equivalence` additionally replays the cross-platform canonical config
 equality vectors in `cpp/update_flow_core/tests/config-equivalence-vectors.json`
-(contract C1, shared with the JS/Harmony bun test and the Android JUnit test)
-against the extracted `PushyConfigsEquivalent`, in both argument orders.
+(contract C1, also replayed by the JS bun test and the flow-core C++ test)
+through the extracted `PushyConfigsEquivalent` binding over
+`flowcore::ConfigsEquivalent`, in both argument orders.
 
 A real GCD worker captures the request generation and blocks at a controlled
 response boundary. Semaphores establish each ordering. Reset races are exercised
