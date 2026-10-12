@@ -1,6 +1,7 @@
 import unittest
 
-from extract import declaration, exported_method, function, mask_literals, method, mutate, struct
+from extract import (declaration, exported_method, function, instance_method, mask_literals,
+                     method, mutate, struct)
 
 
 class ExtractionTests(unittest.TestCase):
@@ -22,6 +23,10 @@ class ExtractionTests(unittest.TestCase):
     def test_objc_declaration_and_definition(self):
         source = '+ (BOOL)restore:(id)value;\n+ (BOOL)restore:(id)value { return YES; }'
         self.assertEqual(method(source, 'restore'), (2, source.splitlines()[1]))
+
+    def test_objc_instance_method_is_not_a_class_method(self):
+        source = '+ (BOOL)switchVersion:(id)h { return NO; }\n- (BOOL)switchVersion:(id)h { return YES; }'
+        self.assertEqual(instance_method(source, 'switchVersion'), (2, source.splitlines()[1]))
 
     def test_objc_no_argument_method(self):
         self.assertEqual(method('+ (id)bundleURL\n{ return nil; }', 'bundleURL')[0], 1)

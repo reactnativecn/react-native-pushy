@@ -175,6 +175,7 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
 + (NSString *)buildTime;
 + (NSString *)downloadDir;
 - (void)resetToPackagedBundle:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromiseRejectBlock)reject;
+- (BOOL)switchVersion:(NSString *)hash error:(NSError **)error;
 @end
 
 @interface RCTPushyOrchestrator : NSObject
@@ -611,6 +612,79 @@ static void InstallRecordActivation(void) {
     [NSFileManager.defaultManager removeItemAtPath:dir error:nil];
 }
 
+// switchVersion:error: grandfathers current/last versions only when their
+// directory has NO record file (activated before markers existed). A present
+// record is verified like any other, so a digest-less schema-1 record cannot
+// be re-activated through current/last; the empty legacy marker still can.
+static void SwitchVersionRecords(void) {
+    SetUp(Order::CloseFirst);
+    NSString *hash = @"C";
+    NSString *dir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
+    Expect([NSFileManager.defaultManager createDirectoryAtPath:dir withIntermediateDirectories:YES
+                                                    attributes:nil error:nil], "create C");
+    NSData *bundle = [@"C" dataUsingEncoding:NSUTF8StringEncoding];
+    Expect([bundle writeToFile:[dir stringByAppendingPathComponent:BUNDLE_FILE_NAME] atomically:YES],
+           "write C bundle");
+    NSString *marker = [dir stringByAppendingPathComponent:VERSION_COMPLETE_FILE_NAME];
+    NSNumber *schema = @(pushy::install_record::kSchema);
+    auto setRecord = ^(NSDictionary *record) {
+        [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
+        if (record != nil) {
+            NSData *data = record.count == 0
+                ? [NSData data] : [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
+            Expect([data writeToFile:marker atomically:YES], "write C record");
+        }
+    };
+    auto pin = ^(const char *current, const char *last) {
+        PushyWithStateLock(^{
+            pushy::state::State state = PushyStateFromDefaults(testDefaults);
+            state.current_version = current;
+            state.last_version = last;
+            PushyApplyStateToDefaults(testDefaults, state);
+        });
+    };
+    auto rejection = ^NSString *(void) {
+        NSError *error = nil;
+        if ([engine switchVersion:hash error:&error]) {
+            return nil;
+        }
+        Expect([error.domain isEqualToString:@(pushy::error_codes::kSwitchVersionFailed)],
+               "switch failures are SWITCH_VERSION_FAILED");
+        return error.localizedDescription ?: @"";
+    };
+    NSDictionary *digestless = @{@"schema": schema, @"versionHash": hash};
+
+    pin("C", "");
+    setRecord(digestless);
+    NSString *reason = rejection();
+    Expect(reason != nil && [reason containsString:@"completion record mismatch"],
+           "recorded current version must be verified");
+    pin("A", "C");
+    reason = rejection();
+    Expect(reason != nil && [reason containsString:@"completion record mismatch"],
+           "recorded last version must be verified");
+
+    pin("A", "");
+    setRecord(nil);
+    reason = rejection();
+    Expect(reason != nil && [reason containsString:@"is incomplete"],
+           "markerless version outside current/last must not activate");
+
+    pin("A", "C");
+    Expect(rejection() == nil, "markerless last version stays grandfathered");
+    pin("C", "A");
+    setRecord(@{});
+    Expect(rejection() == nil, "empty legacy marker stays trusted");
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(bundle.bytes, (CC_LONG)bundle.length, digest);
+    NSMutableString *hex = [NSMutableString string];
+    for (unsigned char byte : digest) { [hex appendFormat:@"%02x", byte]; }
+    pin("C", "A");
+    setRecord(@{@"schema": schema, @"versionHash": hash, @"bundleSha256": hex});
+    Expect(rejection() == nil, "verified current version re-activates");
+    Expect([NSFileManager.defaultManager removeItemAtPath:root error:NULL], "remove fixture files");
+}
+
 int main(int argc, char **argv) {
     @autoreleasepool {
         // These intentional failures run in separate processes. Erasing the
@@ -642,6 +716,7 @@ int main(int argc, char **argv) {
             {"offline_skip", [] { Skipped(YES); }},
             {"spent_budget_skip", [] { Skipped(NO); }},
             {"install_record_activation", InstallRecordActivation},
+            {"switch_version_records", SwitchVersionRecords},
         };
         int ran = 0;
         for (const auto &test : cases) {

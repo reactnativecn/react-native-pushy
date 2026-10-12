@@ -533,9 +533,10 @@ public class UpdateContext {
         StateCoreResult currentState = getStateSnapshot();
         boolean isLegacyActivatedVersion = hash.equals(currentState.currentVersion)
             || hash.equals(currentState.lastVersion);
-        if (isLegacyActivatedVersion) {
+        if (isLegacyActivatedVersion && !new File(versionDir, InstallRecord.FILE_NAME).exists()) {
             // Versions activated before completion markers were introduced are
-            // explicitly grandfathered through current/last state.
+            // explicitly grandfathered through current/last state. A directory
+            // that does carry a record is verified like any other.
             return;
         }
         if (!InstallRecord.isComplete(versionDir, hash)) {

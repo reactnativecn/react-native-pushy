@@ -174,6 +174,14 @@ static BOOL PushyInstallRecordMatches(NSDictionary *record, NSString *hash) {
         && [record[@"versionHash"] isEqualToString:hash];
 }
 
+// Whether the directory carries a completion record file at all (the legacy
+// empty marker included). Only directories WITHOUT one are grandfathered by
+// current/last state in switchVersion; a present record is always verified.
+static BOOL PushyHasInstallRecordFile(NSString *versionDir) {
+    return [[NSFileManager defaultManager] fileExistsAtPath:
+        [versionDir stringByAppendingPathComponent:VERSION_COMPLETE_FILE_NAME]];
+}
+
 // Presence check (launch / dedup paths, no digest work): bundle present and
 // the record exists and, unless legacy-empty, names this version.
 PUSHY_HIDDEN BOOL PushyHasCompletedVersionAtPath(NSString *versionDir, NSString *hash) {
@@ -1825,13 +1833,17 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
     }
 
     // Same rule as Android: only a version this SDK recorded as completely
-    // installed (bundle + marker) may be activated. Versions activated before
-    // markers existed are grandfathered through current/last state; any other
-    // markerless directory may be a crash-left partial install or a directory
-    // something else put there.
+    // installed (bundle + marker) may be activated. Markerless versions
+    // activated before markers existed are grandfathered through current/last
+    // state; any other markerless directory may be a crash-left partial
+    // install or a directory something else put there. A directory that does
+    // carry a record is verified even when it is current/last.
     NSString *versionDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:hash];
     std::string hashStd = PushyToStdString(hash);
     BOOL (^isLegacyActivated)(void) = ^BOOL {
+        if (PushyHasInstallRecordFile(versionDir)) {
+            return NO;
+        }
         pushy::state::State state = PushyStateFromDefaults(PushyDefaults());
         return state.current_version == hashStd || state.last_version == hashStd;
     };

@@ -59,6 +59,10 @@ def method(source: str, name: str) -> tuple[int, str]:
     return definition(source, rf'^\+\s*\([^\n)]*\)\s*{re.escape(name)}\b', name)
 
 
+def instance_method(source: str, name: str) -> tuple[int, str]:
+    return definition(source, rf'^-\s*\([^\n)]*\)\s*{re.escape(name)}\b', name)
+
+
 def exported_method(source: str, name: str) -> tuple[int, str]:
     return definition(source, rf'^RCT_EXPORT_METHOD\(\s*{re.escape(name)}\s*:', name)
 
@@ -83,7 +87,7 @@ GLOBALS = [
     'legacyParamPackageVersion', 'legacyParamBuildTime', 'paramLastVersion',
     'paramCurrentVersion', 'paramIsFirstTime', 'paramIsFirstLoadOk', 'keyUuid',
     'keyHashInfo', 'keyFirstLoadMarked', 'keyRolledBackMarked',
-    'keyNativeCheckCache', 'BUNDLE_FILE_NAME', 'VERSION_COMPLETE_FILE_NAME',
+    'keyNativeCheckCache', 'BUNDLE_FILE_NAME', 'VERSION_COMPLETE_FILE_NAME', 'ERROR_OPTIONS',
     'pushyStateLock', 'ignoreRollback', 'pushyIsUsingBundleUrl',
     'pushyResetGeneration', 'pushyNativeConfigGeneration', 'pushyLaunchVersion',
     'pushyCrashHoldActive', 'pushyPurgeRestoreActive', 'pushyPurgeRestoreWindowOpen',
@@ -96,13 +100,16 @@ HELPERS = [
     # Canonical config equality (cross-platform contract), tested directly.
     'PushyNormalizeEndpointBase', 'PushyJsonIsBool', 'PushyJsonEqual',
     'PushyCanonicalUrlList', 'PushyCanonicalConfig', 'PushyConfigsEquivalent',
-    # Install record activation check (cpp/patch_core/install_record.h).
-    'PushyReadInstallRecord', 'PushyInstallRecordMatches', 'PushyStampFile',
-    'PushyVerifyInstallForActivation',
+    # Install record activation check (cpp/patch_core/install_record.h) and
+    # what switchVersion:error: needs around it.
+    'PushyReadInstallRecord', 'PushyInstallRecordMatches', 'PushyHasInstallRecordFile',
+    'PushyHasCompletedVersionAtPath', 'PushyStampFile', 'PushyVerifyInstallForActivation',
+    'PushyStringIsBlank', 'PushyIsSafePathComponent',
 ]
 # Emitted ahead of HELPERS, which use them.
 STRUCTS = ['PushyFileStamp']
-MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset', 'trust-digestless')
+MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset', 'trust-digestless',
+             'grandfather-recorded')
 
 
 def mutate(text: str, mutation: str) -> str:
@@ -116,6 +123,8 @@ def mutate(text: str, mutation: str) -> str:
         'trust-digestless': (
             r'(expected\.length == 0\) \{\s*)return \[NSString[^;]*record mismatch[^;]*;',
             r'\1return nil;'),
+        'grandfather-recorded': (
+            r'if \(PushyHasInstallRecordFile\(versionDir\)\)\s*\{\s*return NO;\s*\}', ''),
     }
     pattern, replacement = patterns[mutation]
     mutated, count = re.subn(pattern, replacement, text)
@@ -151,7 +160,11 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
     restore = locate(sources, method, 'restorePurgedLaunch')
     commit = locate(sources, method, 'commitRoundWithGeneration')
     helpers = [locate(sources, function, name) for name in HELPERS]
-    if mutation == 'skip-reresolve':
+    switch_version = locate(sources, instance_method, 'switchVersion')
+    if mutation == 'grandfather-recorded':
+        switch_version = (switch_version[0], switch_version[1],
+                          mutate(switch_version[2], mutation))
+    elif mutation == 'skip-reresolve':
         restore = (restore[0], restore[1], mutate(restore[2], mutation))
     elif mutation == 'trust-digestless':
         index = HELPERS.index('PushyVerifyInstallForActivation')
@@ -164,7 +177,8 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
         'helpers.inc': [locate(sources, struct, name) for name in STRUCTS] + helpers,
         'pushy.inc': [locate(sources, method, 'bundleURL'),
                       locate(sources, method, 'resolveLaunchBundleURL'),
-                      locate(sources, exported_method, 'resetToPackagedBundle')],
+                      locate(sources, exported_method, 'resetToPackagedBundle'),
+                      switch_version],
         'orchestrator.inc': [restore, commit],
     }
     output.mkdir(parents=True, exist_ok=True)

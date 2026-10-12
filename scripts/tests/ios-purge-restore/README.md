@@ -32,7 +32,8 @@ once across them; pod-internal `PUSHY_HIDDEN` definitions count like `static`
 ones). It copies the exact definitions (with `#line` locations) of `bundleURL`,
 `resolveLaunchBundleURL`, `restorePurgedLaunch`, `commitRoundWithGeneration`,
 `resetToPackagedBundle`, their state/defaults helpers, the install record
-activation check (`PushyVerifyInstallForActivation`), and the relevant globals
+activation check (`PushyVerifyInstallForActivation`) with `switchVersion:error:`,
+and the relevant globals
 into build-only `.inc` files. These are compiled unchanged with the actual
 `cpp/patch_core/state_core.cpp`.
 
@@ -102,13 +103,15 @@ since process start.
 
 ## Negative controls
 
-`VERIFY_REGRESSIONS=1` additionally compiles four generated-only mutants:
+`VERIFY_REGRESSIONS=1` additionally compiles five generated-only mutants:
 
 - Remove the closed-window activation veto: `late_commit` must fail.
 - Return `NO` after timeout instead of re-resolving: `commit_before_signal` must fail.
 - Remove the reset-generation guard: `reset_wins` must fail.
 - Trust a schema-1 install record without `bundleSha256`:
   `install_record_activation` must fail.
+- Grandfather current/last versions that do carry a record:
+  `switch_version_records` must fail.
 
 Each mutant must compile and fail its specific state assertion; unrelated
 compiler errors, crashes or deadlock-guard failures do not count as detection.
