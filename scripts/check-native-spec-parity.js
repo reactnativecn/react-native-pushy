@@ -32,11 +32,15 @@ if (methods.length < 10) {
 // Bridge plumbing that RN itself calls; not part of the Pushy surface.
 const plumbing = new Set(['addListener', 'removeListeners']);
 
-const oldarch = read(
-  'android/src/oldarch/cn/reactnative/modules/update/UpdateModule.java'
+// One UpdateModule serves both Android architectures. The old bridge finds
+// its methods through @ReactMethod on UpdateModule itself; under the old
+// architecture it extends the hand-written NativePushySpec stand-in, which
+// must declare every method the codegen spec does.
+const androidModule = read(
+  'android/src/main/java/cn/reactnative/modules/update/UpdateModule.java'
 );
-const newarch = read(
-  'android/src/newarch/cn/reactnative/modules/update/UpdateModule.java'
+const oldarchSpec = read(
+  'android/src/oldarch/cn/reactnative/modules/update/NativePushySpec.java'
 );
 const ios = read('ios/RCTPushy/RCTPushy.mm');
 const harmonyCpp = read('harmony/pushy/src/main/cpp/PushyTurboModule.cpp');
@@ -67,12 +71,15 @@ for (const { name, returns } of methods) {
   if (plumbing.has(name)) {
     continue;
   }
-  const javaRe = new RegExp(`public\\s+\\S+\\s+${name}\\s*\\(`);
-  if (!has(oldarch, javaRe)) {
-    problems.push(`android/oldarch: ${name} not exported`);
+  const javaRe = new RegExp(
+    `@ReactMethod\\s+@Override\\s+public\\s+\\S+\\s+${name}\\s*\\(`
+  );
+  if (!has(androidModule, javaRe)) {
+    problems.push(`android: ${name} not exported with @ReactMethod`);
   }
-  if (!has(newarch, javaRe)) {
-    problems.push(`android/newarch: ${name} not exported`);
+  const specRe = new RegExp(`public\\s+abstract\\s+\\S+\\s+${name}\\s*\\(`);
+  if (!has(oldarchSpec, specRe)) {
+    problems.push(`android/oldarch: ${name} missing from NativePushySpec`);
   }
   if (
     !has(ios, new RegExp(`RCT_(EXPORT|REMAP)_METHOD\\(\\s*${name}\\b`)) &&
