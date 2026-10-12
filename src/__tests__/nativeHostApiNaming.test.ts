@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { URL } from 'node:url';
+import {
+  root,
+  shippedNativeSources,
+  source,
+  stripComments,
+} from './nativeSources';
 
-const root = new URL('../../', import.meta.url);
 const android = 'android/src/main/java/cn/reactnative/modules/update/';
 const harmony = 'harmony/pushy/src/main/ets/';
-const source = (path: string) => readFileSync(new URL(path, root), 'utf8');
 
 // These are forbidden host API identifiers, not backend paths or JS bridge names.
 const oldNames =
@@ -18,22 +22,6 @@ const roundNames =
   /\b(?:NativeCheckOrchestrator|CrashRescue|updateflow|scheduleNativeCheck|isJsCheckCompleted|commitNativeCheckResult\w*|runCheckRequest|runRescue\w*|softReload|ReloadEventEmitter|\w*PatchInputs|FlowCheckInput|\w*(?:Check|Rescue)(?:Request|Response|Result|Budget|Deadline|Active|Attempted)\w*|pushyNativeCheckReady|nativeCheckRolledBackVersion)\b/;
 const roundWording =
   /native check|crash rescue|host-check|native-check|crash-rescue/i;
-const stripComments = (text: string) =>
-  text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'\\])\/\/.*$/gm, '$1');
-
-const shippedNativeSources = (dir: string): string[] =>
-  readdirSync(new URL(dir, root), { recursive: true, withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() && /\.(?:h|m|mm|java|kt|ts|ets|cpp)$/.test(entry.name)
-    )
-    .map((entry) =>
-      `${entry.parentPath}/${entry.name}`.slice(
-        new URL(dir, root).pathname.length - dir.length
-      )
-    )
-    .filter((path) => !/\/tests?\//.test(path));
-
 describe('native host API naming', () => {
   test('Android exposes prepareBundle through PushyRuntime', () => {
     const entry = source(`${android}PushyRuntime.java`);

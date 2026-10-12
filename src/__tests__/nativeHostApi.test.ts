@@ -1,27 +1,15 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import type { BundlePreparationResult } from '../../harmony/pushy/src/main/ets/BundlePreparationResult';
 import {
   BundlePreparationRound,
   bundlePreparationResult,
 } from '../../harmony/pushy/src/main/ets/BundlePreparationResult';
 import { STATUS_NONE } from '../../harmony/pushy/src/main/ets/Texts';
+import { evalHarmonyModule } from './nativeSources';
 
 // Evaluate the actual Harmony orchestrator in an isolated VM per test. Only
 // platform imports, HTTP and download IO are substituted; entry points,
 // scheduling, configuration gates, result mapping and reset checks are real.
-const source = readFileSync(
-  new URL(
-    '../../harmony/pushy/src/main/ets/SyncCoordinator.ts',
-    import.meta.url
-  ),
-  'utf8'
-)
-  .replace(/^import[\s\S]*?;\r?\n/gm, '')
-  .replace(/^export /gm, '');
-const javascript = new Bun.Transpiler({ loader: 'ts' }).transformSync(source);
 
 interface Decision {
   action: string;
@@ -69,8 +57,9 @@ function harness() {
       return generation === state.generation && state.commitOK;
     },
   };
-  const runtime = runInNewContext(
-    `${javascript}\nrunQueryRequest = mockCheck;\nperformAttempts = mockDownload;\n({ check: prepareBundleNative, schedule: scheduleNativeSync });`,
+  const runtime = evalHarmonyModule(
+    'SyncCoordinator.ts',
+    'runQueryRequest = mockCheck;\nperformAttempts = mockDownload;\n({ check: prepareBundleNative, schedule: scheduleNativeSync });',
     {
       BundlePreparationRound,
       bundlePreparationResult,

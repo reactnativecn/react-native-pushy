@@ -1,21 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import type { PushyConfiguration } from '../../harmony/pushy/src/main/ets/PushyConfiguration';
 import { normalizePushyConfiguration } from '../../harmony/pushy/src/main/ets/PushyConfiguration';
-
-function runtimeSource(relativePath: string): string {
-  const source = readFileSync(new URL(relativePath, import.meta.url), 'utf8')
-    .replace(/^import[\s\S]*?;\r?\n/gm, '')
-    .replace(/^export\s*\{[^}]*\}(?:\s*from\s*[^;]*)?;\r?\n/gm, '')
-    .replace(/^export /gm, '');
-  return new Bun.Transpiler({ loader: 'ts' }).transformSync(source);
-}
-
-const storeSource = runtimeSource(
-  '../../harmony/pushy/src/main/ets/UpdateContext.ts'
-);
+import { evalHarmonyModule } from './nativeSources';
 
 interface ConfigStore {
   setNativeConfig: (config: string) => Promise<void>;
@@ -43,8 +29,9 @@ function storeHarness() {
       if (shouldFail) throw new Error('storage unavailable');
     },
   };
-  const store = runInNewContext(
-    `${storeSource}\nconst store = Object.create(UpdateContext.prototype); store.preferences = preferences; store.flushBatchDepth = 0; store;`,
+  const store = evalHarmonyModule(
+    'UpdateContext.ts',
+    'const store = Object.create(UpdateContext.prototype); store.preferences = preferences; store.flushBatchDepth = 0; store;',
     {
       preferences,
       util: { generateRandomUUID: () => 'native-installation-id' },

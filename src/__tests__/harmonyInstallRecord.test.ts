@@ -1,7 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
+import { evalHarmonyModule } from './nativeSources';
 
 // Harmony InstallRecord.ts (ArkTS mirror of cpp/patch_core/install_record.h)
 // imports @ohos modules, so it is evaluated with its imports stripped and its
@@ -38,16 +36,6 @@ function loadInstallRecord(
   files: Map<string, string>,
   digests: Map<string, string>
 ): InstallRecordModule {
-  const source = readFileSync(
-    new URL(
-      '../../harmony/pushy/src/main/ets/InstallRecord.ts',
-      import.meta.url
-    ),
-    'utf8'
-  )
-    .replace(/^import[\s\S]*?;\r?\n/gm, '')
-    .replace(/^export /gm, '');
-  const js = new Bun.Transpiler({ loader: 'ts' }).transformSync(source);
   const fileIo = {
     accessSync: (path: string) => files.has(path),
     statSync: (path: string) => ({ size: files.get(path)?.length ?? 0 }),
@@ -62,8 +50,9 @@ function loadInstallRecord(
       return digest;
     },
   };
-  return runInNewContext(
-    `${js}\n({ buildInstallRecord, expectedBundleSha256ForActivation, verifyInstallForActivation });`,
+  return evalHarmonyModule(
+    'InstallRecord.ts',
+    '({ buildInstallRecord, expectedBundleSha256ForActivation, verifyInstallForActivation });',
     {
       fileIo,
       NativePatchCore,
