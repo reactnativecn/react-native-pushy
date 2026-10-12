@@ -17,6 +17,7 @@
     "ios",
     "cpp/patch_core",
     "cpp/update_flow_core",
+    "cpp/android_jni",
     "!cpp/**/tests",
     "harmony/pushy.har",
     "harmony/hvigor-plugin.ts",

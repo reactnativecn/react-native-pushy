@@ -1,4 +1,4 @@
-# JNI-constructed result classes: cpp/patch_core/update_core_android.cpp
+# JNI-constructed result classes: cpp/android_jni/update_core_android.cpp
 # resolves them by FindClass + GetMethodID("<init>") + GetFieldID, so the
 # no-arg constructor and every field must survive shrinking with their names
 # (a -keepnames rule alone lets R8 strip the unreferenced constructor/fields).
@@ -7,7 +7,7 @@
 -keep class cn.reactnative.modules.update.CopyGroupResult { <init>(); <fields>; }
 
 # Native methods are bound from JNI_OnLoad by class/method name (the encoded
-# table in cpp/patch_core/jni_registration.cpp), not by exported symbols, so
+# table in cpp/android_jni/jni_registration.cpp), not by exported symbols, so
 # their classes and names must still survive shrinking unchanged.
 -keepclasseswithmembernames class cn.reactnative.modules.update.** {
     native <methods>;

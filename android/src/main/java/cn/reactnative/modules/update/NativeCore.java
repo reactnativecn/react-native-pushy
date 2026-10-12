@@ -2,7 +2,7 @@ package cn.reactnative.modules.update;
 
 /**
  * Loads librnpushy.so. Its JNI_OnLoad registers the natives of every class
- * (cpp/patch_core/jni_registration.cpp), so the library only has to be
+ * (cpp/android_jni/jni_registration.cpp), so the library only has to be
  * loaded before the first native call: UpdateContext's static initializer
  * does that, and DownloadTask, FlowBridge and supportedDiffVersion are only
  * ever reached through an UpdateContext instance.

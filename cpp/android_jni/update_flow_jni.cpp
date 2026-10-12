@@ -10,9 +10,9 @@
 
 #include <string>
 
-#include "../patch_core/jni_util.h"
-#include "flow_json.h"
-#include "update_flow_core.h"
+#include "jni_util.h"
+#include "../update_flow_core/flow_json.h"
+#include "../update_flow_core/update_flow_core.h"
 
 using pushy::jni_util::ToJString;
 

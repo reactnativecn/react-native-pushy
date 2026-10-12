@@ -1,5 +1,5 @@
-#ifndef PUSHY_PATCH_CORE_JNI_NATIVES_H_
-#define PUSHY_PATCH_CORE_JNI_NATIVES_H_
+#ifndef PUSHY_ANDROID_JNI_NATIVES_H_
+#define PUSHY_ANDROID_JNI_NATIVES_H_
 
 #include <jni.h>
 
@@ -30,4 +30,4 @@ jstring FlowHandleResponse(JNIEnv* env, jclass, jstring responseText, jstring id
 }  // namespace jni_natives
 }  // namespace pushy
 
-#endif  // PUSHY_PATCH_CORE_JNI_NATIVES_H_
+#endif  // PUSHY_ANDROID_JNI_NATIVES_H_

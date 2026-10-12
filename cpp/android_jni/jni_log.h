@@ -1,9 +1,9 @@
-#ifndef PUSHY_PATCH_CORE_JNI_LOG_H_
-#define PUSHY_PATCH_CORE_JNI_LOG_H_
+#ifndef PUSHY_ANDROID_JNI_LOG_H_
+#define PUSHY_ANDROID_JNI_LOG_H_
 
 #include <android/log.h>
 
-#include "obscured_text.h"
+#include "../patch_core/obscured_text.h"
 
 // Keep the core internal to whichever binary links it (see podspec Core).
 #pragma GCC visibility push(hidden)
@@ -28,4 +28,4 @@ inline const char* Tag() {
 #define PUSHY_JNI_LOGE(...) \
   __android_log_print(ANDROID_LOG_ERROR, ::pushy::jni_log::Tag(), __VA_ARGS__)
 
-#endif  // PUSHY_PATCH_CORE_JNI_LOG_H_
+#endif  // PUSHY_ANDROID_JNI_LOG_H_

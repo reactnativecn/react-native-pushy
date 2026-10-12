@@ -1,9 +1,9 @@
 #pragma once
 
 // Single source of truth for the state-machine operation codes shared across
-// the platform glue layers (Android JNI in update_core_android.cpp and
-// HarmonyOS NAPI in pushy.cpp). The integer values MUST stay in sync with the
-// callers on each platform:
+// the platform glue layers (Android JNI in
+// cpp/android_jni/update_core_android.cpp and HarmonyOS NAPI in pushy.cpp).
+// The integer values MUST stay in sync with the callers on each platform:
 //   - Android:  UpdateContext.java (STATE_OP_* constants)
 //   - HarmonyOS: UpdateContext.ts  (StateOperation usage)
 // Do not renumber existing entries; only append new ones.

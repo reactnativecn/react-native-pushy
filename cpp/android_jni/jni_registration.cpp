@@ -11,7 +11,7 @@
 
 #include "jni_log.h"
 #include "jni_natives.h"
-#include "obscured_text.h"
+#include "../patch_core/obscured_text.h"
 
 namespace {
 

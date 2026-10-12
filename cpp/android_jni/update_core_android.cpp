@@ -2,16 +2,16 @@
 
 #include "jni_log.h"
 #include "jni_natives.h"
-#include "obscured_text.h"
+#include "../patch_core/obscured_text.h"
 
 #include <string>
 #include <vector>
 
-#include "archive_patch_core.h"
-#include "hbc_transform_wire.h"
+#include "../patch_core/archive_patch_core.h"
+#include "../patch_core/hbc_transform_wire.h"
 #include "jni_util.h"
-#include "state_core.h"
-#include "state_ops.h"
+#include "../patch_core/state_core.h"
+#include "../patch_core/state_ops.h"
 
 namespace {
 

@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "jni_util.h"
-#include "patch_core.h"
+#include "../patch_core/patch_core.h"
 
 namespace {
 

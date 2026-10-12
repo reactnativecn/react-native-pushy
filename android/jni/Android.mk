@@ -24,14 +24,14 @@ LOCAL_SRC_FILES := \
 	../../cpp/patch_core/digest.cpp \
 	../../cpp/patch_core/hbc_transform.cpp \
 	../../cpp/patch_core/hbc_transform_wire.cpp \
-	../../cpp/patch_core/jni_registration.cpp \
+	../../cpp/android_jni/jni_registration.cpp \
 	../../cpp/patch_core/patch_core.cpp \
-	../../cpp/patch_core/patch_core_android.cpp \
+	../../cpp/android_jni/patch_core_android.cpp \
 	../../cpp/patch_core/state_core.cpp \
-	../../cpp/patch_core/update_core_android.cpp \
+	../../cpp/android_jni/update_core_android.cpp \
 	../../cpp/update_flow_core/flow_json.cpp \
 	../../cpp/update_flow_core/update_flow_core.cpp \
-	../../cpp/update_flow_core/update_flow_jni.cpp \
+	../../cpp/android_jni/update_flow_jni.cpp \
 	$(Hdp_Files)
 
 include $(BUILD_SHARED_LIBRARY)

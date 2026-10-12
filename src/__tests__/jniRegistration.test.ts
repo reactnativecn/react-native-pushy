@@ -4,7 +4,7 @@ import { URL } from 'node:url';
 import { decodeNativeText } from '../../scripts/encode-native-text';
 
 // JNI_OnLoad binds Android native methods from an encoded name/signature table
-// (cpp/patch_core/jni_registration.cpp). A drifted entry would silently leave
+// (cpp/android_jni/jni_registration.cpp). A drifted entry would silently leave
 // a method unbound until its first call, so the table must match every Java
 // `native` declaration exactly.
 const root = new URL('../../', import.meta.url);
@@ -50,7 +50,7 @@ const javaNatives = () =>
 
 const registered = () => {
   const source = readFileSync(
-    new URL('cpp/patch_core/jni_registration.cpp', root),
+    new URL('cpp/android_jni/jni_registration.cpp', root),
     'utf8'
   );
   const entries: string[] = [];
@@ -78,7 +78,7 @@ describe('JNI registration table', () => {
 
   test('stores no plain class or method names', () => {
     const source = readFileSync(
-      new URL('cpp/patch_core/jni_registration.cpp', root),
+      new URL('cpp/android_jni/jni_registration.cpp', root),
       'utf8'
     ).replace(/\/\/.*$/gm, '');
     expect(source).not.toContain('cn/reactnative');

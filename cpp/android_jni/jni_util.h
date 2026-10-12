@@ -9,11 +9,11 @@
 #include <utility>
 #include <vector>
 
-#include "patch_core.h"
+#include "../patch_core/patch_core.h"
 
 // Small JNI helpers shared by every Android glue translation unit
 // (patch_core_android.cpp, update_core_android.cpp and
-// ../update_flow_core/update_flow_jni.cpp). Header-only with inline linkage so
+// update_flow_jni.cpp). Header-only with inline linkage so
 // each can include it without a separate compilation unit.
 
 namespace pushy {

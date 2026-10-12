@@ -3,7 +3,7 @@
  * Verify the prebuilt Android native libraries shipped in android/lib/ are
  * present for every ABI and export the JNI symbols the Java layer binds. This
  * guards against publishing an npm package whose committed librnpushy.so is
- * stale/missing after a cpp/patch_core change (which would crash consumers at
+ * stale/missing after a cpp/ core change (which would crash consumers at
  * runtime with UnsatisfiedLinkError while CI stays green).
  *
  * Reads the ELF .dynsym table directly so it needs no external tools — the
@@ -28,7 +28,7 @@ const ABI_MACHINE = {
   x86_64: 0x3e, // EM_X86_64
 };
 
-// Native methods are registered from JNI_OnLoad (cpp/patch_core/
+// Native methods are registered from JNI_OnLoad (cpp/android_jni/
 // jni_registration.cpp), so JNI_OnLoad must be the library's only JNI export.
 // A leftover Java_* export means a stale .so built before that change.
 const REQUIRED_SYMBOLS = ['JNI_OnLoad'];
