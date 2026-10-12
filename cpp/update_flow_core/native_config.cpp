@@ -120,16 +120,12 @@ std::vector<std::string> DefaultEndpoints() {
   };
 }
 
+// One literal per address: src/__tests__/nativeTextEncoding.test.ts finds
+// them by pattern.
 std::vector<std::string> DefaultQueryUrls() {
   return {
-      pushy::text::Reveal(
-          "3203e0c1bdd1270a253608fcd3fd9362476817f4f0d5a1996342631be3c2a3a9d779"
-          "552507fdcde8928a6f512f5ce2ccbdc869404d2f1de79daa826d562c0913eec4fa9b"
-          "7d4426"),
-      pushy::text::Reveal(
-          "3203e0c1bdd1270a213b12b7dca09468462e12f3b0d5bd813d482446f4c6a1be8e79"
-          "552507fdcda68cd06e5c3710e480a4867048483e55e0c2ab8d7d43030d1ce9c3b183"
-          "214e2601f2f0d5b782601e2719e8ca"),
+      pushy::text::Reveal("3203e0c1bdd1270a253608fcd3fd9362476817f4f0d5a1996342631be3c2a3a9d779552507fdcde8928a6f512f5ce2ccbdc869404d2f1de79daa826d562c0913eec4fa9b7d4426"),
+      pushy::text::Reveal("3203e0c1bdd1270a213b12b7dca09468462e12f3b0d5bd813d482446f4c6a1be8e79552507fdcda68cd06e5c3710e480a4867048483e55e0c2ab8d7d43030d1ce9c3b183214e2601f2f0d5b782601e2719e8ca"),
   };
 }
 

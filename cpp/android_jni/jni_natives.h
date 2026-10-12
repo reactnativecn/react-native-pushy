@@ -26,6 +26,9 @@ jstring FlowBuildRequestBody(JNIEnv* env, jclass, jstring inputJson);
 jstring FlowOrderEndpointCandidates(JNIEnv* env, jclass, jstring endpointsJson, jdouble randomSample);
 jboolean FlowIsValidResponse(JNIEnv* env, jclass, jstring responseText);
 jstring FlowHandleResponse(JNIEnv* env, jclass, jstring responseText, jstring identityJson, jstring afterDownload);
+jboolean FlowConfigsEquivalent(JNIEnv* env, jclass, jstring a, jstring b);
+jstring FlowRunnableConfig(JNIEnv* env, jclass, jstring configJson);
+jstring FlowNormalizeConfiguration(JNIEnv* env, jclass, jstring optionsJson);
 
 }  // namespace jni_natives
 }  // namespace pushy

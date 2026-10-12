@@ -785,10 +785,10 @@ public class UpdateContext {
 
     void setNativeConfig(String config) {
         synchronized (commitLock) {
-            // Canonical comparison (ConfigEquivalence): re-sending the same
-            // config with another key order or trailing slashes must not
-            // cancel an in-flight round or drop its cache.
-            boolean changed = !ConfigEquivalence.equivalent(
+            // Canonical comparison (C1, FlowBridge.configsEquivalent):
+            // re-sending the same config with another key order or trailing
+            // slashes must not cancel an in-flight round or drop its cache.
+            boolean changed = !FlowBridge.configsEquivalent(
                 config, sp.getString(SyncCoordinator.KEY_CONFIG, null));
             SharedPreferences.Editor editor = sp.edit();
             if (changed) {

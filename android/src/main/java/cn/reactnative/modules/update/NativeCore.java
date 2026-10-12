@@ -5,7 +5,9 @@ package cn.reactnative.modules.update;
  * (cpp/android_jni/jni_registration.cpp), so the library only has to be
  * loaded before the first native call: UpdateContext's static initializer
  * does that, and DownloadTask, FlowBridge and supportedDiffVersion are only
- * ever reached through an UpdateContext instance.
+ * ever reached through an UpdateContext instance — except
+ * PushyRuntime.configure, which validates options before touching
+ * UpdateContext and so loads the library itself.
  */
 final class NativeCore {
     private static boolean loaded = false;

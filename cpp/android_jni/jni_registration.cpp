@@ -61,6 +61,12 @@ const std::vector<NativeClass>& NativeClasses() {
         reinterpret_cast<void*>(&pushy::jni_natives::FlowIsValidResponse)},
        {"3216fad5a28e5a40312f13f7c5b6", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43bcfea58d7f476c0c1cf4d0fba27a59210be5a4",
         reinterpret_cast<void*>(&pushy::jni_natives::FlowHandleResponse)},
+       {"3918fad7a78c7b60332a15efd7bf95635e", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655a2f2",
+        reinterpret_cast<void*>(&pushy::jni_natives::FlowConfigsEquivalent)},
+       {"2802fadfaf896440013012ffdfb4", "723bfed0b88a274923311bb6e5a7826444205fa8d2d1b98373002008e8c4ef8e8e655d3f09b0",
+        reinterpret_cast<void*>(&pushy::jni_natives::FlowRunnableConfig)},
+       {"3418e6dcaf87615f271c13f7d0ba9778582610e8f1d5", "723bfed0b88a274923311bb6e5a7826444205fa8d2d1b98373002008e8c4ef8e8e655d3f09b0",
+        reinterpret_cast<void*>(&pushy::jni_natives::FlowNormalizeConfiguration)},
    }},
   };
   return classes;

@@ -78,7 +78,7 @@
 剩余：两份 `UpdateModule.java`（oldarch/newarch，均已是薄转发层，只差基类与注解）；`buildToolsVersion` 仍设置。
 
 **单测建议**（部分）
-已有 `android/src/test` 6 个 JVM 测试类（CleanupKeepNames、ConfigEquivalence、HttpUtils、InstallRecord、SafeZipFile、UpdateFileUtils；CI 不跑，本地 `gradle testReleaseUnitTest`）。未覆盖：`ArchiveLimits.ensureFreeSpace`、`runCheckRequest` 次数上限、`BundledResourceCopier` 的路径/密度解析。
+已有 `android/src/test` 5 个 JVM 测试类（CleanupKeepNames、HttpUtils、InstallRecord、SafeZipFile、UpdateFileUtils；CI 不跑，本地 `gradle testReleaseUnitTest`）。未覆盖：`ArchiveLimits.ensureFreeSpace`、`runCheckRequest` 次数上限、`BundledResourceCopier` 的路径/密度解析。
 
 ---
 

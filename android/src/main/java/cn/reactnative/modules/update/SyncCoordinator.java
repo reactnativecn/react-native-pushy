@@ -104,8 +104,8 @@ final class SyncCoordinator {
         }
         roundDone.await();
         if (roundConfigGeneration != UpdateContext.getNativeConfigGeneration()
-            || !ConfigEquivalence.equivalent(configJson, roundConfigJson)
-            || !ConfigEquivalence.equivalent(configJson, context.getKv(KEY_CONFIG))) {
+            || !FlowBridge.configsEquivalent(configJson, roundConfigJson)
+            || !FlowBridge.configsEquivalent(configJson, context.getKv(KEY_CONFIG))) {
             return BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "config_changed");
         }
         if (roundGeneration != UpdateContext.getResetGeneration()) {
@@ -121,7 +121,7 @@ final class SyncCoordinator {
 
     /**
      * True when JS already obtained a valid response in this process for a
-     * config equivalent (ConfigEquivalence, the cross-platform contract) to
+     * config equivalent (FlowBridge.configsEquivalent, contract C1) to
      * the one the native round would use: the delayed round is then a
      * duplicate request. JS and a host may serialize the same config
      * differently, so exact string equality would almost never match. Only
@@ -131,7 +131,7 @@ final class SyncCoordinator {
     private static boolean hasJsRound(UpdateContext context) {
         String jsConfig = sJsCompletedConfig;
         return jsConfig != null
-            && ConfigEquivalence.equivalent(jsConfig, context.getKv(KEY_CONFIG));
+            && FlowBridge.configsEquivalent(jsConfig, context.getKv(KEY_CONFIG));
     }
 
     /**
@@ -161,25 +161,29 @@ final class SyncCoordinator {
         }
     }
 
+    /**
+     * The shared gate (FlowBridge.runnableConfig, update_flow_core): absent is
+     * skipped/not_configured, a non-object failed/invalid_config, a truthy
+     * disabled skipped/disabled, a blank appKey failed/invalid_config.
+     */
     static RunnableConfig parseRunnableConfig(@Nullable String json) {
-        if (json == null || json.isEmpty()) {
-            return RunnableConfig.rejected(BundlePreparationResult.SKIPPED, "not_configured");
-        }
+        JSONObject verdict;
         JSONObject config;
         try {
+            String result = FlowBridge.runnableConfig(json);
+            if (result == null) {
+                return RunnableConfig.rejected(BundlePreparationResult.FAILED, "internal_error");
+            }
+            verdict = new JSONObject(result);
+            if (verdict.has("status")) {
+                return RunnableConfig.rejected(
+                    verdict.getString("status"), verdict.getString("reason"));
+            }
             config = new JSONObject(json);
         } catch (JSONException e) {
             return RunnableConfig.rejected(BundlePreparationResult.FAILED, "invalid_config");
         }
-        if (config.optBoolean("disabled", false)) {
-            return RunnableConfig.rejected(BundlePreparationResult.SKIPPED, "disabled");
-        }
-        Object appKey = config.opt("appKey");
-        String trimmed = appKey instanceof String ? ((String) appKey).trim() : "";
-        if (trimmed.isEmpty()) {
-            return RunnableConfig.rejected(BundlePreparationResult.FAILED, "invalid_config");
-        }
-        return new RunnableConfig(json, config, trimmed, null);
+        return new RunnableConfig(json, config, verdict.optString("appKey"), null);
     }
 
     private SyncCoordinator() {

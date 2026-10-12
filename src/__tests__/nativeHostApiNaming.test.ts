@@ -32,9 +32,8 @@ describe('native host API naming', () => {
     expect(source(`${android}BundlePreparationResult.java`)).toContain(
       'class BundlePreparationResult'
     );
-    expect(source(`${android}PushyConfiguration.java`)).toContain(
-      'class PushyConfiguration'
-    );
+    // Options are validated by the shared core (native_config.h).
+    expect(entry).toContain('FlowBridge.normalizeConfiguration(');
     for (const name of [
       'PushyNativeUpdate',
       'NativeUpdateResult',

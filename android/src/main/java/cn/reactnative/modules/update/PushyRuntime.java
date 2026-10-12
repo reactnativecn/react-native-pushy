@@ -43,7 +43,11 @@ public final class PushyRuntime {
         CONFIG_WORKER.execute(() -> {
             Exception failure = null;
             try {
-                String config = PushyConfiguration.normalize(snapshot);
+                NativeCore.ensureLoaded();
+                String config = FlowBridge.normalizeConfiguration(snapshot);
+                if (config == null) {
+                    throw new IllegalStateException("Native configuration failed");
+                }
                 UpdateContext.getInstance(applicationContext).setNativeConfig(config);
             } catch (Exception e) {
                 failure = e;
