@@ -23,12 +23,16 @@ final class HttpUtils {
     /** Request path appended to an endpoint base, kept out of the plain string table. */
     static final String QUERY_PATH = Texts.reveal("7514fcd4ad805d55263e08fc99");
 
-    /** Strips every trailing slash so "<base><QUERY_PATH><appKey>" never doubles one. */
-    static String normalizeEndpointBase(String base) {
-        while (base.endsWith("/")) {
-            base = base.substring(0, base.length() - 1);
+    /**
+     * Strips every trailing slash: endpoint bases (so "<base><QUERY_PATH>
+     * <appKey>" never doubles one) and the canonical config URL lists.
+     */
+    static String stripTrailingSlashes(String url) {
+        int end = url.length();
+        while (end > 0 && url.charAt(end - 1) == '/') {
+            end--;
         }
-        return base;
+        return url.substring(0, end);
     }
 
     // "bytes <start>-<end>/<total>". Returns the total (0 when "*"), or -1

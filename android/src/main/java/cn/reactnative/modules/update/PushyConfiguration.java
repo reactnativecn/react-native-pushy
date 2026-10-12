@@ -90,7 +90,7 @@ final class PushyConfiguration {
                 throw invalid(name + " requires absolute HTTP(S) URLs without credentials"
                     + (base ? ", queries or fragments" : ""));
             }
-            String normalized = base ? url.replaceAll("/+$", "") : url;
+            String normalized = base ? HttpUtils.stripTrailingSlashes(url) : url;
             if (seen.add(normalized)) {
                 result.put(normalized);
             }

@@ -227,11 +227,6 @@ final class SyncCoordinator {
         return roundStarted.get() && !roundCompleted;
     }
 
-    /**
-     * Runs the process's single round on the calling thread if nobody has
-     * started it yet. deadlineNanos > 0 (crash rescue) caps every HTTP call
-     * and download phase to the remaining budget.
-     */
     private static boolean hasRunnableConfig(UpdateContext context) {
         return context != null
             && parseRunnableConfig(context.getKv(KEY_CONFIG)).rejection == null;
@@ -243,6 +238,11 @@ final class SyncCoordinator {
         }
     }
 
+    /**
+     * Runs the process's single round on the calling thread if nobody has
+     * started it yet. deadlineNanos > 0 (crash rescue) caps every HTTP call
+     * and download phase to the remaining budget.
+     */
     private static void startRound(long deadlineNanos) {
         // An automatic check before first-run provisioning must not consume
         // the process's only round. Hosts may configure later in this launch.
@@ -437,6 +437,9 @@ final class SyncCoordinator {
         // Cache freshness is anchored to when the server response arrived,
         // not to when a potentially long download/patch/activation finished.
         final long responseAtSeconds = System.currentTimeMillis() / 1000;
+        // Built once; every commit below caches it for JS.
+        final String responseCacheJson =
+            buildResponseCacheJson(configJson, body, responseText, responseAtSeconds);
 
         String decisionJson = FlowBridge.handleResponse(
             responseText, identity.toString(), config.optString("afterDownload", ""));
@@ -447,8 +450,7 @@ final class SyncCoordinator {
         JSONObject decision = new JSONObject(decisionJson);
         if (!"download".equals(decision.optString("action"))) {
             boolean committed = context.commitSyncResult(
-                resetGeneration, null, null, false,
-                buildResponseCacheJson(configJson, body, responseText, responseAtSeconds));
+                resetGeneration, null, null, false, responseCacheJson);
             roundResult = committed
                 ? BundlePreparationResult.of(BundlePreparationResult.NO_UPDATE, decision.optString("reason"))
                 : BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "reset");
@@ -472,8 +474,7 @@ final class SyncCoordinator {
             // The native attempt has finished, so JS may safely reuse the
             // response and retry through its own strategy chain.
             boolean committed = context.commitSyncResult(
-                resetGeneration, null, null, false,
-                buildResponseCacheJson(configJson, body, responseText, responseAtSeconds));
+                resetGeneration, null, null, false, responseCacheJson);
             roundResult = BundlePreparationResult.of(
                 committed ? BundlePreparationResult.FAILED : BundlePreparationResult.CANCELLED,
                 committed ? "download_failed" : "reset");
@@ -519,7 +520,7 @@ final class SyncCoordinator {
                 hash,
                 hashInfoJson,
                 activate,
-                buildResponseCacheJson(configJson, body, responseText, responseAtSeconds));
+                responseCacheJson);
         } catch (Exception e) {
             Log.w(Texts.LOG_TAG, "native sync: commit failed: " + e);
             roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "commit_failed");
@@ -642,19 +643,10 @@ final class SyncCoordinator {
         } catch (JSONException e) {
             return null;
         }
-        HashSet<String> tried = new HashSet<>();
-        int httpAttempts = 0;
+        QueryRun run = new QueryRun(appKey, body, deadlineNanos);
         for (int i = 0; i < ordered.length(); i++) {
-            String base = HttpUtils.normalizeEndpointBase(ordered.optString(i, ""));
-            if (base.isEmpty() || !tried.add(base)) {
-                continue;
-            }
-            if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
-                return null;
-            }
-            String response = httpRequest(
-                base + HttpUtils.QUERY_PATH + appKey, body, deadlineNanos);
-            if (isValidResponse(response)) {
+            String response = run.tryEndpoint(ordered.optString(i, ""), false);
+            if (response != null || run.exhausted) {
                 return response;
             }
         }
@@ -667,7 +659,7 @@ final class SyncCoordinator {
             if (listUrl.isEmpty()) {
                 continue;
             }
-            if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
+            if (!run.spendAttempt()) {
                 return null;
             }
             String listText = httpRequest(listUrl, null, deadlineNanos);
@@ -681,23 +673,10 @@ final class SyncCoordinator {
                 continue;
             }
             for (int j = 0; j < remote.length(); j++) {
-                String base = HttpUtils.normalizeEndpointBase(remote.optString(j, ""));
-                if (base.isEmpty() || tried.contains(base)) {
-                    continue;
-                }
-                if (httpsOnly && !HttpUtils.isHttpsUrl(base)) {
-                    // A remotely injected endpoint must not downgrade an
-                    // https configuration to plaintext.
-                    Log.w(Texts.LOG_TAG, "native sync: ignoring non-https remote endpoint " + base);
-                    continue;
-                }
-                if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
-                    return null;
-                }
-                tried.add(base);
-                String response = httpRequest(
-                    base + HttpUtils.QUERY_PATH + appKey, body, deadlineNanos);
-                if (isValidResponse(response)) {
+                // A remotely injected endpoint must not downgrade an https
+                // configuration to plaintext.
+                String response = run.tryEndpoint(remote.optString(j, ""), httpsOnly);
+                if (response != null || run.exhausted) {
                     return response;
                 }
             }
@@ -705,6 +684,54 @@ final class SyncCoordinator {
             break;
         }
         return null;
+    }
+
+    /** One query's shared state: the bases already tried and the HTTP budget. */
+    private static final class QueryRun {
+        private final String appKey;
+        private final String body;
+        private final long deadlineNanos;
+        private final HashSet<String> tried = new HashSet<>();
+        private int httpAttempts;
+        // Set once MAX_QUERY_HTTP_ATTEMPTS is spent: the whole query gives up.
+        boolean exhausted;
+
+        QueryRun(String appKey, String body, long deadlineNanos) {
+            this.appKey = appKey;
+            this.body = body;
+            this.deadlineNanos = deadlineNanos;
+        }
+
+        boolean spendAttempt() {
+            if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
+                exhausted = true;
+                return false;
+            }
+            return true;
+        }
+
+        /**
+         * Queries one endpoint base unless it is empty, already tried or (with
+         * httpsOnly) not https. Returns the valid response, or null to move on
+         * (check {@link #exhausted}).
+         */
+        @Nullable
+        String tryEndpoint(String rawBase, boolean httpsOnly) {
+            String base = HttpUtils.stripTrailingSlashes(rawBase);
+            if (base.isEmpty() || tried.contains(base)) {
+                return null;
+            }
+            if (httpsOnly && !HttpUtils.isHttpsUrl(base)) {
+                Log.w(Texts.LOG_TAG, "native sync: ignoring non-https remote endpoint " + base);
+                return null;
+            }
+            if (!spendAttempt()) {
+                return null;
+            }
+            tried.add(base);
+            String response = httpRequest(base + HttpUtils.QUERY_PATH + appKey, body, deadlineNanos);
+            return isValidResponse(response) ? response : null;
+        }
     }
 
     private static long capToHoldBudget(long phaseDeadlineNanos, long holdDeadlineNanos) {

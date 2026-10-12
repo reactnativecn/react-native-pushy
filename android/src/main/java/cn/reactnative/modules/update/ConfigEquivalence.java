@@ -86,17 +86,9 @@ final class ConfigEquivalence {
         }
         LinkedHashSet<Object> unique = new LinkedHashSet<>();
         for (Object item : (List<?>) value) {
-            unique.add(item instanceof String ? stripTrailingSlashes((String) item) : item);
+            unique.add(item instanceof String ? HttpUtils.stripTrailingSlashes((String) item) : item);
         }
         map.put(key, new ArrayList<Object>(unique));
-    }
-
-    private static String stripTrailingSlashes(String url) {
-        int end = url.length();
-        while (end > 0 && url.charAt(end - 1) == '/') {
-            end--;
-        }
-        return url.substring(0, end);
     }
 
     // JSONObject/JSONArray have identity equals; convert to Map/List with
