@@ -73,16 +73,19 @@ GLOBALS = [
     'legacyParamPackageVersion', 'legacyParamBuildTime', 'paramLastVersion',
     'paramCurrentVersion', 'paramIsFirstTime', 'paramIsFirstLoadOk', 'keyUuid',
     'keyHashInfo', 'keyFirstLoadMarked', 'keyRolledBackMarked',
-    'KeyPackageUpdatedMarked', 'keyNativeCheckCache', 'BUNDLE_FILE_NAME',
+    'keyNativeCheckCache', 'BUNDLE_FILE_NAME',
     'pushyStateLock', 'ignoreRollback', 'pushyIsUsingBundleUrl',
-    'pushyResetGeneration', 'pushyLaunchVersion', 'pushyCrashHoldActive',
-    'pushyPurgeRestoreActive', 'pushyPurgeRestoreWindowOpen',
-    'pushyHostRoundResult', 'kPushyPurgeRestoreBudget',
+    'pushyResetGeneration', 'pushyNativeConfigGeneration', 'pushyLaunchVersion',
+    'pushyCrashHoldActive', 'pushyPurgeRestoreActive', 'pushyPurgeRestoreWindowOpen',
+    'pushyHostRoundResult', 'kPushyPurgeRestoreBudget', 'kPushyPurgeRestoreMinimumBudget',
 ]
 HELPERS = [
-    'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString',
+    'PushyRevealOnce', 'KeyPackageUpdatedMarked', 'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString',
     'PushySetNullableString', 'PushyHashInfoKey', 'PushyBinaryIdentityValue',
     'PushyStateFromDefaults', 'PushyApplyStateToDefaults', 'PushySwitchVersionLocked',
+    # Canonical config equality (cross-platform contract), tested directly.
+    'PushyNormalizeEndpointBase', 'PushyJsonIsBool', 'PushyJsonEqual',
+    'PushyCanonicalUrlList', 'PushyCanonicalConfig', 'PushyConfigsEquivalent',
 ]
 MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset')
 

@@ -59,10 +59,21 @@ Pod::Spec.new do |s|
   # anything below 15.0 there, so a hard-coded 11.0 fails the build.
   final_ios_deployment_target =
     defined?(min_ios_version_supported) ? min_ios_version_supported : '11.0'
+  # tvOS has its own version line: react-native-tvos reports it through
+  # min_supported_versions[:tvos] (stock React Native has no :tvos entry).
+  # 15.1 is react-native-tvos's own floor since 0.76, and clears the same
+  # Xcode 27 resource-bundle minimum as iOS.
+  final_tvos_deployment_target = begin
+    defined?(min_supported_versions) ? min_supported_versions[:tvos] : nil
+  rescue StandardError
+    nil
+  end
+  final_tvos_deployment_target ||= '15.1'
 
   if valid_expo_project
     # --- Try to find and parse ExpoModulesCore.podspec only if it's an Expo project ---
     parsed_expo_ios_target = nil
+    parsed_expo_tvos_target = nil
     expo_modules_core_podspec_path = begin
         package_json_path = `node -p "#{expo_modules_core_package_json_js}"`.strip
         File.join(File.dirname(package_json_path), 'ExpoModulesCore.podspec') if $?.success? && package_json_path && !package_json_path.empty?
@@ -76,6 +87,8 @@ Pod::Spec.new do |s|
         match = content.match(/s\.platforms\s*=\s*\{[\s\S]*?:ios\s*=>\s*'([^\']+)'/) # Match within s.platforms hash
         if match && match[1]
           parsed_expo_ios_target = match[1]
+          tvos_match = content.match(/s\.platforms\s*=\s*\{[\s\S]*?:tvos\s*=>\s*'([^\']+)'/)
+          parsed_expo_tvos_target = tvos_match[1] if tvos_match
         else
           match = content.match(/s\.platform\s*=\s*:ios,\s*'([^\']+)'/) # Fallback to s.platform = :ios, 'version'
           if match && match[1]
@@ -89,12 +102,15 @@ Pod::Spec.new do |s|
     if parsed_expo_ios_target
         final_ios_deployment_target = parsed_expo_ios_target
     end
+    if parsed_expo_tvos_target
+        final_tvos_deployment_target = parsed_expo_tvos_target
+    end
   end
 
   # tvOS (react-native-tvos) shares the iOS sources; the only platform
   # differences live behind TARGET_OS_TV in RCTPushy.mm (download directory,
   # purged-cache recovery).
-  s.platforms = { :ios => final_ios_deployment_target, :tvos => final_ios_deployment_target }
+  s.platforms = { :ios => final_ios_deployment_target, :tvos => final_tvos_deployment_target }
 
   s.name         = package['name']
   s.version      = package['version']
@@ -109,6 +125,9 @@ Pod::Spec.new do |s|
   s.source = { :git => 'https://github.com/reactnativecn/react-native-update.git', :tag => "#{s.version}" }
 
   s.libraries = 'bz2', 'z'
+  # tvOS checks for a network path before blocking a launch on the
+  # purged-version restore (nw_path_monitor).
+  s.tvos.frameworks = 'Network'
   # No search path into the pod source: every include under ios/ resolves
   # relative to the including file (the cpp/ core via ../../cpp/...), and the
   # former absolute "#{podspec_dir}/ios" entry made the generated xcconfig
