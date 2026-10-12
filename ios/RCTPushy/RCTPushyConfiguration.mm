@@ -12,11 +12,6 @@ NSString *RCTPushyRevealText(const char *hex) {
                                   encoding:NSUTF8StringEncoding] ?: @"";
 }
 
-NSString *RCTPushyQueryPath(void) {
-    static NSString *path = RCTPushyRevealText("7514fcd4ad805d55263e08fc99");
-    return path;
-}
-
 // Validation and defaults are the shared core's (flowcore::NormalizeConfiguration,
 // also used by Android and Harmony); this only bridges the dictionary.
 NSString *RCTPushyNormalizeConfiguration(NSDictionary *options, NSError **error) {

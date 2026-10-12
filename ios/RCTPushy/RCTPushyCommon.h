@@ -23,9 +23,6 @@ static NSString *const RCTPushyErrorCodeKey = @"PushyErrorCode";
 // binary; not a secret.
 PUSHY_HIDDEN NSString *RCTPushyRevealText(const char *hex);
 
-// Request path appended to an endpoint base.
-PUSHY_HIDDEN NSString *RCTPushyQueryPath(void);
-
 // Whether following a redirect from `from` to `to` would leave https for
 // plaintext http. Every https request (check and artifact) refuses that
 // downgrade before the redirected request is sent.

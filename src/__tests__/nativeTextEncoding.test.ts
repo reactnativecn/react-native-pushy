@@ -48,7 +48,7 @@ describe('native text encoding', () => {
         .filter((path) => path.startsWith(prefix))
         .flatMap((path) => encodedIn(source(path)))
         .map(decodeNativeText);
-    for (const platform of ['ios/', 'harmony/']) {
+    for (const platform of ['harmony/']) {
       expect({
         platform,
         found: decodedIn(platform).includes(plainTexts[0]),

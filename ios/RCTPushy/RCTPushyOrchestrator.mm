@@ -1,8 +1,8 @@
 #import "RCTPushyInternal.h"
 #include "../../cpp/patch_core/error_codes.h"
-#include "../../cpp/patch_core/hbc_transform_wire.h"
 #include "../../cpp/update_flow_core/flow_json.h"
 #include "../../cpp/update_flow_core/native_config.h"
+#include "../../cpp/update_flow_core/native_round.h"
 #include "../../cpp/update_flow_core/update_flow_core.h"
 
 #if TARGET_OS_TV
@@ -19,14 +19,10 @@ static NSString *const keyNativeConfig = @"REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY
 // rescue was truncated): that launch resumes immediately instead of waiting.
 static NSString *const keyNativeCheckIncomplete = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY";
 
-// Version-info flags and the no-op status read by JS, stored encoded
-// (RCTPushyRevealText) so they do not appear as plain binary strings.
+// The crash-hold version-info flag and the no-op status read by JS, stored
+// encoded (RCTPushyRevealText) so they do not appear as plain binary strings.
 static NSString *PushyInfoCrashHold(void) {
     static NSString *value = RCTPushyRevealText("3905f5c2a6b96d56212a19");
-    return value;
-}
-static NSString *PushyInfoForceBoot(void) {
-    static NSString *value = RCTPushyRevealText("3c18e6d2aba9674a360d19ead5a695");
     return value;
 }
 static NSString *PushyStatusNone(void) {
@@ -312,47 +308,6 @@ static NSString *PushyHttpRequest(NSString *urlString, NSString *method,
     return result;
 }
 
-static NSString *PushyNormalizeEndpointBase(NSString *base) {
-    while ([base hasSuffix:@"/"]) {
-        base = [base substringToIndex:base.length - 1];
-    }
-    return base;
-}
-
-// Same rule as Harmony (SyncCoordinator.ts isHttpsOnly, SR-1): when every
-// configured endpoint is https, endpoints from a fetched remote list must be
-// https and artifact URLs from the decision may not be plaintext http, so the
-// network cannot downgrade the round. Redirects are guarded separately
-// (RCTPushyIsHttpsDowngrade).
-static BOOL PushyIsHttpsUrl(NSString *url) {
-    return [[url lowercaseString] hasPrefix:@"https://"];
-}
-
-static BOOL PushyIsCleartextUrl(NSString *url) {
-    return [[url lowercaseString] hasPrefix:@"http://"];
-}
-
-static BOOL PushyIsHttpsOnly(const flowjson::Value &endpoints) {
-    if (endpoints.elements().empty()) {
-        return NO;
-    }
-    for (const auto &endpoint : endpoints.elements()) {
-        if (!endpoint.IsString() || !PushyIsHttpsUrl(PushyFromStdString(endpoint.AsString()))) {
-            return NO;
-        }
-    }
-    return YES;
-}
-
-static BOOL PushyIsValidResponse(NSString *responseText) {
-    if (responseText == nil) {
-        return NO;
-    }
-    // Shared schema rule (update_flow_core::IsValidResponse): a 200 with
-    // `{"error": ...}` is a failed endpoint, not a verdict.
-    return flowcore::IsValidResponse(PushyToStdString(responseText)) ? YES : NO;
-}
-
 // Contract C1 (flowcore::ConfigsEquivalent, shared with Android and Harmony;
 // JS has its own copy): the same config in another serialization — key order,
 // trailing slashes, defaulted keys — is not a change. Lets a host-owned
@@ -367,29 +322,20 @@ static BOOL PushyConfigsEquivalent(NSString *a, NSString *b) {
 // install, round start, prepareBundle, the round itself) reads it through
 // PushyLoadRunnableConfig, which applies the shared gate
 // (flowcore::ParseRunnableConfig), so they agree on what "configured" and
-// "disabled" mean.
-struct PushyRunnableConfig {
-    NSString *json;
-    flowjson::Value value;
-    NSString *appKey;
-};
-
-// YES when a round may run; otherwise *rejection is the host-facing result
-// (skipped: not_configured/disabled, failed: invalid_config).
-static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **rejection) {
-    NSString *json = [PushyDefaults() stringForKey:keyNativeConfig];
-    config->json = [json copy];
-    flowcore::RunnableConfig gate = flowcore::ParseRunnableConfig(PushyToStdString(json));
-    if (!gate.runnable()) {
-        if (rejection != NULL) {
-            *rejection = PushyHostResult(PushyFromStdString(gate.status),
-                                         PushyFromStdString(gate.reason));
-        }
-        return NO;
+// "disabled" mean. YES when a round may run (*json is the config text);
+// otherwise *rejection is the host-facing result (skipped:
+// not_configured/disabled, failed: invalid_config).
+static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
+    NSString *text = [PushyDefaults() stringForKey:keyNativeConfig];
+    if (json != NULL) {
+        *json = [text copy];
     }
-    config->value = std::move(gate.config);
-    config->appKey = PushyFromStdString(gate.appKey);
-    return YES;
+    flowcore::RunnableConfig gate = flowcore::ParseRunnableConfig(PushyToStdString(text));
+    if (!gate.runnable() && rejection != NULL) {
+        *rejection = PushyHostResult(PushyFromStdString(gate.status),
+                                     PushyFromStdString(gate.reason));
+    }
+    return gate.runnable();
 }
 
 @implementation RCTPushyOrchestrator
@@ -421,8 +367,7 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
 }
 
 + (BOOL)hasRunnableConfig {
-    PushyRunnableConfig config;
-    return PushyLoadRunnableConfig(&config, NULL);
+    return PushyLoadRunnableConfig(NULL, NULL);
 }
 
 // Process-wide round state, set up by whichever launch path needs a round
@@ -549,12 +494,11 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
     if (!pushySyncReady.load()) {
         return PushyHostResult(@"skipped", @"not_initialized");
     }
-    PushyRunnableConfig runnable;
+    NSString *configJson = nil;
     NSDictionary *rejection = nil;
-    if (!PushyLoadRunnableConfig(&runnable, &rejection)) {
+    if (!PushyLoadRunnableConfig(&configJson, &rejection)) {
         return rejection;
     }
-    NSString *configJson = runnable.json;
     // Run the round on its own queue rather than this caller's thread, so the
     // wait below can be bounded.
     if ([self claimRound]) {
@@ -693,10 +637,7 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
                                     configGeneration:configGeneration
                                             hashInfo:hashInfoEntry
                                             activate:hash
-                                        responseText:nil
-                                             request:nil
-                                              config:nil
-                                          responseAt:0
+                                               cache:nil
                                            activated:NULL];
     if (committed) {
         @synchronized (self) {
@@ -717,10 +658,10 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
     pushyHostRoundConfigGeneration = configGeneration;
     pushyHostRoundResult = PushyHostResult(@"failed", @"check_failed");
     NSUserDefaults *defaults = PushyDefaults();
-    PushyRunnableConfig config;
+    NSString *configJson = nil;
     NSDictionary *rejection = nil;
-    BOOL runnable = PushyLoadRunnableConfig(&config, &rejection);
-    pushyHostRoundConfig = config.json;
+    BOOL runnable = PushyLoadRunnableConfig(&configJson, &rejection);
+    pushyHostRoundConfig = configJson;
     if (!runnable) {
         pushyHostRoundResult = rejection;
         return;
@@ -728,10 +669,8 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
     // Preserve the interrupted-round breadcrumb and reset-safe atomic commit.
     [defaults setObject:@YES forKey:keyNativeCheckIncomplete];
     @try {
-        [self runConfiguredRound:config.value
-                      configJson:config.json
-                          appKey:config.appKey
-        launchRolledBackVersion:launchRolledBackVersion
+        [self runConfiguredRound:configJson
+         launchRolledBackVersion:launchRolledBackVersion
                  resetGeneration:resetGeneration
                 configGeneration:configGeneration
                         deadline:deadlineUptime];
@@ -740,85 +679,60 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
     }
 }
 
-+ (void)runConfiguredRound:(const flowjson::Value &)config
-                configJson:(NSString *)configJson
-                    appKey:(NSString *)appKey
++ (void)runConfiguredRound:(NSString *)configJson
    launchRolledBackVersion:(NSString *)launchRolledBackVersion
            resetGeneration:(uint64_t)resetGeneration
           configGeneration:(uint64_t)configGeneration
                   deadline:(NSTimeInterval)deadlineUptime {
-    NSUserDefaults *defaults = PushyDefaults();
-    NSString *packageVersion =
-        PushyFromStdString(config.Get("packageVersion").AsString());
-    if (packageVersion.length == 0) {
-        packageVersion = [RCTPushy packageVersion];
-    }
-
     __block NSString *currentVersion = nil;
     PushyWithStateLock(^{
         pushy::state::State state = PushyStateFromDefaults(PushyDefaults());
         currentVersion = PushyFromStdString(state.current_version);
     });
-    NSString *rolledBackVersion = launchRolledBackVersion;
-    NSString *uuid = [defaults stringForKey:keyUuid] ?: @"";
-
-    flowjson::Value identity = flowjson::Value::Object();
-    identity.Set("packageVersion",
-                 flowjson::Value::String(PushyToStdString(packageVersion)));
-    if (currentVersion != nil) {
-        identity.Set("currentVersion",
-                     flowjson::Value::String(PushyToStdString(currentVersion)));
-    }
-    identity.Set("uuid", flowjson::Value::String(PushyToStdString(uuid)));
-    if (rolledBackVersion != nil) {
-        identity.Set("rolledBackVersion",
-                     flowjson::Value::String(PushyToStdString(rolledBackVersion)));
-    }
-
-    flowjson::Value cInfo = flowjson::Value::Object();
-    cInfo.Set("rnu", config.Get("rnu"));
-    cInfo.Set("rn", config.Get("rn"));
-    cInfo.Set("os", flowjson::Value::String(PushyToStdString([NSString
-        stringWithFormat:@"%@ %@", PushyOsName, PushyOsVersion()])));
-    cInfo.Set("uuid", flowjson::Value::String(PushyToStdString(uuid)));
-
-    flowjson::Value input = flowjson::Value::Object();
-    input.Set("packageVersion", identity.Get("packageVersion"));
-    if (currentVersion != nil) {
-        input.Set("currentVersion", identity.Get("currentVersion"));
-    }
-    input.Set("buildTime",
-              flowjson::Value::String(PushyToStdString([RCTPushy buildTime])));
-    input.Set("cInfo", cInfo);
-    input.Set("supportedDiffVersion",
-              flowjson::Value::Number(pushy::hbc::kSupportedDiffVersion));
+    // This launch as the shared core sees it (native_round.h); nil values are
+    // left out — a version-less launch has no currentVersion, as the JS
+    // constant does not.
+    flowjson::Value env = flowjson::Value::Object();
+    const auto put = [&env](const char *key, NSString *value) {
+        if (value != nil) {
+            env.Set(key, flowjson::Value::String(PushyToStdString(value)));
+        }
+    };
+    put("packageVersion", [RCTPushy packageVersion]);
+    put("currentVersion", currentVersion);
+    put("uuid", [PushyDefaults() stringForKey:keyUuid]);
+    put("rolledBackVersion", launchRolledBackVersion);
+    put("buildTime", [RCTPushy buildTime]);
+    put("os", [NSString stringWithFormat:@"%@ %@", PushyOsName, PushyOsVersion()]);
     // Cache-only while a crash is being held (§11.3 budget) or the launch is
     // blocked on the tvOS purged-version restore; computed (and shared with JS
     // getBundleHash) on the ordinary delayed round.
-    input.Set("bundleHash",
-              flowjson::Value::String(PushyToStdString(PushyBundleHashSync(
-                  !(pushyCrashHoldActive.load() || pushyPurgeRestoreActive.load())))));
+    put("bundleHash", PushyBundleHashSync(
+        !(pushyCrashHoldActive.load() || pushyPurgeRestoreActive.load())));
 
-    std::string bodyJson =
-        flowjson::Stringify(flowcore::BuildRequestBody(input));
-    NSString *body = [NSString stringWithUTF8String:bodyJson.c_str()];
+    const std::string config = PushyToStdString(configJson);
+    const flowjson::Value round =
+        flowcore::PrepareRound(config, env, arc4random() / 4294967296.0);
+    NSString *body = PushyFromStdString(round.Get("body").AsString());
     if (body == nil) {
-        RCTLogWarn(@"RCTPushy -- native sync: request body is not valid UTF-8");
+        RCTLogWarn(@"RCTPushy -- native sync: no request to send");
         pushyHostRoundResult = PushyHostResult(@"failed", @"invalid_request");
         return;
     }
 
-    BOOL httpsOnly = PushyIsHttpsOnly(config.Get("endpoints"));
-    NSString *responseText = [self runQueryRequest:config
-                                            appKey:appKey
+    NSString *responseText = [self runQueryRequest:round.Get("query")
                                               body:body
-                                         httpsOnly:httpsOnly
                                           deadline:deadlineUptime];
     if (responseText == nil) {
         RCTLogInfo(@"RCTPushy -- native sync: no endpoint reachable, giving up until next launch");
         return;
     }
-    long long responseAtSeconds = (long long)[[NSDate date] timeIntervalSince1970];
+    // Planned attempts, hashInfo and the response cache (anchored to the
+    // response's arrival) all come from the shared core.
+    flowjson::Value decision = flowcore::HandleRoundResponse(
+        PushyToStdString(responseText), config, env, PushyToStdString(body),
+        (long long)[[NSDate date] timeIntervalSince1970]);
+    NSString *cache = PushyFromStdString(decision.Get("cache").AsString());
     NSDictionary *cancelledByReset = PushyHostResult(@"cancelled", @"reset");
     // Commits only the response cache (nothing to install or activate) and
     // yields `result`, unless a reset or config change since the round
@@ -828,17 +742,11 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
                                         configGeneration:configGeneration
                                                 hashInfo:nil
                                                 activate:nil
-                                            responseText:responseText
-                                                 request:body
-                                                  config:configJson
-                                              responseAt:responseAtSeconds
+                                                   cache:cache
                                                activated:NULL];
         return committed ? result : cancelledByReset;
     };
 
-    flowjson::Value decision = flowcore::HandleResponse(
-        PushyToStdString(responseText), identity, false,
-        config.Get("afterDownload").AsString());
     if (decision.Get("action").AsString() != "download") {
         pushyHostRoundResult = commitResponseOnly(PushyHostResult(
             PushyStatusNone(), PushyFromStdString(decision.Get("reason").AsString())));
@@ -857,7 +765,6 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
         downloaded = [self performAttempts:decision.Get("attempts")
                                       hash:hash
                                 originHash:currentVersion
-                                 httpsOnly:httpsOnly
                                   deadline:deadlineUptime];
     }
     if (!downloaded) {
@@ -865,25 +772,14 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
         return;
     }
 
-    // Persist name/description/metaInfo alongside the version, mirroring the
-    // JS side's setLocalHashInfo after a successful download.
-    const flowjson::Value &info = decision.Get("info");
-    NSMutableDictionary *versionInfo = [NSMutableDictionary dictionary];
-    for (const char *key : {"name", "description", "metaInfo"}) {
-        if (info.Get(key).IsString()) {
-            versionInfo[@(key)] = PushyFromStdString(info.Get(key).AsString()) ?: @"";
-        }
-    }
-    // A forceBoot activation is the brick-rescue path: mark it in the
-    // persisted info so JS can report force_boot_rescue when this version
-    // survives to markSuccess. Only the server-sent directive counts — a
-    // silent-strategy activation is ordinary delivery.
-    if (info.Get("config").Get("forceBoot").Truthy()) {
-        versionInfo[PushyInfoForceBoot()] = @YES;
-    }
+    // The version info to persist alongside it (the JS side's
+    // setLocalHashInfo, the forceBoot rescue marked by the core).
+    flowjson::Value info = decision.Get("hashInfo");
     if (pushyCrashHoldActive.load()) {
-        versionInfo[PushyInfoCrashHold()] = @YES;
+        info.Set(PushyToStdString(PushyInfoCrashHold()), flowjson::Value::Bool(true));
     }
+    NSDictionary *versionInfo =
+        PushyJsonDictionary(PushyFromStdString(flowjson::Stringify(info)), NULL);
     // Silent strategies or a server-marked forceBoot version (per-version
     // remote override — the brick rescue) activate for the next launch;
     // otherwise activation stays with the JS side (§6/§10.1). Unless a crash
@@ -898,10 +794,7 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
                                     configGeneration:configGeneration
                                             hashInfo:@{@"hash": hash, @"info": versionInfo}
                                             activate:activate ? hash : nil
-                                        responseText:responseText
-                                             request:body
-                                              config:configJson
-                                          responseAt:responseAtSeconds
+                                               cache:cache
                                            activated:&activated];
     activate = activated;
     if (!committed) {
@@ -935,19 +828,10 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
                  configGeneration:(uint64_t)configGeneration
                          hashInfo:(NSDictionary *)hashInfoEntry
                          activate:(NSString *)hashToActivate
-                     responseText:(NSString *)responseText
-                          request:(NSString *)requestBody
-                           config:(NSString *)configJson
-                       responseAt:(long long)responseAtSeconds
+                            cache:(NSString *)cache
                         activated:(BOOL *)activatedOut {
-    // responseText is nil for the crash handler's activation-only commit
+    // cache is nil for the crash handler's activation-only commit
     // (activatePendingVersion): no round ran, so there is no cache to write.
-    NSString *cache = responseText == nil ? nil : PushyJsonString(@{
-        @"ts": @(responseAtSeconds),
-        @"body": responseText,
-        @"request": requestBody,
-        @"config": configJson,
-    });
     __block BOOL committed = NO;
     __block BOOL activated = NO;
     PushyWithStateLock(^{
@@ -965,7 +849,7 @@ static BOOL PushyLoadRunnableConfig(PushyRunnableConfig *config, NSDictionary **
         // crash handler's activation-only one): it may take over this launch
         // only while +bundleURL still waits for it; after that the version is
         // left to JS unless a crash is being held (JS is dead then).
-        if (responseText != nil && pushyPurgeRestoreActive.load()) {
+        if (cache != nil && pushyPurgeRestoreActive.load()) {
             if (pushyPurgeRestoreWindowOpen) {
                 if (activation != nil && info != nil) {
                     NSMutableDictionary *marked = [info mutableCopy];
@@ -1005,98 +889,42 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
     return MIN(10, deadlineUptime - PushyMonotonicNow());
 }
 
-// Sequential fallback over the ordered candidates (§5.1): one request at a
-// time with its own timeout; after the configured round fails, queryUrls
-// discovery merges remote candidates (excluding the already-tried) for one
-// more round. No hedged race on purpose — this path is latency-insensitive.
-+ (NSString *)runQueryRequest:(const flowjson::Value &)config
-                       appKey:(NSString *)appKey
+// Sequential fallback over the endpoints (§5.1), one request at a time with
+// its own timeout, as the shared core walks it (flowcore::NextQueryStep:
+// order, list discovery, https-only remote bases, the request budget,
+// response validity). No hedged race on purpose — this path is
+// latency-insensitive.
++ (NSString *)runQueryRequest:(const flowjson::Value &)query
                          body:(NSString *)body
-                    httpsOnly:(BOOL)httpsOnly
                      deadline:(NSTimeInterval)deadlineUptime {
-    NSMutableSet<NSString *> *tried = [NSMutableSet set];
-    const NSUInteger maxHttpAttempts = 8;
-    __block NSUInteger httpAttempts = 0;
-    // Spends one attempt of the shared budget. NO once the attempt cap or the
-    // deadline is exhausted (the round must stop issuing requests); the
-    // per-request timeout lands in *timeout otherwise.
-    BOOL (^takeAttempt)(NSTimeInterval *) = ^BOOL(NSTimeInterval *timeout) {
-        if (httpAttempts++ >= maxHttpAttempts) {
-            return NO;
+    flowjson::Value state = query;
+    NSString *text = nil;
+    while (true) {
+        state = flowcore::NextQueryStep(state, text == nil
+            ? flowjson::Value::Undefined()
+            : flowjson::Value::String(PushyToStdString(text)));
+        if (state.Get("found").Truthy()) {
+            return text;
         }
-        *timeout = PushyQueryRequestTimeout(deadlineUptime);
-        return *timeout > 0;
-    };
-    // Tries each not-yet-tried endpoint base in order and returns the first
-    // valid response; *stop is set when the budget ran out. A remote list
-    // (fetched from queryUrls) may not downgrade an https-only config.
-    NSString *(^queryEndpoints)(const flowjson::Value &, BOOL, BOOL *) =
-        ^NSString *(const flowjson::Value &endpoints, BOOL remote, BOOL *stop) {
-        for (const auto &endpoint : endpoints.elements()) {
-            NSString *base = PushyNormalizeEndpointBase(
-                PushyFromStdString(endpoint.AsString()));
-            if (base.length == 0 || [tried containsObject:base]) {
-                continue;
-            }
-            if (remote && httpsOnly && !PushyIsHttpsUrl(base)) {
-                RCTLogWarn(@"RCTPushy -- native sync: ignoring non-https remote endpoint %@", base);
-                continue;
-            }
-            NSTimeInterval timeout = 0;
-            if (!takeAttempt(&timeout)) {
-                *stop = YES;
-                return nil;
-            }
-            [tried addObject:base];
-            NSString *response = PushyHttpRequest(
-                [NSString stringWithFormat:@"%@%@%@", base, RCTPushyQueryPath(), appKey],
-                @"POST", body, timeout);
-            if (PushyIsValidResponse(response)) {
-                return response;
-            }
-        }
-        return nil;
-    };
-
-    BOOL stop = NO;
-    double sample = arc4random() / 4294967296.0;
-    NSString *response = queryEndpoints(
-        flowcore::OrderEndpointCandidates(config.Get("endpoints"), sample), NO, &stop);
-    if (response != nil || stop) {
-        return response;
-    }
-    for (const auto &queryUrl : config.Get("queryUrls").elements()) {
-        NSString *listUrl = PushyFromStdString(queryUrl.AsString());
-        if (listUrl == nil) {
-            continue;
-        }
-        NSTimeInterval listTimeout = 0;
-        if (!takeAttempt(&listTimeout)) {
+        NSString *url = PushyFromStdString(state.Get("url").AsString());
+        NSTimeInterval timeout = PushyQueryRequestTimeout(deadlineUptime);
+        if (url == nil || timeout <= 0) {
             return nil;
         }
-        NSString *listText = PushyHttpRequest(listUrl, @"GET", nil, listTimeout);
-        if (listText == nil) {
-            continue;
-        }
-        bool ok = false;
-        flowjson::Value remote = flowjson::Parse(PushyToStdString(listText), &ok);
-        if (!ok || !remote.IsArray()) {
-            continue;
-        }
-        // One successfully fetched remote list is enough.
-        return queryEndpoints(remote, YES, &stop);
+        BOOL post = state.Get("post").Truthy();
+        text = PushyHttpRequest(url, post ? @"POST" : @"GET", post ? body : nil, timeout);
     }
-    return nil;
 }
 
-// Strategies in order (diff, pdiff, full), each over its mirrors. A failure
+// Strategies in order (diff, pdiff, full), each over its mirrors, already
+// planned for this device by the core (no diff without a running version, no
+// cleartext URL under an https-only config). A failure
 // that is not mirror-retryable (PATCH_FAILED: the bytes arrived but could not
 // be applied, and every mirror serves the same bytes) moves on to the next
 // strategy instead of downloading the same artifact again, like the JS side.
 + (BOOL)performAttempts:(const flowjson::Value &)attempts
                    hash:(NSString *)hash
              originHash:(NSString *)originHash
-              httpsOnly:(BOOL)httpsOnly
                deadline:(NSTimeInterval)holdDeadline {
     // Crash-rescue budget caps every phase; 0 keeps the normal 10min windows.
     NSTimeInterval incrementalDeadline = PushyMonotonicNow() + 600;
@@ -1109,9 +937,6 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
         PushyType pushyType = type == "diff" ? PushyTypePatchFromPpk
                             : type == "pdiff" ? PushyTypePatchFromPackage
                                               : PushyTypeFullDownload;
-        if (pushyType == PushyTypePatchFromPpk && originHash.length == 0) {
-            continue;  // diff patches from the running version; none running
-        }
         BOOL isFullAttempt = pushyType == PushyTypeFullDownload;
         if (isFullAttempt && fullDeadline == 0) {
             // diff/pdiff cannot starve the last-resort full download.
@@ -1124,10 +949,6 @@ static NSTimeInterval PushyQueryRequestTimeout(NSTimeInterval deadlineUptime) {
         for (const auto &urlValue : attempt.Get("urls").elements()) {
             NSString *url = PushyFromStdString(urlValue.AsString());
             if (url == nil) {
-                continue;
-            }
-            if (httpsOnly && PushyIsCleartextUrl(url)) {
-                RCTLogWarn(@"RCTPushy -- native sync: ignoring cleartext %s url %@", type.c_str(), url);
                 continue;
             }
             NSTimeInterval remaining = deadline - PushyMonotonicNow();

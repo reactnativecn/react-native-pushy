@@ -188,10 +188,7 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
                  configGeneration:(uint64_t)configGeneration
                          hashInfo:(NSDictionary *)hashInfo
                          activate:(NSString *)hash
-                     responseText:(NSString *)response
-                          request:(NSString *)request
-                           config:(NSString *)config
-                       responseAt:(long long)responseAt
+                            cache:(NSString *)cache
                         activated:(BOOL *)activated;
 @end
 
@@ -301,8 +298,7 @@ static dispatch_time_t TestLaunchDeadline(dispatch_time_t when, int64_t delta) {
         roundCommitted = [self commitRoundWithGeneration:requestGeneration
             configGeneration:pushyNativeConfigGeneration.load()
             hashInfo:@{@"hash": @"B", @"info": @{@"name": @"B", @"forceBootRescue": @YES}}
-            activate:@"B" responseText:@"{\"update\":true,\"hash\":\"B\"}"
-            request:@"request" config:@"config" responseAt:123 activated:&roundActivated];
+            activate:@"B" cache:@"{\"ts\":123,\"body\":\"{}\"}" activated:&roundActivated];
         pushyHostRoundResult = @{@"status": @"test", @"reason": @"", @"hash": @"B"};
         Signal(commitFinished);
         actor = Actor::None;
