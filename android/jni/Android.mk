@@ -26,7 +26,6 @@ LOCAL_SRC_FILES := \
 	../../cpp/patch_core/hbc_transform_wire.cpp \
 	../../cpp/android_jni/jni_registration.cpp \
 	../../cpp/patch_core/patch_core.cpp \
-	../../cpp/android_jni/patch_core_android.cpp \
 	../../cpp/patch_core/state_core.cpp \
 	../../cpp/android_jni/update_core_android.cpp \
 	../../cpp/update_flow_core/flow_json.cpp \
