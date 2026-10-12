@@ -7,11 +7,14 @@ name: harmony-build
 # first seen when publishing. assembleHar runs the ArkTS compiler over the
 # .ets/.ts sources, which is the real type check; check-harmony-types.js
 # adds a strict tsc pass over the .ts sources and must not skip here.
+#
+# The JS <-> native method parity and constant-mirror checks run in
+# `bun lint` (lint.yml) on every PR, so they are not repeated here.
 on:
   pull_request:
     branches:
       - master
-    paths:
+    paths: &harmony-paths
       - '.github/workflows/harmony-build.yml'
       - '.gitmodules'
       - 'package.json'
@@ -21,23 +24,10 @@ on:
       - 'android/jni/**'
       - 'scripts/build-harmony-har.js'
       - 'scripts/check-harmony-types.js'
-      - 'scripts/check-native-spec-parity.js'
-      - 'src/NativePushy.ts'
   push:
     branches:
       - master
-    paths:
-      - '.github/workflows/harmony-build.yml'
-      - '.gitmodules'
-      - 'package.json'
-      - 'bun.lock'
-      - 'harmony/**'
-      - 'cpp/**'
-      - 'android/jni/**'
-      - 'scripts/build-harmony-har.js'
-      - 'scripts/check-harmony-types.js'
-      - 'scripts/check-native-spec-parity.js'
-      - 'src/NativePushy.ts'
+    paths: *harmony-paths
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -67,12 +57,6 @@ jobs:
           node-version: 24
       - run: bun install --frozen-lockfile
 
-      - name: Verify JS <-> native method parity
-        run: node scripts/check-native-spec-parity.js
-
-      - name: Verify constant mirrors match the C++ headers
-        run: node harmony/pushy/src/test/check-constant-parity.js
-
       - name: Build Harmony HAR (release)
         run: npm run build:harmony-har -- --build-mode release
 
@@ -88,30 +72,9 @@ jobs:
           test "${#libs[@]}" -gt 0
           node scripts/check-binary-strings.js "${libs[@]}"
 
+      # Required: the script also searches the container's install roots for
+      # the OpenHarmony SDK declarations and fails if it finds none.
       - name: Type-check Harmony TS sources (required)
-        shell: bash
-        run: |
-          # The container's SDK is not laid out like a DevEco install, so
-          # locate the ets declaration root (the directory holding api/ and
-          # kits/) directly and hand it to the script.
-          ets_dir="${HARMONY_SDK_ETS_DIR:-}"
-          if [ -z "$ets_dir" ]; then
-            for root in "${DEVECO_SDK_HOME:-}" /opt /usr/local /usr/lib /root /home /github/home; do
-              [ -n "$root" ] && [ -d "$root" ] || continue
-              # The @ohos.*/@kit.* declarations live under the OpenHarmony SDK
-              # (sdk/<ver>/openharmony/ets); the sibling hms/ets tree only
-              # holds HMS kits and must not win.
-              api_dir="$(find "$root" -maxdepth 8 -type d -path '*/openharmony/ets/api' 2>/dev/null \
-                | sort | head -n 1)"
-              if [ -n "$api_dir" ]; then
-                ets_dir="$(dirname "$api_dir")"
-                break
-              fi
-            done
-          fi
-          echo "HARMONY_SDK_ETS_DIR=${ets_dir:-<not found>}"
-          if [ -z "$ets_dir" ]; then
-            echo "SDK candidates under /opt:"; ls -la /opt 2>/dev/null || true
-          fi
-          HARMONY_SDK_ETS_DIR="$ets_dir" HARMONY_TYPECHECK_REQUIRED=1 \
-            node scripts/check-harmony-types.js
+        run: node scripts/check-harmony-types.js
+        env:
+          HARMONY_TYPECHECK_REQUIRED: '1'
