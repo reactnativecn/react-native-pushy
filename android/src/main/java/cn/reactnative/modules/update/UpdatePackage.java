@@ -23,24 +23,21 @@ public class UpdatePackage extends TurboReactPackage {
 
     @Override
     public ReactModuleInfoProvider getReactModuleInfoProvider() {
-        return new ReactModuleInfoProvider() {
-            @Override
-            public Map<String, ReactModuleInfo> getReactModuleInfos() {
-                final Map<String, ReactModuleInfo> moduleInfos = new HashMap<>();
-                boolean isTurboModule = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
-                moduleInfos.put(
-                        UpdateModule.NAME,
-                        new ReactModuleInfo(
-                                UpdateModule.NAME,
-                                UpdateModule.NAME,
-                                false, // canOverrideExistingModule
-                                false, // needsEagerInit
-                                true, // hasConstants
-                                false, // isCxxModule
-                                isTurboModule // isTurboModule
-                        ));
-                return moduleInfos;
-            }
+        return () -> {
+            final Map<String, ReactModuleInfo> moduleInfos = new HashMap<>();
+            boolean isTurboModule = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
+            moduleInfos.put(
+                    UpdateModule.NAME,
+                    new ReactModuleInfo(
+                            UpdateModule.NAME,
+                            UpdateModule.NAME,
+                            false, // canOverrideExistingModule
+                            false, // needsEagerInit
+                            true, // hasConstants
+                            false, // isCxxModule
+                            isTurboModule // isTurboModule
+                    ));
+            return moduleInfos;
         };
     }
 }

@@ -13,8 +13,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 
 public class UpdateContext {
     static {
@@ -113,12 +111,7 @@ public class UpdateContext {
 
     private UpdateContext(Context context) {
         this.context = context.getApplicationContext();
-        this.executor = Executors.newSingleThreadExecutor(new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                return new Thread(r, "pushy-download");
-            }
-        });
+        this.executor = Threads.single("pushy-download", false);
 
         this.rootDir = new File(this.context.getFilesDir(), Texts.reveal("0502e4d5af9f6d"));
 
@@ -258,21 +251,16 @@ public class UpdateContext {
             publishBundleHash("");
             return;
         }
-        Thread thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                String hash = "";
-                try {
-                    hash = loadOrHashBundledAsset();
-                } catch (Throwable e) {
-                    Log.w(TAG, "bundle hash failed: " + e);
-                } finally {
-                    publishBundleHash(hash);
-                }
+        Threads.startDaemon("pushy-bundle-hash", () -> {
+            String hash = "";
+            try {
+                hash = loadOrHashBundledAsset();
+            } catch (Throwable e) {
+                Log.w(TAG, "bundle hash failed: " + e);
+            } finally {
+                publishBundleHash(hash);
             }
-        }, "pushy-bundle-hash");
-        thread.setDaemon(true);
-        thread.start();
+        });
     }
 
     private void publishBundleHash(String hash) {

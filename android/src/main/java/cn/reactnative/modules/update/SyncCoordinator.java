@@ -200,33 +200,27 @@ final class SyncCoordinator {
         if (context.getKv(KEY_CONFIG) != null) {
             CrashHold.install();
         }
-        Thread thread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    // Keep the check away from the cold-start critical path
-                    // (§7 R5) — unless the previous process died mid-round,
-                    // in which case every launch second counts (§11.4).
-                    if (context.getKv(KEY_ROUND_INCOMPLETE) == null) {
-                        Thread.sleep(5000);
-                    }
-                    if (hasJsRound(context)) {
-                        // Not consuming the round: a later crash rescue may
-                        // still need it.
-                        Log.i(Texts.LOG_TAG,
-                            "native sync skipped: JS already queried in this process");
-                        return;
-                    }
-                    startRound(0);
-                } catch (Throwable e) {
-                    // The rescue path must never take the app down with it.
-                    Log.w(Texts.LOG_TAG, "native sync failed: " + e);
+        Threads.startDaemon("pushy-native-sync", Thread.MIN_PRIORITY + 1, () -> {
+            try {
+                // Keep the check away from the cold-start critical path
+                // (§7 R5) — unless the previous process died mid-round,
+                // in which case every launch second counts (§11.4).
+                if (context.getKv(KEY_ROUND_INCOMPLETE) == null) {
+                    Thread.sleep(5000);
                 }
+                if (hasJsRound(context)) {
+                    // Not consuming the round: a later crash rescue may
+                    // still need it.
+                    Log.i(Texts.LOG_TAG,
+                        "native sync skipped: JS already queried in this process");
+                    return;
+                }
+                startRound(0);
+            } catch (Throwable e) {
+                // The rescue path must never take the app down with it.
+                Log.w(Texts.LOG_TAG, "native sync failed: " + e);
             }
-        }, "pushy-native-sync");
-        thread.setPriority(Thread.MIN_PRIORITY + 1);
-        thread.setDaemon(true);
-        thread.start();
+        });
     }
 
     static boolean isRoundInFlight() {

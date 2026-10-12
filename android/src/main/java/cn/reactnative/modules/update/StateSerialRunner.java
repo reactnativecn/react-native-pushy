@@ -1,64 +1,47 @@
 package cn.reactnative.modules.update;
 
-import android.util.Log;
-import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Promise;
-
+import com.facebook.react.bridge.UiThreadUtil;
 import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 
 /**
- * Runs state-persistence operations (switchVersion / markSuccess / setUuid /
- * setLocalHashInfo) on a dedicated single background thread.
+ * Runs a module operation on a given executor and rejects its promise with
+ * the operation's error code when it throws; the operation resolves the
+ * promise itself.
  *
- * These operations only read/modify SharedPreferences via a synchronous
- * commit(); they were previously dispatched to the UI thread purely to
- * serialize them. markSuccess in particular runs on every cold start, so doing
- * its blocking disk write on the main thread caused jank/ANR on low-end
- * devices. A single-thread executor preserves the same serialization guarantee
- * while keeping the disk I/O off the UI thread.
- *
- * Note: reload/restart operations must still run on the UI thread and therefore
- * keep using {@link UiThreadRunner}.
+ * State-persistence operations (switchVersion / markSuccess / setUuid /
+ * setLocalHashInfo / reset / config) go to {@link #STATE_SERIAL}, a single
+ * background thread: they only read/modify SharedPreferences via a
+ * synchronous commit(), and were once dispatched to the UI thread purely to
+ * serialize them. markSuccess runs on every cold start, so its blocking disk
+ * write on the main thread caused jank/ANR on low-end devices; one worker
+ * keeps the serialization in submission order without that. Only the React
+ * reload itself still hops to {@link #UI_THREAD}.
  */
 final class StateSerialRunner {
     interface Operation {
         void run() throws Throwable;
     }
 
-    // Single worker thread -> operations stay serialized in submission order,
-    // matching the previous UI-thread behavior. The thread is named so it is
-    // identifiable in thread dumps / ANR traces when diagnosing persistence.
-    private static final Executor EXECUTOR = Executors.newSingleThreadExecutor(
-        new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                return new Thread(r, "pushy-state-serial");
-            }
-        });
+    // Named so it is identifiable in thread dumps / ANR traces.
+    static final Executor STATE_SERIAL = Threads.single("pushy-state-serial", false);
+    static final Executor UI_THREAD = UiThreadUtil::runOnUiThread;
 
     private StateSerialRunner() {
     }
 
     static void run(
-        @Nullable final Promise promise,
+        Executor executor,
+        final Promise promise,
         final String errorCode,
         final String operationName,
         final Operation operation
     ) {
-        EXECUTOR.execute(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    operation.run();
-                } catch (Throwable error) {
-                    if (promise != null) {
-                        promise.reject(errorCode, operationName + " failed", error);
-                    } else {
-                        Log.e(Texts.LOG_TAG, operationName + " failed", error);
-                    }
-                }
+        executor.execute(() -> {
+            try {
+                operation.run();
+            } catch (Throwable error) {
+                promise.reject(errorCode, operationName + " failed", error);
             }
         });
     }

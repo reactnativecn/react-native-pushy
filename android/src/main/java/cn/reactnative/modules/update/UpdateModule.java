@@ -1,5 +1,8 @@
 package cn.reactnative.modules.update;
 
+import static cn.reactnative.modules.update.StateSerialRunner.STATE_SERIAL;
+import static cn.reactnative.modules.update.StateSerialRunner.UI_THREAD;
+
 import android.util.Log;
 import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Promise;
@@ -249,18 +252,12 @@ public class UpdateModule extends NativePushySpec {
         // the launch resolution run on the state serial thread like every
         // other state write; only the React reload itself is posted to the
         // UI thread. A failure at either hop rejects with RESTART_FAILED.
-        StateSerialRunner.run(promise, ErrorCodes.RESTART_FAILED, "restartApp", new StateSerialRunner.Operation() {
-            @Override
-            public void run() throws Throwable {
-                final String bundlePath = ReactReloadManager.prepareRestart(updateContext, hash);
-                UiThreadRunner.run(promise, ErrorCodes.RESTART_FAILED, "restartApp", new UiThreadRunner.Operation() {
-                    @Override
-                    public void run() throws Throwable {
-                        ReactReloadManager.reload(updateContext, reactContext, bundlePath);
-                        promise.resolve(true);
-                    }
-                });
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.RESTART_FAILED, "restartApp", () -> {
+            final String bundlePath = ReactReloadManager.prepareRestart(updateContext, hash);
+            StateSerialRunner.run(UI_THREAD, promise, ErrorCodes.RESTART_FAILED, "restartApp", () -> {
+                ReactReloadManager.reload(updateContext, reactContext, bundlePath);
+                promise.resolve(true);
+            });
         });
     }
 
@@ -271,24 +268,18 @@ public class UpdateModule extends NativePushySpec {
         if (hash == null) {
             return;
         }
-        StateSerialRunner.run(promise, ErrorCodes.SWITCH_VERSION_FAILED, "switchVersionLater", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.switchVersion(hash);
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.SWITCH_VERSION_FAILED, "switchVersionLater", () -> {
+            updateContext.switchVersion(hash);
+            promise.resolve(true);
         });
     }
 
     @ReactMethod
     @Override
     public void markSuccess(final Promise promise) {
-        StateSerialRunner.run(promise, ErrorCodes.MARK_SUCCESS_FAILED, "markSuccess", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.markSuccess();
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.MARK_SUCCESS_FAILED, "markSuccess", () -> {
+            updateContext.markSuccess();
+            promise.resolve(true);
         });
     }
 
@@ -297,23 +288,15 @@ public class UpdateModule extends NativePushySpec {
     public void getBundleHash(final Promise promise) {
         // Threading lives in UpdateContext (its bundle-hash thread); resolve is
         // thread-safe. Never rejects — empty string means "unknown".
-        updateContext.getBundleHash(new UpdateContext.BundleHashListener() {
-            @Override
-            public void onBundleHash(String hash) {
-                promise.resolve(hash);
-            }
-        });
+        updateContext.getBundleHash(promise::resolve);
     }
 
     @ReactMethod
     @Override
     public void resetToPackagedBundle(final Promise promise) {
-        StateSerialRunner.run(promise, ErrorCodes.RESET_FAILED, "resetToPackagedBundle", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.resetToPackagedBundle();
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.RESET_FAILED, "resetToPackagedBundle", () -> {
+            updateContext.resetToPackagedBundle();
+            promise.resolve(true);
         });
     }
 
@@ -362,12 +345,9 @@ public class UpdateModule extends NativePushySpec {
             promise.reject(ErrorCodes.INVALID_OPTIONS, "config must be a JSON object string", e);
             return;
         }
-        StateSerialRunner.run(promise, ErrorCodes.FILE_OPERATION_FAILED, "syncNativeConfig", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.setNativeConfig(config);
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.FILE_OPERATION_FAILED, "syncNativeConfig", () -> {
+            updateContext.setNativeConfig(config);
+            promise.resolve(true);
         });
     }
 
@@ -377,12 +357,9 @@ public class UpdateModule extends NativePushySpec {
         if (requireNonEmpty(uuid, "uuid", promise) == null) {
             return;
         }
-        StateSerialRunner.run(promise, ErrorCodes.FILE_OPERATION_FAILED, "setUuid", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.setKv("uuid", uuid);
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.FILE_OPERATION_FAILED, "setUuid", () -> {
+            updateContext.setKv("uuid", uuid);
+            promise.resolve(true);
         });
     }
 
@@ -398,12 +375,9 @@ public class UpdateModule extends NativePushySpec {
         }
         // A state write that did not reach disk (SharedPreferences commit
         // false) is FILE_OPERATION_FAILED, distinct from malformed input.
-        StateSerialRunner.run(promise, ErrorCodes.FILE_OPERATION_FAILED, "setLocalHashInfo", new StateSerialRunner.Operation() {
-            @Override
-            public void run() {
-                updateContext.setKv("hash_" + hash, info);
-                promise.resolve(true);
-            }
+        StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.FILE_OPERATION_FAILED, "setLocalHashInfo", () -> {
+            updateContext.setKv("hash_" + hash, info);
+            promise.resolve(true);
         });
     }
 

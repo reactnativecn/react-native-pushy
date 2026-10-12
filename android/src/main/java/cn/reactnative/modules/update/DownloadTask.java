@@ -120,15 +120,12 @@ class DownloadTask implements Runnable {
         // Cross-platform progress contract: unknown length is reported as
         // total=0, never a raw -1 (OkHttp's contentLength for chunked/gzip).
         final long normalizedTotal = total > 0 ? total : 0;
-        mainHandler.post(new Runnable() {
-            @Override
-            public void run() {
-                WritableMap progress = Arguments.createMap();
-                progress.putDouble("received", received);
-                progress.putDouble("total", normalizedTotal);
-                progress.putString("hash", hash);
-                UpdateEventEmitter.sendEvent("RCTPushyDownloadProgress", progress);
-            }
+        mainHandler.post(() -> {
+            WritableMap progress = Arguments.createMap();
+            progress.putDouble("received", received);
+            progress.putDouble("total", normalizedTotal);
+            progress.putString("hash", hash);
+            UpdateEventEmitter.sendEvent("RCTPushyDownloadProgress", progress);
         });
     }
 
@@ -766,19 +763,13 @@ class DownloadTask implements Runnable {
         // Phase 1, under the version-files lock: only renames doomed entries
         // into the trash, so activation is never blocked behind a recursive
         // delete of several version directories.
-        UpdateContext.getInstance(context).runCleanupWithLatestState(
-            new UpdateContext.CleanupAction() {
-                @Override
-                public void run(String[] keepNames) {
-                    cleanupOldEntries(
-                        params.unzipDirectory.getAbsolutePath(),
-                        keepNames,
-                        params.maxAgeDays,
-                        trash.getAbsolutePath()
-                    );
-                }
-            }
-        );
+        UpdateContext.getInstance(context).runCleanupWithLatestState(keepNames ->
+            cleanupOldEntries(
+                params.unzipDirectory.getAbsolutePath(),
+                keepNames,
+                params.maxAgeDays,
+                trash.getAbsolutePath()
+            ));
         // Phase 2, lock released: nothing in the trash is reachable as a
         // version any more. Also purges leftovers of an interrupted run.
         // Best effort: phase 1 already succeeded, and a leftover the native
