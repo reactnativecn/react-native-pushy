@@ -13,6 +13,7 @@
 
 #include "../flow_json.h"
 #include "../native_config.h"
+#include "../native_round.h"
 #include "../update_flow_core.h"
 
 using flowjson::Parse;
@@ -615,6 +616,93 @@ int RunTrimAndDeepEquals() {
   return failures;
 }
 
+// The native round (native_round.h): request preparation, the endpoint
+// query walk (replayed against a scripted network) and the response
+// handling, from tests/native-round-vectors.json. Cases whose `before`
+// records per-platform outputs pin a deliberate alignment.
+int RunNativeRound(const Value& doc) {
+  int failures = 0;
+  const Value& prepare = doc.Get("prepare");
+  const Value& query = doc.Get("query");
+  const Value& respond = doc.Get("respond");
+  if (!prepare.IsArray() || prepare.Size() == 0 || !query.IsArray() ||
+      query.Size() == 0 || !respond.IsArray() || respond.Size() == 0) {
+    std::fprintf(stderr, "native round vectors: missing cases\n");
+    return 1;
+  }
+  const auto report = [&failures](const char* section, const Value& c,
+                                  const std::string& expected,
+                                  const std::string& actual) {
+    if (actual != expected) {
+      std::fprintf(stderr,
+                   "%s \"%s\" MISMATCH\n  expected: %s\n  actual:   %s\n",
+                   section, c.Get("name").AsString().c_str(), expected.c_str(),
+                   actual.c_str());
+      failures++;
+    }
+  };
+  for (const Value& c : prepare.elements()) {
+    const Value round = flowcore::PrepareRound(
+        c.Get("config").AsString(), c.Get("env"), c.Get("sample").AsNumber());
+    Value actual = Value::Undefined();
+    if (round.IsObject()) {
+      // The body is compared as an object so the vectors stay readable; it
+      // must also be exactly the canonical text.
+      bool ok = false;
+      Value body = Parse(round.Get("body").AsString(), &ok);
+      if (!ok || Stringify(body) != round.Get("body").AsString()) {
+        std::fprintf(stderr, "prepare \"%s\": body is not canonical JSON\n",
+                     c.Get("name").AsString().c_str());
+        failures++;
+      }
+      actual = Value::Object();
+      actual.Set("body", std::move(body));
+      actual.Set("query", round.Get("query"));
+    }
+    report("prepare", c, Stringify(c.Get("expected")), Stringify(actual));
+  }
+  for (const Value& c : query.elements()) {
+    const Value round = flowcore::PrepareRound(
+        c.Get("config").AsString(), c.Get("env"), c.Get("sample").AsNumber());
+    Value state = round.Get("query");
+    Value requests = Value::Array();
+    Value text = Value::Undefined();
+    Value result = Value::Null();
+    for (int step = 0; step < 64; step++) {
+      state = flowcore::NextQueryStep(state, text);
+      if (state.Get("found").Truthy()) {
+        result = text;
+        break;
+      }
+      const Value& url = state.Get("url");
+      if (!url.IsString()) {
+        break;
+      }
+      requests.Push(Value::String(
+          (state.Get("post").Truthy() ? "POST " : "GET ") + url.AsString()));
+      const Value& scripted = c.Get("responses").Get(url.AsString());
+      text = scripted.IsString() ? scripted : Value::Undefined();
+    }
+    Value actual = Value::Object();
+    actual.Set("requests", std::move(requests));
+    actual.Set("result", std::move(result));
+    report("query", c, Stringify(c.Get("expected")), Stringify(actual));
+  }
+  for (const Value& c : respond.elements()) {
+    const Value actual = flowcore::HandleRoundResponse(
+        c.Get("response").AsString(), c.Get("config").AsString(),
+        c.Get("env"), c.Get("request").AsString(), c.Get("ts").AsNumber());
+    report("respond", c, Stringify(c.Get("expected")), Stringify(actual));
+  }
+  // Walking past the end, or a state that is not an object, stays inert.
+  if (!flowcore::NextQueryStep(Value::Array(), Value::Undefined())
+           .IsUndefined()) {
+    std::fprintf(stderr, "NextQueryStep: a non-object state must be rejected\n");
+    failures++;
+  }
+  return failures;
+}
+
 bool LoadJson(const char* path, Value* doc) {
   std::ifstream file(path);
   if (!file) {
@@ -634,19 +722,22 @@ bool LoadJson(const char* path, Value* doc) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  if (argc < 4) {
+  if (argc < 5) {
     std::fprintf(stderr,
                  "usage: %s <flow_vectors.json> "
                  "<config-equivalence-vectors.json> "
-                 "<native-config-vectors.json>\n",
+                 "<native-config-vectors.json> "
+                 "<native-round-vectors.json>\n",
                  argv[0]);
     return 2;
   }
   Value doc;
   Value equivalenceDoc;
   Value nativeConfigDoc;
+  Value nativeRoundDoc;
   if (!LoadJson(argv[1], &doc) || !LoadJson(argv[2], &equivalenceDoc) ||
-      !LoadJson(argv[3], &nativeConfigDoc)) {
+      !LoadJson(argv[3], &nativeConfigDoc) ||
+      !LoadJson(argv[4], &nativeRoundDoc)) {
     return 2;
   }
 
@@ -658,7 +749,8 @@ int main(int argc, char* argv[]) {
   int failures = RunParserRobustness() + RunNumberConversion() +
                  RunInputCaps() + RunHandleCheckResponse() +
                  RunConfigEquivalence(equivalenceDoc) +
-                 RunNativeConfig(nativeConfigDoc) + RunTrimAndDeepEquals();
+                 RunNativeConfig(nativeConfigDoc) +
+                 RunNativeRound(nativeRoundDoc) + RunTrimAndDeepEquals();
   for (size_t i = 0; i < cases.Size(); i++) {
     const Value& testCase = cases.At(i);
     const std::string& fn = testCase.Get("fn").AsString();
@@ -690,9 +782,12 @@ int main(int argc, char* argv[]) {
   }
   std::printf(
       "all %zu flow vectors, %zu config equivalence vectors, %zu+%zu native "
-      "config vectors + parser robustness passed\n",
+      "config vectors, %zu+%zu+%zu native round vectors + parser robustness "
+      "passed\n",
       cases.Size(), equivalenceDoc.Get("cases").Size(),
       nativeConfigDoc.Get("runnable").Size(),
-      nativeConfigDoc.Get("normalize").Size());
+      nativeConfigDoc.Get("normalize").Size(),
+      nativeRoundDoc.Get("prepare").Size(), nativeRoundDoc.Get("query").Size(),
+      nativeRoundDoc.Get("respond").Size());
   return 0;
 }

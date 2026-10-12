@@ -10,6 +10,7 @@
 
 #include "../flow_json.h"
 #include "../native_config.h"
+#include "../native_round.h"
 #include "../update_flow_core.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
@@ -42,6 +43,28 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   flowjson::Stringify(
       flowcore::HandleResponse(text, identity, false, "none"));
   flowcore::IsValidResponse(text);
+
+  // The round: the text as the persisted config, as a response and as a
+  // remote endpoint list. Every query walk must end within its request cap.
+  flowjson::Value env = flowjson::Value::Object();
+  env.Set("packageVersion", flowjson::Value::String("2.3.4"));
+  env.Set("currentVersion", flowjson::Value::String("cur"));
+  env.Set("os", flowjson::Value::String("fuzz 1"));
+  const flowjson::Value round = flowcore::PrepareRound(text, env, 0.5);
+  flowjson::Value state = round.Get("query");
+  for (int step = 0; state.IsObject(); step++) {
+    if (step > 2 * flowcore::kMaxQueryRequests + 2) {
+      std::abort();
+    }
+    state = flowcore::NextQueryStep(state, flowjson::Value::String(text));
+    if (state.Get("found").Truthy() || !state.Get("url").IsString()) {
+      break;
+    }
+  }
+  flowjson::Stringify(flowcore::HandleRoundResponse(
+      text, "{\"appKey\":\"k\",\"endpoints\":[\"https://a\"]}", env, "{}", 1));
+  flowjson::Stringify(
+      flowcore::HandleRoundResponse("{\"upToDate\":true}", text, env, text, 1));
 
   // The persisted-config layer reads host/JS-written text: equivalence must
   // be reflexive for every object, and a normalized config must be runnable
