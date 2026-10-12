@@ -19,6 +19,7 @@ namespace {
 using pushy::jni_util::JArrayToVector;
 using pushy::jni_util::JStringToString;
 using pushy::jni_util::ThrowRuntimeException;
+using pushy::jni_util::ToJString;
 using pushy::state_ops::StateOperation;
 
 constexpr const char* kStringSig = "Ljava/lang/String;";
@@ -189,7 +190,7 @@ void SetStringField(
     return;
   }
 
-  jstring java_value = env->NewStringUTF(value.c_str());
+  jstring java_value = ToJString(env, value);
   env->SetObjectField(target, field, java_value);
   env->DeleteLocalRef(java_value);
 }
@@ -292,7 +293,7 @@ jobject NewCopyGroupResult(
   if (to_paths != nullptr) {
     for (jsize index = 0; index < static_cast<jsize>(group.to_paths.size());
          ++index) {
-      jstring value = env->NewStringUTF(group.to_paths[index].c_str());
+      jstring value = ToJString(env, group.to_paths[index]);
       env->SetObjectArrayElement(to_paths, index, value);
       env->DeleteLocalRef(value);
     }
