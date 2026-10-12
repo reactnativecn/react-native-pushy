@@ -1,7 +1,8 @@
 /**
  * Harmony update-flow e2e, mirroring the Detox local-merge suite:
- * binary base -> full package (v1) -> ppk diff (v2) -> v2-track diff (v4)
- * -> persistence.
+ * binary base -> full package (v1) -> ppk diff (v2) -> package diff against
+ * the hap's embedded bundle (v3) -> v2-track diff (v4) -> persistence, plus
+ * the bundleHash identity check.
  *
  * Prerequisites:
  * - Emulator/device in `hdc list targets`
@@ -9,6 +10,9 @@
  *   the e2e entry (e2e/entry.base.ts) installed on the device
  * - Artifacts + local server are handled by globalSetup (E2E_PLATFORM=harmony)
  */
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import * as path from 'node:path';
 import { HarmonyDriver } from '../harness/harmony-driver.ts';
 
 const BUNDLE_NAME =
@@ -17,6 +21,7 @@ const LABELS = {
   base: 'BINARY_BASE',
   full: 'E2E_FULL_V1',
   ppkPatch: 'E2E_PPK_PATCH_V2',
+  packagePatch: 'E2E_PACKAGE_PATCH_V3',
   v2Track: 'E2E_V2TRACK_V4',
 } as const;
 const LOCAL_UPDATE_PORT = 31337;
@@ -32,7 +37,31 @@ const MAX_CHECK_UPDATE_ATTEMPTS = 2;
 // no such hook, so wait out the default delay with margin instead.
 const MARK_SUCCESS_SETTLE_MS = 3000;
 
+const HAP_PATH = path.resolve(
+  __dirname,
+  '../../../harmony_use_pushy/harmony/entry/build/default/outputs/default/entry-default-signed.hap'
+);
+const HAP_BUNDLE_ENTRY = 'resources/rawfile/bundle.harmony.js';
+
 const driver = new HarmonyDriver(BUNDLE_NAME);
+
+function embeddedBundleSha256(): string {
+  const bundle = execFileSync('unzip', ['-p', HAP_PATH, HAP_BUNDLE_ENTRY], {
+    maxBuffer: 256 * 1024 * 1024,
+  });
+  if (bundle.length === 0) {
+    throw new Error(`${HAP_BUNDLE_ENTRY} not found in ${HAP_PATH}`);
+  }
+  return createHash('sha256').update(bundle).digest('hex');
+}
+
+async function lastReportedBundleHash(): Promise<string> {
+  const response = await fetch(
+    `http://127.0.0.1:${LOCAL_UPDATE_PORT}/control/last-bundle-hash?platform=harmony`
+  );
+  const body = (await response.json()) as { bundleHash?: string };
+  return body.bundleHash ?? '';
+}
 
 async function waitForBundleLabel(expectedLabel: string, timeout: number) {
   const expectedText = `bundleLabel: ${expectedLabel}`;
@@ -93,6 +122,17 @@ describe('harmony local update flow', () => {
 
   it('applies the ppk diff update (v2)', async () => {
     await tapCheckUpdateAndWaitForBundleLabel(LABELS.ppkPatch);
+  });
+
+  it('reports the embedded bundle sha256 as bundleHash', async () => {
+    // Every checkUpdate so far carried the hash the native side computed from
+    // the rawfile fd. A mismatch would make the server trust a pdiff whose
+    // origin check then fails on device.
+    expect(await lastReportedBundleHash()).toBe(embeddedBundleSha256());
+  });
+
+  it('applies the package diff against the embedded bundle (v3)', async () => {
+    await tapCheckUpdateAndWaitForBundleLabel(LABELS.packagePatch);
   });
 
   it('applies the v2-track diff update (v4)', async () => {

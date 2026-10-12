@@ -70,6 +70,10 @@ function safeResolve(urlPath: string) {
   return target;
 }
 
+// Most recent non-empty bundleHash each platform sent with checkUpdate, so a
+// test can compare it against the sha256 of the bundle embedded in the binary.
+const lastBundleHash: Record<string, string> = {};
+
 function buildUpdateResponse(
   platform: string,
   currentHash: string,
@@ -104,12 +108,15 @@ function buildUpdateResponse(
     };
   }
 
-  if (platform === 'android' && currentHash === LOCAL_UPDATE_HASHES.ppkPatch) {
+  // Package diffs (patched against the bundle embedded in the installed
+  // binary) run on Android and Harmony; iOS has no package-diff artifact.
+  const servesPackageDiff = platform === 'android' || platform === 'harmony';
+  if (servesPackageDiff && currentHash === LOCAL_UPDATE_HASHES.ppkPatch) {
     return {
       update: true,
       name: 'local-pdiff-v3',
       hash: LOCAL_UPDATE_HASHES.packagePatch,
-      description: 'Serve an Android package diff from local e2e server.',
+      description: 'Serve a package diff from local e2e server.',
       metaInfo: JSON.stringify({ stage: 'pdiff', platform }),
       paths: [assetBasePath],
       pdiff: LOCAL_UPDATE_FILES.packageDiff,
@@ -122,10 +129,9 @@ function buildUpdateResponse(
     platform,
     LOCAL_UPDATE_FILES.v2TrackDiff
   );
-  const v2TrackPrevHash =
-    platform === 'android'
-      ? LOCAL_UPDATE_HASHES.packagePatch
-      : LOCAL_UPDATE_HASHES.ppkPatch;
+  const v2TrackPrevHash = servesPackageDiff
+    ? LOCAL_UPDATE_HASHES.packagePatch
+    : LOCAL_UPDATE_HASHES.ppkPatch;
   if (currentHash === v2TrackPrevHash && diffV >= 2) {
     if (fullFallback) {
       return {
@@ -177,6 +183,11 @@ const server = Bun.serve({
       });
     }
 
+    if (url.pathname === '/control/last-bundle-hash') {
+      const target = url.searchParams.get('platform') || '';
+      return json({ bundleHash: lastBundleHash[target] ?? '' });
+    }
+
     if (url.pathname === '/control/force-boot') {
       if (request.method !== 'POST') {
         return new Response('method not allowed', { status: 405 });
@@ -202,7 +213,11 @@ const server = Bun.serve({
       const payload = (await request.json().catch(() => ({}))) as {
         hash?: unknown;
         diffV?: unknown;
+        bundleHash?: unknown;
       };
+      if (typeof payload.bundleHash === 'string' && payload.bundleHash) {
+        lastBundleHash[platform] = payload.bundleHash;
+      }
       const currentHash = typeof payload.hash === 'string' ? payload.hash : '';
       const diffV = typeof payload.diffV === 'number' ? payload.diffV : 0;
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Build & install the HarmonyOS e2e base app, encoding the required order:
 #   local har -> swap local react-native-update -> refresh oh_modules
-#   -> prepare update artifacts -> base bundle -> assembleHap -> install.
+#   -> prepare update artifacts -> base bundle -> assembleHap
+#   -> package diff against that hap -> install.
 #
 # The order matters: `pushy bundle --platform harmony` (run by the prepare
 # step) overwrites the project's rawfile/bundle.harmony.js, so the base bundle
@@ -76,6 +77,10 @@ echo "==> Assembling signed hap"
   echo "signed hap not found: $HAP_PATH" >&2
   exit 1
 }
+
+echo "==> Generating package diff against the hap's embedded bundle"
+(cd "$E2ETEST_ROOT" && E2E_PLATFORM=harmony E2E_HARMONY_PACKAGE_DIFF_ONLY=true \
+  node scripts/run-prepare-local-update-artifacts.js)
 
 if [ "${SKIP_INSTALL:-false}" != "true" ]; then
   echo "==> Installing $BUNDLE_NAME"

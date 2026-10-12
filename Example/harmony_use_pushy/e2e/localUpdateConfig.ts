@@ -9,6 +9,7 @@ export const LOCAL_UPDATE_LABELS = {
   base: 'BINARY_BASE',
   full: 'E2E_FULL_V1',
   ppkPatch: 'E2E_PPK_PATCH_V2',
+  packagePatch: 'E2E_PACKAGE_PATCH_V3',
   v2Track: 'E2E_V2TRACK_V4',
 } as const;
 
