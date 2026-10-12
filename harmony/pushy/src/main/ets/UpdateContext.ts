@@ -43,11 +43,10 @@ const TAG = 'PushyContext';
 // 常规清理保留最近 3 天内触碰过的条目(续传 partial、staging 同样按 mtime)。
 const CLEANUP_MAX_AGE_DAYS = 3;
 
-// Preferences.flushSync 是 API 14 才有、getAllSync 老 SDK 声明里没有:HAR 兼容
-// API 12,按结构化视图探测(不用交叉类型——ArkTS 不支持)。
+// Preferences.flushSync 是 API 14 才有:HAR 兼容 API 12,按结构化视图探测
+// (不用交叉类型——ArkTS 不支持)。
 interface OptionalPreferencesApi {
   flushSync?: () => void;
-  getAllSync?: () => Record<string, unknown>;
 }
 
 // C1 跨平台配置等价(JS/Android/iOS 同一规则):缺省键补默认值、端点/
@@ -641,23 +640,20 @@ export class UpdateContext {
     let flushed: Promise<void> = Promise.resolve();
     try {
       // 删除已下载版本的 hash_* 元信息（不走 clear()：它是异步的，且会连带清掉
-      // uuid —— 见 syncStateWithBinaryVersion 的注释）。getAllSync 在旧 SDK 上
-      // 可能不存在，此时残留的 hash_* 只是无害孤儿数据，不影响 reset 语义。
-      const api = this.optionalPreferencesApi();
-      if (typeof api.getAllSync === 'function') {
-        try {
-          const all = api.getAllSync();
-          for (const key of Object.keys(all)) {
-            if (key.startsWith('hash_')) {
-              this.preferences.deleteSync(key);
-            }
+      // uuid —— 见 syncStateWithBinaryVersion 的注释）。读取失败时残留的
+      // hash_* 只是无害孤儿数据，不影响 reset 语义。
+      try {
+        const all = this.preferences.getAllSync();
+        for (const key of Object.keys(all)) {
+          if (key.startsWith('hash_')) {
+            this.preferences.deleteSync(key);
           }
-        } catch (e) {
-          logger.error(
-            TAG,
-            `Failed to clear hash info on reset: ${getErrorMessage(e)}`,
-          );
         }
+      } catch (e) {
+        logger.error(
+          TAG,
+          `Failed to clear hash info on reset: ${getErrorMessage(e)}`,
+        );
       }
       this.writeState(resetState, { clearFirstLoadMarker: true });
       // 缓存里的响应仍在宣告本次 reset 刚删掉的版本,一并丢弃,避免 JS 侧复用。
@@ -738,20 +734,15 @@ export class UpdateContext {
     hash: string,
     deadlineUptimeMs: number = 0,
   ): Promise<void> {
-    try {
-      const params = this.createTaskParams(
-        DownloadTaskParams.TASK_TYPE_PATCH_FULL,
-        url,
-        hash,
-      );
-      params.targetFile = `${this.rootDir}/${hash}.ppk`;
-      params.unzipDirectory = `${this.rootDir}/${hash}`;
-      params.deadlineUptimeMs = deadlineUptimeMs;
-      await this.executeTask(params);
-    } catch (e) {
-      logger.error(TAG, `Failed to download full package: ${getErrorMessage(e)}`);
-      throw e;
-    }
+    const params = this.createTaskParams(
+      DownloadTaskParams.TASK_TYPE_PATCH_FULL,
+      url,
+      hash,
+    );
+    params.targetFile = `${this.rootDir}/${hash}.ppk`;
+    params.unzipDirectory = `${this.rootDir}/${hash}`;
+    params.deadlineUptimeMs = deadlineUptimeMs;
+    await this.executeTask(params);
   }
 
   public async downloadPatchFromPpk(
@@ -778,23 +769,15 @@ export class UpdateContext {
     hash: string,
     deadlineUptimeMs: number = 0,
   ): Promise<void> {
-    try {
-      const params = this.createTaskParams(
-        DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP,
-        url,
-        hash,
-      );
-      params.targetFile = `${this.rootDir}/${hash}${APP_DELTA_SUFFIX}`;
-      params.unzipDirectory = `${this.rootDir}/${hash}`;
-      params.deadlineUptimeMs = deadlineUptimeMs;
-      return await this.executeTask(params);
-    } catch (e) {
-      logger.error(
-        TAG,
-        `Failed to download package delta: ${getErrorMessage(e)}`,
-      );
-      throw e;
-    }
+    const params = this.createTaskParams(
+      DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP,
+      url,
+      hash,
+    );
+    params.targetFile = `${this.rootDir}/${hash}${APP_DELTA_SUFFIX}`;
+    params.unzipDirectory = `${this.rootDir}/${hash}`;
+    params.deadlineUptimeMs = deadlineUptimeMs;
+    await this.executeTask(params);
   }
 
   // 运行中热更版本安装记录里的 bundleSha256(崩溃归因用);内置 bundle /
