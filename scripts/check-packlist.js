@@ -4,30 +4,37 @@
 // must and must not be there. Run in lint CI and right before `npm publish`
 // (with --release, which additionally requires the Harmony HAR).
 const { execFileSync } = require('child_process');
+const { files: filesField } = require('../package.json');
 
 const release = process.argv.includes('--release');
 
-const allowedPrefixes = [
-  'src/',
-  'android/src/',
-  'android/lib/',
-  'android/jni/',
-  'android/build.gradle',
-  'android/proguard.pro',
-  'ios/',
-  'cpp/patch_core/',
-  'cpp/update_flow_core/',
-  'harmony/pushy.har',
-  'harmony/hvigor-plugin.ts',
-  'harmony/pushy/src/',
-  'react-native-update.podspec',
-  'react-native.config.js',
-  'expo-module.config.json',
-  'package.json',
-  'README.md',
-  'README-CN.md',
-  'LICENSE',
-];
+// A `files` entry (glob, file or directory) as a regex over packed paths:
+// the entry itself or anything below it.
+function entryPattern(entry) {
+  const source = entry
+    .replace(/\/+$/, '')
+    .split(/(\*\*\/?|\*)/)
+    .map((part) => {
+      if (part === '**' || part === '**/') {
+        return '(?:.*/)?';
+      }
+      if (part === '*') {
+        return '[^/]*';
+      }
+      return part.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+    })
+    .join('');
+  return new RegExp(`^${source}(/|$)`);
+}
+
+// Derived from package.json `files` (the single list of what ships), plus
+// package.json which npm always packs. Negated entries must not show up.
+const allowed = ['package.json', ...filesField.filter((f) => !f.startsWith('!'))].map(
+  entryPattern
+);
+const excluded = filesField
+  .filter((f) => f.startsWith('!'))
+  .map((f) => ({ entry: f, re: entryPattern(f.slice(1)) }));
 
 const forbidden = [
   /(^|\/)(tests?|__tests__)\//,
@@ -78,8 +85,12 @@ const set = new Set(files);
 const problems = [];
 
 for (const file of files) {
-  if (!allowedPrefixes.some((p) => file === p || file.startsWith(p))) {
+  if (!allowed.some((re) => re.test(file))) {
     problems.push(`not whitelisted: ${file}`);
+  }
+  const hit = excluded.find(({ re }) => re.test(file));
+  if (hit) {
+    problems.push(`excluded by "${hit.entry}" but packed: ${file}`);
   }
   if (forbidden.some((re) => re.test(file))) {
     problems.push(`forbidden: ${file}`);
