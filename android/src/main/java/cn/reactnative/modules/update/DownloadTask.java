@@ -73,7 +73,7 @@ class DownloadTask implements Runnable {
     // transfer first hashes the prefix already on disk); null when this task
     // did not stream the whole file itself and it must be hashed from disk.
     private String streamedArchiveSha256;
-    // Digest of index.bundlejs computed while a full package was extracted;
+    // Digest of the bundle computed while a full package was extracted;
     // null when the bundle was produced some other way (patch tasks).
     private String stagedBundleSha256;
 
@@ -589,7 +589,7 @@ class DownloadTask implements Runnable {
         // bytes as they are extracted, instead of re-reading the bundle right
         // after. Any entry resolving to the bundle path counts; the last write
         // wins on disk and in the digest alike.
-        File bundleTarget = new File(work, "index.bundlejs").getCanonicalFile();
+        File bundleTarget = InstallRecord.bundleFile(work).getCanonicalFile();
         stagedBundleSha256 = null;
         try (SafeZipFile zipFile = new SafeZipFile(params.targetFile)) {
             ensureArchiveWithinLimits(params.targetFile, zipFile, work);
@@ -630,7 +630,7 @@ class DownloadTask implements Runnable {
             UpdateFileUtils.removeDirectory(work);
             return;
         }
-        File bundle = new File(work, "index.bundlejs");
+        File bundle = InstallRecord.bundleFile(work);
         if (!bundle.isFile()) {
             throw new IOException("bundle missing after install: " + bundle);
         }
@@ -709,7 +709,7 @@ class DownloadTask implements Runnable {
                 work.getAbsolutePath(),
                 originBundleFile.getAbsolutePath(),
                 new File(work, BUNDLE_DELTA_ENTRY).getAbsolutePath(),
-                new File(work, "index.bundlejs").getAbsolutePath(),
+                InstallRecord.bundleFile(work).getAbsolutePath(),
                 "",
                 false,
                 new String[0],
@@ -742,9 +742,9 @@ class DownloadTask implements Runnable {
         applyDeltaFromSource(
             params.originDirectory.getAbsolutePath(),
             work.getAbsolutePath(),
-            new File(params.originDirectory, "index.bundlejs").getAbsolutePath(),
+            InstallRecord.bundleFile(params.originDirectory).getAbsolutePath(),
             new File(work, BUNDLE_DELTA_ENTRY).getAbsolutePath(),
-            new File(work, "index.bundlejs").getAbsolutePath(),
+            InstallRecord.bundleFile(work).getAbsolutePath(),
             plan.mergeSourceSubdir,
             plan.enableMerge,
             contents.copyFroms.toArray(new String[0]),
@@ -844,8 +844,7 @@ class DownloadTask implements Runnable {
     private boolean hasCompletedDeltaDirectory() {
         return params.unzipDirectory != null
             && params.hash != null
-            && new File(params.unzipDirectory, "index.bundlejs").isFile()
-            && InstallRecord.isComplete(params.unzipDirectory, params.hash);
+            && InstallRecord.isInstalled(params.unzipDirectory, params.hash);
     }
 
     // True when this task targets the version the process is running from.
@@ -864,18 +863,12 @@ class DownloadTask implements Runnable {
      * failure rather than overwritten.
      */
     private void ensureNotReinstallingRunningVersion() throws IOException {
-        File bundle = new File(params.unzipDirectory, "index.bundlejs");
-        if (bundle.isFile() && InstallRecord.isComplete(params.unzipDirectory, params.hash)) {
-            try {
-                InstallRecord.verifyForActivation(params.unzipDirectory, params.hash, bundle);
-                return;
-            } catch (IOException e) {
-                throw new FileOperationException("Running version " + params.hash
-                    + " cannot be reinstalled in place: " + e.getMessage());
-            }
+        try {
+            InstallRecord.verifyInstalled(params.unzipDirectory, params.hash);
+        } catch (IOException e) {
+            throw new FileOperationException("Running version " + params.hash
+                + " cannot be reinstalled in place: " + e.getMessage());
         }
-        throw new FileOperationException("Running version " + params.hash
-            + " has no verifiable install record and cannot be reinstalled in place");
     }
 
     @Override

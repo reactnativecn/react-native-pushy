@@ -19,8 +19,14 @@ final class InstallRecord {
     static final int SCHEMA = 1;
     static final String FILE_NAME = ".pushy-complete";
     static final String STAGING_SUFFIX = ".staging";
+    /** The JS bundle inside a version directory. */
+    static final String BUNDLE_FILE_NAME = "index.bundlejs";
 
     private InstallRecord() {
+    }
+
+    static File bundleFile(File versionDir) {
+        return new File(versionDir, BUNDLE_FILE_NAME);
     }
 
     static File stagingDirectoryFor(File versionDir) {
@@ -117,14 +123,33 @@ final class InstallRecord {
      */
     static boolean isComplete(File versionDir, String versionHash) {
         JSONObject record = read(versionDir);
-        if (record == null) {
-            return false;
-        }
-        if (record.length() == 0) {
-            return true;
-        }
+        return record != null && (record.length() == 0 || names(record, versionHash));
+    }
+
+    /** A schema-1 record for this version (the legacy empty marker has no fields). */
+    private static boolean names(JSONObject record, String versionHash) {
         return record.optInt("schema", 0) == SCHEMA
             && versionHash.equals(record.optString("versionHash", ""));
+    }
+
+    /**
+     * Launch / dedup presence check: the bundle exists and the record names
+     * this version. No digest work.
+     */
+    static boolean isInstalled(File versionDir, String versionHash) {
+        return bundleFile(versionDir).isFile() && isComplete(versionDir, versionHash);
+    }
+
+    /**
+     * Activation check of an installed version: the bundle exists and its
+     * bytes match the record's digest. Throws with the reason otherwise.
+     */
+    static void verifyInstalled(File versionDir, String versionHash) throws IOException {
+        File bundle = bundleFile(versionDir);
+        if (!bundle.isFile()) {
+            throw new IOException("Bundle version " + versionHash + " not found.");
+        }
+        verifyForActivation(versionDir, versionHash, bundle);
     }
 
     /**
@@ -141,8 +166,7 @@ final class InstallRecord {
         if (record.length() == 0) {
             return;
         }
-        if (record.optInt("schema", 0) != SCHEMA
-            || !versionHash.equals(record.optString("versionHash", ""))) {
+        if (!names(record, versionHash)) {
             throw new IOException("Bundle version " + versionHash + " completion record mismatch.");
         }
         Object digest = record.opt("bundleSha256");

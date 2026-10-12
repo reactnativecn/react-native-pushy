@@ -514,8 +514,7 @@ public class UpdateContext {
             throw new IllegalArgumentException("Invalid hash: " + hash);
         }
         File versionDir = new File(rootDir, hash);
-        File bundleFile = new File(versionDir, "index.bundlejs");
-        if (!bundleFile.isFile()) {
+        if (!InstallRecord.bundleFile(versionDir).isFile()) {
             throw new IllegalStateException("Bundle version " + hash + " not found.");
         }
         StateCoreResult currentState = getStateSnapshot();
@@ -527,15 +526,11 @@ public class UpdateContext {
             // that does carry a record is verified like any other.
             return;
         }
-        if (!InstallRecord.isComplete(versionDir, hash)) {
-            // An arbitrary markerless directory may be a crash-left partial
-            // install.
-            throw new IllegalStateException("Bundle version " + hash + " is incomplete.");
-        }
-        // The record's bundle digest must match the bytes on disk before
-        // the next launch is pointed at them.
+        // An arbitrary markerless directory may be a crash-left partial
+        // install, and the record's bundle digest must match the bytes on
+        // disk before the next launch is pointed at them.
         try {
-            InstallRecord.verifyForActivation(versionDir, hash, bundleFile);
+            InstallRecord.verifyInstalled(versionDir, hash);
         } catch (IOException e) {
             throw new IllegalStateException(e.getMessage(), e);
         }
@@ -801,7 +796,7 @@ public class UpdateContext {
                 // the main thread.
                 java.util.HashSet<String> visitedVersions = new java.util.HashSet<>();
                 while (currentVersion != null && visitedVersions.add(currentVersion)) {
-                    File bundleFile = new File(rootDir, currentVersion+"/index.bundlejs");
+                    File bundleFile = InstallRecord.bundleFile(new File(rootDir, currentVersion));
                     if (!bundleFile.exists()) {
                         Log.e(TAG, "Bundle version " + currentVersion + " not found.");
                         currentVersion = this.rollBack();
@@ -977,9 +972,7 @@ public class UpdateContext {
         if (!UpdateFileUtils.isSafePathComponent(hash)) {
             return false;
         }
-        File versionDir = new File(rootDir, hash);
-        return new File(versionDir, "index.bundlejs").isFile()
-            && InstallRecord.isComplete(versionDir, hash);
+        return InstallRecord.isInstalled(new File(rootDir, hash), hash);
     }
 
     private String rollBack() {
