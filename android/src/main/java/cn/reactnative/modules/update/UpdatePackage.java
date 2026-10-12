@@ -18,7 +18,7 @@ public class UpdatePackage extends TurboReactPackage {
     @Nullable
     @Override
     public NativeModule getModule(String name, ReactApplicationContext reactContext) {
-        return name.equals(UpdateModuleImpl.NAME) ? new UpdateModule(reactContext) : null;
+        return name.equals(UpdateModule.NAME) ? new UpdateModule(reactContext) : null;
     }
 
     @Override
@@ -29,10 +29,10 @@ public class UpdatePackage extends TurboReactPackage {
                 final Map<String, ReactModuleInfo> moduleInfos = new HashMap<>();
                 boolean isTurboModule = BuildConfig.IS_NEW_ARCHITECTURE_ENABLED;
                 moduleInfos.put(
-                        UpdateModuleImpl.NAME,
+                        UpdateModule.NAME,
                         new ReactModuleInfo(
-                                UpdateModuleImpl.NAME,
-                                UpdateModuleImpl.NAME,
+                                UpdateModule.NAME,
+                                UpdateModule.NAME,
                                 false, // canOverrideExistingModule
                                 false, // needsEagerInit
                                 true, // hasConstants

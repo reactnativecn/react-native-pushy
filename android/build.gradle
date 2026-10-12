@@ -183,9 +183,9 @@ android {
         main {
             // let gradle pack the shared library into apk
             jniLibs.srcDirs = ['./lib']
-            if (isNewArchitectureEnabled()) {
-                java.srcDirs += ['src/newarch']
-            } else {
+            // Under the new architecture codegen generates NativePushySpec;
+            // the old one compiles the hand-written stand-in instead.
+            if (!isNewArchitectureEnabled()) {
                 java.srcDirs += ['src/oldarch']
             }
             

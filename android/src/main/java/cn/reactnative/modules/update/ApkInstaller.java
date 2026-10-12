@@ -137,7 +137,7 @@ final class ApkInstaller {
         // before staging it. The `hash` JS passes to downloadAndInstallApk is
         // the progress-event key ("downloadingApk"), not a digest, so there
         // is nothing to check against yet; until the server sends one, the
-        // https-only rule in UpdateModuleImpl is the integrity boundary.
+        // https-only rule in UpdateModule is the integrity boundary.
         PackageInstaller packageInstaller = null;
         int sessionId = -1;
         boolean committed = false;

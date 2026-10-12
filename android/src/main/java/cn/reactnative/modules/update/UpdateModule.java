@@ -4,6 +4,7 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import com.facebook.react.bridge.Promise;
 import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableMap;
 import java.util.HashMap;
 import java.util.Map;
@@ -12,32 +13,33 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 /**
- * Everything the "Pushy" native module does, independent of the bridge it is
- * registered with. The old-architecture and new-architecture UpdateModule
- * classes are thin wrappers that only carry their annotations / spec
- * overrides and forward here, so the two cannot drift apart.
+ * The "Pushy" native module for both architectures. NativePushySpec is the
+ * codegen spec under the new architecture and the hand-written stand-in in
+ * src/oldarch otherwise; the old bridge discovers methods through the
+ * @ReactMethod annotations here, so every spec method carries one. Each
+ * state-changing method takes a trailing Promise, so a failed persistence
+ * rejects instead of resolving early (CODE_AUDIT 2.3).
  */
-public class UpdateModuleImpl {
+public class UpdateModule extends NativePushySpec {
     // Download URL option key, stored encoded.
     private static final String OPTION_URL = Texts.reveal("2f07f0d0ba8e5d572e");
-
-
-    public static final String NAME = "Pushy";
 
     private final ReactApplicationContext reactContext;
     private final UpdateContext updateContext;
 
-    public UpdateModuleImpl(ReactApplicationContext reactContext) {
+    public UpdateModule(ReactApplicationContext reactContext) {
         this(reactContext, UpdateContext.getInstance(reactContext));
     }
 
-    public UpdateModuleImpl(ReactApplicationContext reactContext, UpdateContext updateContext) {
+    public UpdateModule(ReactApplicationContext reactContext, UpdateContext updateContext) {
+        super(reactContext);
         this.reactContext = reactContext;
         this.updateContext = updateContext;
         UpdateEventEmitter.register(reactContext);
     }
 
-    public Map<String, Object> getConstants() {
+    @Override
+    protected Map<String, Object> getTypedExportedConstants() {
         final Map<String, Object> constants = new HashMap<String, Object>();
         constants.put("downloadRootDir", updateContext.getRootDir());
         constants.put("packageVersion", updateContext.getPackageVersion());
@@ -134,6 +136,8 @@ public class UpdateModuleImpl {
         };
     }
 
+    @ReactMethod
+    @Override
     public void downloadFullUpdate(final ReadableMap options, final Promise promise) {
         String url = readRequiredString(options, OPTION_URL, promise);
         if (url == null) {
@@ -146,6 +150,8 @@ public class UpdateModuleImpl {
         updateContext.downloadFullUpdate(url, hash, downloadListener(promise));
     }
 
+    @ReactMethod
+    @Override
     public void downloadAndInstallApk(final ReadableMap options, final Promise promise) {
         // Every failure of this path — a missing REQUEST_INSTALL_PACKAGES
         // declaration above all — has to come back as a promise rejection,
@@ -190,6 +196,8 @@ public class UpdateModuleImpl {
         }
     }
 
+    @ReactMethod
+    @Override
     public void downloadPatchFromPackage(final ReadableMap options, final Promise promise) {
         String url = readRequiredString(options, OPTION_URL, promise);
         if (url == null) {
@@ -202,6 +210,8 @@ public class UpdateModuleImpl {
         updateContext.downloadPatchFromApk(url, hash, downloadListener(promise));
     }
 
+    @ReactMethod
+    @Override
     public void downloadPatchFromPpk(final ReadableMap options, final Promise promise) {
         String url = readRequiredString(options, OPTION_URL, promise);
         if (url == null) {
@@ -218,15 +228,23 @@ public class UpdateModuleImpl {
         updateContext.downloadPatchFromPpk(url, hash, originHash, downloadListener(promise));
     }
 
+    @ReactMethod
+    @Override
     public void reloadUpdate(final ReadableMap options, final Promise promise) {
         String hash = readRequiredString(options, "hash", promise);
         if (hash == null) {
             return;
         }
-        restartApp(hash, promise);
+        restart(hash, promise);
     }
 
-    public void restartApp(@Nullable final String hash, final Promise promise) {
+    @ReactMethod
+    @Override
+    public void restartApp(Promise promise) {
+        restart(null, promise);
+    }
+
+    private void restart(@Nullable final String hash, final Promise promise) {
         // Two hops (CODE_AUDIT 2.2): the switch (bundle digest + commit) and
         // the launch resolution run on the state serial thread like every
         // other state write; only the React reload itself is posted to the
@@ -246,6 +264,8 @@ public class UpdateModuleImpl {
         });
     }
 
+    @ReactMethod
+    @Override
     public void setNeedUpdate(final ReadableMap options, final Promise promise) {
         final String hash = readRequiredString(options, "hash", promise);
         if (hash == null) {
@@ -260,6 +280,8 @@ public class UpdateModuleImpl {
         });
     }
 
+    @ReactMethod
+    @Override
     public void markSuccess(final Promise promise) {
         StateSerialRunner.run(promise, ErrorCodes.MARK_SUCCESS_FAILED, "markSuccess", new StateSerialRunner.Operation() {
             @Override
@@ -270,6 +292,8 @@ public class UpdateModuleImpl {
         });
     }
 
+    @ReactMethod
+    @Override
     public void getBundleHash(final Promise promise) {
         // Threading lives in UpdateContext (its bundle-hash thread); resolve is
         // thread-safe. Never rejects — empty string means "unknown".
@@ -281,6 +305,8 @@ public class UpdateModuleImpl {
         });
     }
 
+    @ReactMethod
+    @Override
     public void resetToPackagedBundle(final Promise promise) {
         StateSerialRunner.run(promise, ErrorCodes.RESET_FAILED, "resetToPackagedBundle", new StateSerialRunner.Operation() {
             @Override
@@ -296,9 +322,25 @@ public class UpdateModuleImpl {
      * reuse instead of re-checking (§10.3). Empty string when absent; never
      * rejects.
      */
+    @ReactMethod
+    @Override
     public void getNativeCheckCache(final Promise promise) {
         String cached = updateContext.getNativeCheckCache();
         promise.resolve(cached == null ? "" : cached);
+    }
+
+    /**
+     * JS obtained a valid check response for this config in this process; the
+     * delayed native round then skips its duplicate request (§10.3).
+     */
+    @ReactMethod
+    @Override
+    public void markJsCheckCompleted(final String config, final Promise promise) {
+        if (requireNonEmpty(config, "config", promise) == null) {
+            return;
+        }
+        SyncCoordinator.recordJsRound(config);
+        promise.resolve(true);
     }
 
     /**
@@ -308,14 +350,8 @@ public class UpdateModuleImpl {
      * Validated at write time — a corrupt config would otherwise silently
      * disable the native check forever with no signal.
      */
-    public void markJsCheckCompleted(final String config, final Promise promise) {
-        if (requireNonEmpty(config, "config", promise) == null) {
-            return;
-        }
-        SyncCoordinator.recordJsRound(config);
-        promise.resolve(true);
-    }
-
+    @ReactMethod
+    @Override
     public void syncNativeConfig(final String config, final Promise promise) {
         if (requireNonEmpty(config, "config", promise) == null) {
             return;
@@ -335,6 +371,8 @@ public class UpdateModuleImpl {
         });
     }
 
+    @ReactMethod
+    @Override
     public void setUuid(final String uuid, final Promise promise) {
         if (requireNonEmpty(uuid, "uuid", promise) == null) {
             return;
@@ -348,6 +386,8 @@ public class UpdateModuleImpl {
         });
     }
 
+    @ReactMethod
+    @Override
     public void setLocalHashInfo(final String hash, final String info, final Promise promise) {
         if (requireNonEmpty(hash, "hash", promise) == null) {
             return;
@@ -367,6 +407,8 @@ public class UpdateModuleImpl {
         });
     }
 
+    @ReactMethod
+    @Override
     public void getLocalHashInfo(final String hash, final Promise promise) {
         if (requireNonEmpty(hash, "hash", promise) == null) {
             return;
@@ -384,5 +426,15 @@ public class UpdateModuleImpl {
         }
 
         promise.resolve(value);
+    }
+
+    @ReactMethod
+    @Override
+    public void addListener(String eventName) {
+    }
+
+    @ReactMethod
+    @Override
+    public void removeListeners(double count) {
     }
 }
