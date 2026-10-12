@@ -46,10 +46,6 @@ describe('core info parsing', () => {
       version: { major: 0, minor: 73, patch: 0 },
     }));
 
-    mock.module('nanoid/non-secure', () => ({
-      nanoid: () => 'mock-uuid',
-    }));
-
     // Use a unique query parameter to bypass cache if supported, or just rely on fresh environment per file.
     // In Bun, you can sometimes use a cache buster if it's dynamic import.
     await importFreshCore('error');
@@ -178,9 +174,6 @@ describe('web platform', () => {
     mock.module('react-native/Libraries/Core/ReactNativeVersion', () => ({
       version: { major: 0, minor: 73, patch: 0 },
     }));
-    mock.module('nanoid/non-secure', () => ({
-      nanoid: () => 'web-uuid',
-    }));
     const consoleError = spyOn(console, 'error').mockImplementation(() => {});
     const consoleWarn = spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -193,8 +186,7 @@ describe('web platform', () => {
       expect(typeof core.currentVersion).toBe('string');
       expect(typeof core.packageVersion).toBe('string');
       expect(typeof core.buildTime).toBe('string');
-      expect(typeof core.cInfo.uuid).toBe('string');
-      expect(core.cInfo.uuid.length).toBeGreaterThan(0);
+      expect(core.cInfo.uuid).toMatch(/^[A-Za-z0-9_-]{21}$/);
       expect(core.currentVersionInfo).toEqual({});
       expect(core.supportedDiffVersion).toBe(0);
       expect(core.getBundleHash()).toBe('');

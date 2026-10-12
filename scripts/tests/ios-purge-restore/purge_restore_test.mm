@@ -27,6 +27,9 @@ static void TestLog(NSString *, ...) {}
 #define RCTLogWarn TestLog
 #define RCTLogError TestLog
 
+// Pod-internal linkage (RCTPushyInternal.h); one translation unit here.
+#define PUSHY_HIDDEN
+
 #include "globals.inc"
 
 static const char *testName = "setup";
@@ -61,6 +64,9 @@ static BOOL roundCommitted, roundActivated;
 static BOOL resetResolved;
 static int scheduleCount;
 static int64_t waitBudget;
+static NSTimeInterval processElapsed;
+static BOOL networkPath;
+static NSTimeInterval ExpectedBudget(void) { return 12 - processElapsed; }
 static NSString *root;
 
 // In-memory collaborator, deliberately NOT an NSUserDefaults subclass: inherited
@@ -171,6 +177,7 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
 + (void)startRoundWithDeadline:(NSTimeInterval)deadline;
 + (BOOL)restorePurgedLaunch:(NSString *)purged rolledBack:(NSString *)rolledBack;
 + (BOOL)commitRoundWithGeneration:(uint64_t)generation
+                 configGeneration:(uint64_t)configGeneration
                          hashInfo:(NSDictionary *)hashInfo
                          activate:(NSString *)hash
                      responseText:(NSString *)response
@@ -277,7 +284,7 @@ static dispatch_time_t TestLaunchDeadline(dispatch_time_t when, int64_t delta) {
 + (void)startRoundWithDeadline:(NSTimeInterval)deadline {
     @autoreleasepool {
         actor = Actor::Commit;
-        Expect(deadline == 100 + kPushyPurgeRestoreBudget, "round receives the launch deadline");
+        Expect(deadline == 100 + ExpectedBudget(), "round receives the launch deadline");
         requestGeneration = pushyResetGeneration.load();
         Signal(requestStarted);
         Await(allowCommit, "release the native check response");
@@ -285,6 +292,7 @@ static dispatch_time_t TestLaunchDeadline(dispatch_time_t when, int64_t delta) {
         // B represents an already-complete on-disk download. Do not reproduce
         // the activation policy here: the production commit must enforce it.
         roundCommitted = [self commitRoundWithGeneration:requestGeneration
+            configGeneration:pushyNativeConfigGeneration.load()
             hashInfo:@{@"hash": @"B", @"info": @{@"name": @"B", @"forceBootRescue": @YES}}
             activate:@"B" responseText:@"{\"update\":true,\"hash\":\"B\"}"
             request:@"request" config:@"config" responseAt:123 activated:&roundActivated];
@@ -293,6 +301,10 @@ static dispatch_time_t TestLaunchDeadline(dispatch_time_t when, int64_t delta) {
         actor = Actor::None;
     }
 }
+// Launch-budget collaborators: time already spent since process start and
+// whether the system reports a network path.
+static NSTimeInterval PushyProcessElapsed(void) { return processElapsed; }
+static BOOL PushyHasNetworkPath(void) { return networkPath; }
 #define dispatch_semaphore_wait TestLaunchWait
 #define dispatch_semaphore_signal TestCompletionSignal
 #define dispatch_time TestLaunchDeadline
@@ -323,6 +335,8 @@ static void SetUp(Order selected) {
     resetResolved = NO;
     scheduleCount = 0;
     waitBudget = 0;
+    processElapsed = 0;
+    networkPath = YES;
     testDefaults = [TestDefaults new];
     engine = [RCTPushy new];
     root = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
@@ -335,6 +349,7 @@ static void SetUp(Order selected) {
          atomically:YES encoding:NSUTF8StringEncoding error:NULL], "create packaged fixture bundle");
     PushyWithStateLock(^{
         pushyResetGeneration.store(0);
+        pushyNativeConfigGeneration.store(0);
         ignoreRollback.store(false);
         pushyIsUsingBundleUrl.store(false);
         pushyLaunchVersion = nil;
@@ -396,7 +411,8 @@ static void ExpectRestored(NSURL *url) {
 static void Finish(void) {
     if (order != Order::CompleteInTime) { Signal(allowSignal); }
     Await(workerSettled, "worker's delayed signal delivered before teardown");
-    Expect(waitBudget == (int64_t)(12 * NSEC_PER_SEC), "launch wait must stay at 12 seconds, not 13");
+    Expect(waitBudget == (int64_t)(ExpectedBudget() * NSEC_PER_SEC),
+           "launch wait must be 12 seconds minus the time since process start");
     Expect(scheduleCount == 1, "bundleURL must retain its finally scheduling path");
     Expect(!pushyPurgeRestoreWindowOpen, "every completed launch must close its restore window");
     Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
@@ -448,6 +464,31 @@ static void CompleteInTime(void) {
     Finish();
 }
 
+// Time spent before +bundleURL counts against the launch budget.
+static void LateLaunch(void) {
+    SetUp(Order::CompleteInTime);
+    processElapsed = 4.5;
+    ExpectRestored([RCTPushy bundleURL]);
+    Expect(roundCommitted && roundActivated, "restore still runs on the remaining budget");
+    Finish();
+}
+
+// No restore attempt (no wait, no round) when it cannot help: offline, or
+// the launch budget is already spent.
+static void Skipped(BOOL offline) {
+    SetUp(Order::CompleteInTime);
+    networkPath = !offline;
+    processElapsed = offline ? 0 : 10.5;
+    ExpectPackaged([RCTPushy bundleURL]);
+    Expect(waitBudget == 0, "skipped restore must not wait");
+    Expect(scheduleCount == 1, "bundleURL must retain its finally scheduling path");
+    Expect(!pushyPurgeRestoreWindowOpen && !pushyPurgeRestoreActive.load(),
+           "skipped restore must not open its window");
+    Expect(dispatch_semaphore_wait(requestStarted, DISPATCH_TIME_NOW) != 0,
+           "skipped restore must not start the round");
+    Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
+}
+
 // This contract test deliberately does not call SetUp: a new collaborator must
 // start empty on its own, not only because the fixture reset some known keys.
 static void DefaultsIsolation(void) {
@@ -469,6 +510,32 @@ static void DefaultsIsolation(void) {
     });
 }
 
+// Canonical config equality shared with JS/Android/Harmony: equal canonical
+// forms are the same config (persistConfiguration no-op, hasJsRound match).
+// Replays the cross-platform vectors every implementation consumes; the file
+// is located from this source file (<repo>/scripts/tests/ios-purge-restore/).
+static void ConfigEquivalence(void) {
+    NSString *repo = [[[[@__FILE__ stringByDeletingLastPathComponent]
+        stringByDeletingLastPathComponent] stringByDeletingLastPathComponent]
+        stringByDeletingLastPathComponent];
+    NSString *path = [repo stringByAppendingPathComponent:
+        @"cpp/update_flow_core/tests/config-equivalence-vectors.json"];
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    Expect(data != nil, "config-equivalence-vectors.json is readable");
+    NSDictionary *file = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    NSArray *cases = [file isKindOfClass:NSDictionary.class] ? file[@"cases"] : nil;
+    Expect([cases isKindOfClass:NSArray.class] && cases.count >= 30, "vector file has cases");
+    for (NSDictionary *vector in cases) {
+        NSString *a = vector[@"a"], *b = vector[@"b"];
+        bool equivalent = [vector[@"equivalent"] boolValue];
+        std::string why = std::string("vector \"") + [vector[@"name"] UTF8String] + "\"";
+        Expect(PushyConfigsEquivalent(a, b) == equivalent, why.c_str());
+        Expect(PushyConfigsEquivalent(b, a) == equivalent, (why + " (reversed)").c_str());
+    }
+    Expect(!PushyConfigsEquivalent(nil, @"{\"appKey\":\"k\"}"), "no stored config is a change");
+    std::printf("[PASS] config_equivalence: %lu shared vectors\n", (unsigned long)cases.count);
+}
+
 int main(int argc, char **argv) {
     @autoreleasepool {
         // These intentional failures run in separate processes. Erasing the
@@ -487,6 +554,8 @@ int main(int argc, char **argv) {
         testName = "defaults_isolation";
         DefaultsIsolation();
         std::printf("[PASS] defaults_isolation\n");
+        testName = "config_equivalence";
+        ConfigEquivalence();
         struct Case { const char *name; void (*run)(); };
         const Case cases[] = {
             {"late_commit", LateCommit},
@@ -494,6 +563,9 @@ int main(int argc, char **argv) {
             {"reset_wins", [] { ResetOrdering(Order::ResetFirst); }},
             {"commit_wins", [] { ResetOrdering(Order::CommitFirst); }},
             {"complete_in_time", CompleteInTime},
+            {"late_launch", LateLaunch},
+            {"offline_skip", [] { Skipped(YES); }},
+            {"spent_budget_skip", [] { Skipped(NO); }},
         };
         int ran = 0;
         for (const auto &test : cases) {

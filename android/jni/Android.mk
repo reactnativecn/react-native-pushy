@@ -5,6 +5,7 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := rnpushy
 LOCAL_CPPFLAGS += -std=c++17
 LOCAL_LDFLAGS += -Wl,--exclude-libs,ALL
+LOCAL_LDLIBS := -llog
 LOCAL_C_INCLUDES := \
 	$(LOCAL_PATH) \
 	$(LOCAL_PATH)/HDiffPatch \

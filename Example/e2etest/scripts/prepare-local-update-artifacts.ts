@@ -24,15 +24,18 @@ type DiffCommandRunner = {
       'no-interactive': true;
     };
   }) => Promise<void>;
-  hdiffFromApk: (options: {
-    args: [string, string];
-    options: {
-      output: string;
-      customDiff: (oldSource?: Buffer, newSource?: Buffer) => Buffer;
-      'no-interactive': true;
-    };
-  }) => Promise<void>;
+  hdiffFromApk: PackageDiffCommand;
+  hdiffFromApp: PackageDiffCommand;
 };
+
+type PackageDiffCommand = (options: {
+  args: [string, string];
+  options: {
+    output: string;
+    customDiff: (oldSource?: Buffer, newSource?: Buffer) => Buffer;
+    'no-interactive': true;
+  };
+}) => Promise<void>;
 
 type HdiffModule = {
   diff?: (oldSource?: Buffer, newSource?: Buffer) => Buffer;
@@ -109,6 +112,14 @@ if (!['ios', 'android', 'harmony'].includes(platform)) {
 const harmonyProjectRoot = path.resolve(projectRoot, '../harmony_use_pushy');
 const bundleProjectRoot =
   platform === 'harmony' ? harmonyProjectRoot : projectRoot;
+// The signed release hap the device runs. Its rawfile bundle is the pdiff
+// origin, so the package diff can only be made once this hap exists — which is
+// after artifact prep (build-harmony-e2e.sh reruns this script with
+// E2E_HARMONY_PACKAGE_DIFF_ONLY=true right after assembleHap).
+const harmonyHapPath = path.join(
+  harmonyProjectRoot,
+  'harmony/entry/build/default/outputs/default/entry-default-signed.hap'
+);
 
 if (!fs.existsSync(cliEntry)) {
   throw new Error(`react-native-update-cli entry not found: ${cliEntry}`);
@@ -431,7 +442,51 @@ async function generateAndroidPackageDiff(
   verifyGeneratedFile('package diff', output);
 }
 
+async function generateHarmonyPackageDiff(v3: string) {
+  const output = path.join(artifactsDir, LOCAL_UPDATE_FILES.packageDiff);
+  if (!fs.existsSync(harmonyHapPath)) {
+    // Fresh checkout: build-harmony-e2e.sh produces the hap and comes back
+    // for this step. The server would serve a broken pdiff otherwise.
+    console.warn(
+      `Harmony hap not found yet (${harmonyHapPath}); package diff deferred.`
+    );
+    writeFallbackPatch('package diff', output);
+    return;
+  }
+  if (useFullFallbackArtifacts) {
+    writeFallbackPatch('package diff', output);
+    return;
+  }
+  const { customDiff } = ensureHdiffModule();
+  console.log(
+    `Running hdiffFromApp: ${harmonyHapPath} -> ${v3} (${
+      fs.statSync(harmonyHapPath).size
+    } -> ${fs.statSync(v3).size} bytes)`
+  );
+  await keepProcessAlive(
+    'harmony package diff',
+    diffCommands.hdiffFromApp({
+      args: [harmonyHapPath, v3],
+      options: { output, customDiff, 'no-interactive': true },
+    })
+  );
+  verifyGeneratedFile('harmony package diff', output);
+}
+
 async function main() {
+  if (
+    platform === 'harmony' &&
+    process.env.E2E_HARMONY_PACKAGE_DIFF_ONLY === 'true'
+  ) {
+    const v3 = path.join(artifactsDir, LOCAL_UPDATE_FILES.packageFull);
+    if (!fs.existsSync(v3)) {
+      throw new Error(
+        `v3 artifact missing: ${v3}; run the full prepare first.`
+      );
+    }
+    await generateHarmonyPackageDiff(v3);
+    return;
+  }
   prepareDir();
 
   const v1 = path.join(artifactsDir, LOCAL_UPDATE_FILES.full);
@@ -445,7 +500,7 @@ async function main() {
   // hermesc -base-bytecode=v1, so every patch below carries delta-mode bytecode.
   bundleTo('e2e/entry.v1.ts', v1);
   bundleTo('e2e/entry.v2.ts', v2, v1);
-  if (platform === 'android') {
+  if (platform === 'android' || platform === 'harmony') {
     bundleTo('e2e/entry.v3.ts', v3, v1);
   }
   bundleTo('e2e/entry.v4.ts', v4, v1);
@@ -519,8 +574,19 @@ async function main() {
       console.log('Generating ppk diff...');
       await generatePpkDiff(v1, v2, ppkDiff, hdiff.customDiff);
 
+      // Harmony runs the same chain as Android (v2 -> pdiff v3 -> v4), so
+      // its v2-track diff starts from v3.
       console.log('Generating v2-track ppk diff...');
-      await generateV2TrackPpkDiff(v2, v4, v2TrackDiff, hdiff);
+      await generateV2TrackPpkDiff(
+        platform === 'harmony' ? v3 : v2,
+        v4,
+        v2TrackDiff,
+        hdiff
+      );
+    }
+    if (platform === 'harmony') {
+      console.log('Generating harmony package diff...');
+      await generateHarmonyPackageDiff(v3);
     }
   }
 

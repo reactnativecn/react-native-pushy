@@ -660,4 +660,36 @@ describe('UpdateProvider rendering', () => {
     );
     expect(mockAlert).not.toHaveBeenCalled();
   });
+  test('the launch deep link is handled once, even when the strategy callbacks change', async () => {
+    const { Linking } = await import('react-native');
+    const getInitialURL = mock(() =>
+      Promise.resolve('app://open?type=__rnPushyVersionHash&data=test-hash')
+    );
+    (Linking as any).getInitialURL = getInitialURL;
+    const client = createClient({
+      updateStrategy: 'alwaysAlert',
+      checkStrategy: null,
+    });
+    client.checkUpdate.mockImplementation(async () => ({ upToDate: true }));
+    await renderProvider(client);
+
+    const testChecks = () =>
+      client.checkUpdate.mock.calls.filter(
+        (call: any[]) => call[0]?.toHash === 'test-hash'
+      ).length;
+    expect(getInitialURL).toHaveBeenCalledTimes(1);
+    expect(testChecks()).toBe(1);
+
+    // A strategy change rebuilds checkUpdate and with it parseTestPayload;
+    // the Linking effect used to re-run and replay the initial URL.
+    for (const updateStrategy of ['silentAndNow', 'silentAndLater']) {
+      await TestRenderer.act(async () => {
+        client.setOptions({ updateStrategy });
+        await flush();
+      });
+    }
+
+    expect(getInitialURL).toHaveBeenCalledTimes(1);
+    expect(testChecks()).toBe(1);
+  });
 });

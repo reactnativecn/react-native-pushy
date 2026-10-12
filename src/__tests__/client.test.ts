@@ -475,6 +475,62 @@ describe('Pushy server config', () => {
     );
   });
 
+  test('concurrent markSuccess calls share one native call and one report', async () => {
+    let resolveNative = () => {};
+    const nativeMarkSuccess = mock(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveNative = resolve;
+        })
+    );
+    const logger = mock(() => {});
+    setupClientMocks({ isFirstTime: true, markSuccess: nativeMarkSuccess });
+    const { Pushy, sharedState } = await importFreshClient(
+      'mark-success-concurrent'
+    );
+    const client = new Pushy({ appKey: 'demo-app', logger });
+
+    const first = client.markSuccess();
+    const second = client.markSuccess();
+    resolveNative();
+    await Promise.all([first, second]);
+    await client.markSuccess();
+
+    expect(nativeMarkSuccess).toHaveBeenCalledTimes(1);
+    expect(sharedState.marked).toBe(true);
+    expect(
+      logger.mock.calls.filter(([event]: any[]) => event.type === 'markSuccess')
+    ).toHaveLength(1);
+  });
+
+  test('a failed markSuccess can be retried', async () => {
+    let calls = 0;
+    const nativeMarkSuccess = mock(() =>
+      ++calls === 1 ? Promise.reject(Error('busy')) : Promise.resolve()
+    );
+    setupClientMocks({ isFirstTime: true, markSuccess: nativeMarkSuccess });
+    const { Pushy, sharedState } =
+      await importFreshClient('mark-success-retry');
+    const client = new Pushy({ appKey: 'demo-app' });
+    const errors: any[] = [];
+    client.onError((e: any) => {
+      errors.push(e);
+    });
+
+    const results = await Promise.allSettled([
+      client.markSuccess(),
+      client.markSuccess(),
+    ]);
+    expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected']);
+    // One failure, one report — not one per caller.
+    expect(errors).toHaveLength(1);
+    expect(sharedState.marked).toBe(false);
+
+    await client.markSuccess();
+    expect(nativeMarkSuccess).toHaveBeenCalledTimes(2);
+    expect(sharedState.marked).toBe(true);
+  });
+
   test('waits for beforeReload before switching version', async () => {
     const calls: string[] = [];
     const reloadUpdate = mock(() => {
@@ -1002,6 +1058,7 @@ describe('downloadUpdate fallback chain', () => {
     addProgressListener = mock(() => ({ remove: mock(() => {}) })),
     setLocalHashInfo = mock(() => {}),
     fetchWithTimeout = mock(() => Promise.resolve()),
+    testUrls = mock((urls?: string[]) => Promise.resolve(urls?.[0] || null)),
   }: {
     downloadPatchFromPpk?: ReturnType<typeof mock>;
     downloadPatchFromPackage?: ReturnType<typeof mock>;
@@ -1009,6 +1066,7 @@ describe('downloadUpdate fallback chain', () => {
     addProgressListener?: ReturnType<typeof mock>;
     setLocalHashInfo?: ReturnType<typeof mock>;
     fetchWithTimeout?: ReturnType<typeof mock>;
+    testUrls?: ReturnType<typeof mock>;
   } = {}) => {
     setupClientMocks({
       downloadPatchFromPpk,
@@ -1038,10 +1096,11 @@ describe('downloadUpdate fallback chain', () => {
       log: mock(() => {}),
       noop: () => {},
       promiseAny: mock(() => Promise.resolve()),
-      testUrls: (urls?: string[]) => Promise.resolve(urls?.[0] || null),
+      testUrls,
     }));
 
     return {
+      testUrls,
       downloadPatchFromPpk,
       downloadPatchFromPackage,
       downloadFullUpdate,
@@ -1351,6 +1410,35 @@ describe('downloadUpdate fallback chain', () => {
 
     expect(hash).toBe('new-hash');
     expect(downloadFullUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  test('mirrors are ranked once per strategy across retries; a failed winner is demoted', async () => {
+    const fullUrls: string[] = [];
+    let fullCalls = 0;
+    const { testUrls } = setupDownloadMocks({
+      downloadPatchFromPpk: mock(() => Promise.reject(Error('diff fail'))),
+      downloadPatchFromPackage: mock(() => Promise.reject(Error('pdiff fail'))),
+      downloadFullUpdate: mock(({ updateUrl }: { updateUrl: string }) => {
+        fullUrls.push(updateUrl);
+        // Attempt 0 fails on both mirrors; attempt 1 succeeds on its first.
+        return ++fullCalls <= 2
+          ? Promise.reject(Error('full fail'))
+          : Promise.resolve();
+      }),
+    });
+    const { Pushy, sharedState } = await importFreshClient('dl-rank-once');
+    sharedState.downloadedHash = undefined;
+    const client = new Pushy({ appKey: 'demo-app', maxRetries: 3 });
+
+    expect(await client.downloadUpdate(twoMirrors)).toBe('new-hash');
+    // diff, pdiff, full: one HEAD race each, not one per attempt.
+    expect(testUrls).toHaveBeenCalledTimes(3);
+    expect(fullUrls).toEqual([
+      'https://cdn-a.example.com/full.ppk',
+      'https://cdn-b.example.com/full.ppk',
+      // The HEAD winner failed: the retry starts from the other mirror.
+      'https://cdn-b.example.com/full.ppk',
+    ]);
   });
 
   test('defaults to 3 retries when maxRetries is not set', async () => {
@@ -2165,6 +2253,27 @@ describe('syncNativeConfig', () => {
     expect(syncNativeConfig).toHaveBeenCalledTimes(2);
   });
 
+  test('switching ownership to native and back writes the config again', async () => {
+    const syncNativeConfig = mock(() => Promise.resolve());
+    setupClientMocks({ syncNativeConfig });
+    const { Pushy } = await importFreshClient('sync-config-owner-roundtrip');
+    const client = new Pushy({ appKey: 'demo-app' });
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(syncNativeConfig).toHaveBeenCalledTimes(1);
+
+    // While native owns it, the host may have stored anything: the old JS
+    // value says nothing about native storage any more.
+    client.setOptions({ nativeConfigSource: 'native' });
+    client.setOptions({ nativeConfigSource: 'javascript' });
+
+    expect(syncNativeConfig).toHaveBeenCalledTimes(2);
+    expect(syncNativeConfig.mock.calls[1]).toEqual(
+      syncNativeConfig.mock.calls[0]
+    );
+  });
+
   test('an older native module without the method is skipped silently', async () => {
     setupClientMocks();
     const { Pushy } = await importFreshClient('sync-config-4');
@@ -2366,6 +2475,132 @@ describe('native check cache reuse', () => {
     const client = new Pushy({ appKey: 'demo-app' });
 
     expect(await client.checkUpdate()).toEqual(networkResult);
+  });
+
+  test('an expired cache is judged on its age alone and never read again', async () => {
+    const getNativeCheckCache = mock(() =>
+      Promise.resolve(
+        JSON.stringify({
+          ts: Math.floor(Date.now() / 1000) - 600,
+          body: JSON.stringify({ upToDate: true }),
+          // Never parsed: the age check comes first.
+          request: '{not json',
+          config: '{not json',
+        })
+      )
+    );
+    const syncNativeConfig = mock(() => Promise.resolve());
+    setupClientMocks({ getNativeCheckCache, syncNativeConfig });
+    const networkResult = { update: true, hash: 'net-hash' };
+    (globalThis as any).fetch = mock(async () =>
+      createJsonResponse(networkResult)
+    );
+    const { Pushy } = await importFreshClient('native-cache-expired-once');
+    const client = new Pushy({ appKey: 'demo-app' });
+
+    const parse = spyOn(JSON, 'parse');
+    let parsedCacheFields: unknown[][] = [];
+    try {
+      expect(await client.checkUpdate()).toEqual(networkResult);
+      parsedCacheFields = parse.mock.calls.filter(
+        ([text]) => text === '{not json'
+      );
+    } finally {
+      parse.mockRestore();
+    }
+    expect(parsedCacheFields).toHaveLength(0);
+    // A different request (outside the dedup window's identity) re-checks,
+    // but the native cache is not consulted again in this process.
+    expect(await client.checkUpdate({ toHash: 'other' })).toEqual(
+      networkResult
+    );
+    expect(getNativeCheckCache).toHaveBeenCalledTimes(1);
+  });
+
+  test('an absent cache is not read again in the same process', async () => {
+    const getNativeCheckCache = mock(() => Promise.resolve(null));
+    const syncNativeConfig = mock(() => Promise.resolve());
+    setupClientMocks({ getNativeCheckCache, syncNativeConfig });
+    const networkResult = { upToDate: true };
+    (globalThis as any).fetch = mock(async () =>
+      createJsonResponse(networkResult)
+    );
+    const { Pushy } = await importFreshClient('native-cache-absent-once');
+    const client = new Pushy({ appKey: 'demo-app' });
+
+    await client.checkUpdate();
+    await client.checkUpdate({ toHash: 'other' });
+
+    expect(getNativeCheckCache).toHaveBeenCalledTimes(1);
+  });
+
+  test('a config that is canonically equal (C1) still matches the cache', async () => {
+    const cachedResult = { upToDate: true };
+    let configJson = '';
+    const syncNativeConfig = mock((value: string) => {
+      configJson = value;
+      return Promise.resolve();
+    });
+    const getNativeCheckCache = mock(() => {
+      // What a native normalizer might have stored: trailing slashes, a
+      // duplicate endpoint, default-valued keys spelled out, other key order.
+      const { endpoints, ...rest } = JSON.parse(configJson);
+      const nativeConfig = {
+        disabled: false,
+        endpoints: [...endpoints.map((url: string) => `${url}/`), endpoints[0]],
+        ...rest,
+      };
+      return Promise.resolve(
+        JSON.stringify({
+          ts: Math.floor(Date.now() / 1000) - 10,
+          body: JSON.stringify(cachedResult),
+          request: expectedRequestBody,
+          config: JSON.stringify(nativeConfig),
+        })
+      );
+    });
+    setupClientMocks({ getNativeCheckCache, syncNativeConfig });
+    const { Pushy } = await importFreshClient('native-cache-canonical-config');
+    const client = new Pushy({ appKey: 'demo-app' });
+
+    expect(await client.checkUpdate()).toEqual(cachedResult);
+  });
+
+  test('markJsCheckCompleted is sent once per config after it succeeds', async () => {
+    const syncNativeConfig = mock(() => Promise.resolve());
+    let markCalls = 0;
+    const markJsCheckCompleted = mock(() =>
+      ++markCalls === 1 ? Promise.reject(Error('busy')) : Promise.resolve()
+    );
+    setupClientMocks({ syncNativeConfig, markJsCheckCompleted });
+    (globalThis as any).fetch = mock(async () =>
+      createJsonResponse({ upToDate: true })
+    );
+    const { Pushy } = await importFreshClient('mark-js-check-once');
+    const client = new Pushy({ appKey: 'demo-app' });
+    const flushAll = async () => {
+      for (let i = 0; i < 5; i++) {
+        await Promise.resolve();
+      }
+    };
+
+    // The first acknowledgement failed: the next completed check resends.
+    await client.checkUpdate({ round: 1 });
+    await flushAll();
+    await client.checkUpdate({ round: 2 });
+    await flushAll();
+    expect(markJsCheckCompleted).toHaveBeenCalledTimes(2);
+
+    // Acknowledged for this config: further checks stay quiet...
+    await client.checkUpdate({ round: 3 });
+    await flushAll();
+    expect(markJsCheckCompleted).toHaveBeenCalledTimes(2);
+
+    // ...until the config changes.
+    client.setOptions({ updateStrategy: 'silentAndNow' });
+    await client.checkUpdate({ round: 4 });
+    await flushAll();
+    expect(markJsCheckCompleted).toHaveBeenCalledTimes(3);
   });
 
   test('a cache timestamp from the future is never reused', async () => {

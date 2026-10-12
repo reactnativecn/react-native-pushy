@@ -27,6 +27,7 @@ import NativePatchCore, {
   StateCoreResult,
 } from './NativePatchCore';
 import { assertSafePathComponent } from './PathUtils';
+import { withRawFd } from './SaveFile';
 import {
   ERROR_SWITCH_VERSION_FAILED,
   createPushyError,
@@ -46,6 +47,89 @@ const CLEANUP_MAX_AGE_DAYS = 3;
 interface OptionalPreferencesApi {
   flushSync?: () => void;
   getAllSync?: () => Record<string, unknown>;
+}
+
+// C1 跨平台配置等价(JS/Android/iOS 同一规则):缺省键补默认值、端点/
+// 发现地址去尾斜杠并保序去重、忽略键序。等价的配置不算"变更"——宿主重复
+// configure、或 JS 同步一份只差格式的同一配置,都不应取消在飞轮次或丢弃
+// 响应缓存。放在本文件(而非独立模块):本文件被测试原样求值,只能依赖
+// 自身源码。
+const NATIVE_CONFIG_DEFAULTS: Record<string, unknown> = {
+  disabled: false,
+  queryUrls: [],
+  rnu: '',
+  rn: '',
+  afterDownload: 'none',
+};
+const NATIVE_CONFIG_URL_LISTS: string[] = ['endpoints', 'queryUrls'];
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(item => canonicalJson(item)).join(',')}]`;
+  }
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const keys = Object.keys(record)
+      .filter(key => record[key] !== undefined)
+      .sort();
+    return `{${keys
+      .map(key => `${JSON.stringify(key)}:${canonicalJson(record[key])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
+}
+
+/** 配置 JSON 的规范形式;不是可解析的 JSON 对象时返回 undefined。 */
+export function canonicalNativeConfig(json: string): string | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch (e) {
+    return undefined;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const config: Record<string, unknown> = {};
+  const source = parsed as Record<string, unknown>;
+  for (const key of Object.keys(source)) {
+    config[key] = source[key];
+  }
+  for (const key of Object.keys(NATIVE_CONFIG_DEFAULTS)) {
+    if (config[key] === undefined) {
+      config[key] = NATIVE_CONFIG_DEFAULTS[key];
+    }
+  }
+  for (const key of NATIVE_CONFIG_URL_LISTS) {
+    const list = config[key];
+    if (!Array.isArray(list)) {
+      continue;
+    }
+    const seen = new Set<string>();
+    const normalized: unknown[] = [];
+    for (const item of list as unknown[]) {
+      const value = typeof item === 'string' ? item.replace(/\/+$/, '') : item;
+      const identity = canonicalJson(value);
+      if (!seen.has(identity)) {
+        seen.add(identity);
+        normalized.push(value);
+      }
+    }
+    config[key] = normalized;
+  }
+  return canonicalJson(config);
+}
+
+/** 两份配置 JSON 是否等价(C1)。任一不是可解析的 JSON 对象即不等价。 */
+export function nativeConfigsEquivalent(
+  a: string | undefined,
+  b: string | undefined,
+): boolean {
+  if (a === undefined || b === undefined) {
+    return false;
+  }
+  const left = canonicalNativeConfig(a);
+  return left !== undefined && left === canonicalNativeConfig(b);
 }
 
 interface PersistOptions {
@@ -460,19 +544,29 @@ export class UpdateContext {
     this.flushInBackground('sync binary version');
   }
 
-  /** 写入并落盘;flushSync 不可用时以 flush() 的结果拒绝。 */
-  /** Shared JS/native configuration writer; all mutations precede the first await. */
   private static nativeConfigGeneration: number = 0;
 
   public getNativeConfigGeneration(): number {
     return UpdateContext.nativeConfigGeneration;
   }
 
+  /** 与持久化的配置是否等价(C1)。 */
+  public isStoredNativeConfig(config: string | undefined): boolean {
+    return nativeConfigsEquivalent(config, this.getKv(KEY_CONFIG));
+  }
+
+  /**
+   * Shared JS/native configuration writer; all mutations precede the first
+   * await. An equivalent configuration (C1) is not a change: the stored string,
+   * response cache and generations stay as they are.
+   */
   public setNativeConfig(config: string): Promise<void> {
     if (!this.getKv('uuid')) {
       this.preferences.putSync('uuid', util.generateRandomUUID());
     }
-    if (this.getKv(KEY_CONFIG) !== config) {
+    const current = this.getKv(KEY_CONFIG);
+    // Byte-identical is trivially no change, even for a value C1 cannot parse.
+    if (!current || (current !== config && !nativeConfigsEquivalent(current, config))) {
       // Also guards A -> B -> A replacements and late download commits.
       UpdateContext.resetGeneration += 1;
       UpdateContext.nativeConfigGeneration += 1;
@@ -484,6 +578,7 @@ export class UpdateContext {
     return this.flushPreferences('persist configuration');
   }
 
+  /** 写入并落盘;flushSync 不可用时以 flush() 的结果拒绝。 */
   public setKv(key: string, value: string): Promise<void> {
     this.preferences.putSync(key, value);
     return this.flushPreferences(`set key ${key}`);
@@ -952,29 +1047,56 @@ export class UpdateContext {
     }
   }
 
+  // 进行中的摘要计算:JS getBundleHash 与原生轮次可能同时要它,共用一次。
+  private bundleHashTask: Promise<string> | null = null;
+
   /**
    * bundleHash = 二进制内嵌 JS bundle 的 sha256 —— 标识二进制本身,与当前运行
    * 的热更版本无关。哈希对象与 pdiff 的源读取完全一致:rawfile 的
    * bundle.harmony.js(DownloadTask.doPatchFromApp 同一读法)。懒计算 + 缓存;
    * 永不失败——空串表示"未知",服务端回退 buildTime 启发式。
    */
-  public async getBundleHash(): Promise<string> {
+  public getBundleHash(): Promise<string> {
     if (UpdateContext.DEBUG) {
       // debug 下 bundle 由 metro 提供,与 dev 删 buildTime 的行为对齐。
-      return '';
+      return Promise.resolve('');
     }
     const cachePrefix = `${this.getPackageVersion()}|${this.getBundleModifiedTime()}|`;
     const cached = this.readString(UpdateContext.KEY_BUNDLE_HASH_CACHE);
     if (cached.startsWith(cachePrefix)) {
-      return cached.slice(cachePrefix.length);
+      return Promise.resolve(cached.slice(cachePrefix.length));
     }
+    if (!this.bundleHashTask) {
+      const task = this.computeBundleHash(cachePrefix);
+      this.bundleHashTask = task;
+      task.then(
+        () => {
+          this.bundleHashTask = null;
+        },
+        () => {
+          this.bundleHashTask = null;
+        },
+      );
+    }
+    return this.bundleHashTask;
+  }
+
+  private async computeBundleHash(cachePrefix: string): Promise<string> {
     let hash = '';
     try {
-      // 异步读:TurboModule 跑在 UI 线程,同步读几 MB 会卡主线程一次。C++
-      // 哈希本身毫秒级,同步无妨。
-      const content =
-        await this.context.resourceManager.getRawFileContent('bundle.harmony.js');
-      hash = NativePatchCore.sha256Hex(content);
+      // 内嵌 bundle 有几 MB:不读进内存,也不在 UI 线程(TurboModule 所在)
+      // 哈希——native 工作线程按 rawfile descriptor 的区间 pread 流式计算。
+      // fd 在 promise 落定后才关闭(withRawFd)。
+      hash = await withRawFd(
+        this.context.resourceManager,
+        'bundle.harmony.js',
+        descriptor =>
+          NativePatchCore.sha256HexRawFdAsync(
+            descriptor.fd,
+            descriptor.offset,
+            descriptor.length,
+          ),
+      );
     } catch (error) {
       // rawfile 缺 bundle(未打包 release bundle)是合法的"未知",不是错误。
       logger.info(TAG, `Cannot hash embedded bundle: ${getErrorMessage(error)}`);

@@ -137,28 +137,62 @@ function startNativeRound(
   });
 }
 
+interface ConfigRead {
+  json: string;
+  config: NativeConfig;
+  /** Trimmed; the same value gates the round and builds the request URL. */
+  appKey: string;
+  /** Set when the persisted configuration cannot start a round. */
+  rejection?: BundlePreparationResult;
+}
+
+// The single configuration gate shared by the preflight, the host API and
+// the round itself, so the three can never disagree about what is runnable.
+function readNativeConfig(context: UpdateContext): ConfigRead {
+  const json = context.getKv(KEY_CONFIG);
+  const empty: NativeConfig = {};
+  if (!json) {
+    return {
+      json: '',
+      config: empty,
+      appKey: '',
+      rejection: bundlePreparationResult('skipped', 'not_configured'),
+    };
+  }
+  const invalid: ConfigRead = {
+    json,
+    config: empty,
+    appKey: '',
+    rejection: bundlePreparationResult('failed', 'invalid_config'),
+  };
+  let config: NativeConfig;
+  try {
+    config = JSON.parse(json) as NativeConfig;
+  } catch (e) {
+    return invalid;
+  }
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    return invalid;
+  }
+  if (config.disabled) {
+    return {
+      json,
+      config,
+      appKey: '',
+      rejection: bundlePreparationResult('skipped', 'disabled'),
+    };
+  }
+  const appKey = typeof config.appKey === 'string' ? config.appKey.trim() : '';
+  if (!appKey) {
+    return invalid;
+  }
+  return { json, config, appKey };
+}
+
 // A preflight skip must not consume the process's only round: configuration
 // may arrive after the delayed startup timer on a first-ever launch.
 function configurationError(context: UpdateContext): BundlePreparationResult | undefined {
-  const json = context.getKv(KEY_CONFIG);
-  if (!json) {
-    return bundlePreparationResult('skipped', 'not_configured');
-  }
-  try {
-    const config = JSON.parse(json) as NativeConfig;
-    if (!config || typeof config !== 'object' || Array.isArray(config)) {
-      return bundlePreparationResult('failed', 'invalid_config');
-    }
-    if (config.disabled) {
-      return bundlePreparationResult('skipped', 'disabled');
-    }
-    if (typeof config.appKey !== 'string' || config.appKey.trim().length === 0) {
-      return bundlePreparationResult('failed', 'invalid_config');
-    }
-  } catch (e) {
-    return bundlePreparationResult('failed', 'invalid_config');
-  }
-  return undefined;
+  return readNativeConfig(context).rejection;
 }
 
 export async function prepareBundleNative(
@@ -167,24 +201,11 @@ export async function prepareBundleNative(
   if (scheduledContext !== context) {
     return bundlePreparationResult('skipped', 'not_initialized');
   }
-  const configJson = context.getKv(KEY_CONFIG);
-  if (!configJson) {
-    return bundlePreparationResult('skipped', 'not_configured');
+  const read = readNativeConfig(context);
+  if (read.rejection !== undefined) {
+    return read.rejection;
   }
-  try {
-    const config = JSON.parse(configJson) as NativeConfig;
-    if (!config || typeof config !== 'object' || Array.isArray(config)) {
-      return bundlePreparationResult('failed', 'invalid_config');
-    }
-    if (config.disabled) {
-      return bundlePreparationResult('skipped', 'disabled');
-    }
-    if (typeof config.appKey !== 'string' || !config.appKey) {
-      return bundlePreparationResult('failed', 'invalid_config');
-    }
-  } catch (e) {
-    return bundlePreparationResult('failed', 'invalid_config');
-  }
+  const configJson = read.json;
   const result = await startNativeRound(context, scheduledRollback);
   if (roundConfigGeneration !== context.getNativeConfigGeneration()
       || configJson !== roundConfigJson || configJson !== context.getKv(KEY_CONFIG)) {
@@ -205,13 +226,11 @@ export function recordJsRound(config: string): void {
   jsCompletedConfig = config;
 }
 
-// JS 已用与原生完全相同的配置拿到有效响应(§10.3):延迟轮次就是一次重复请求。
+// JS 已用与原生等价的配置(C1:规范形式相同,而非逐字相同——宿主持有的配置
+// 与 JS 序列化格式不同)拿到有效响应(§10.3):延迟轮次就是一次重复请求。
 // 只有计划内的轮次会问这个问题——JS 没起来、启动即崩、检查失败时都不会有信号。
 function hasJsRound(context: UpdateContext): boolean {
-  return (
-    jsCompletedConfig !== undefined &&
-    jsCompletedConfig === context.getKv(KEY_CONFIG)
-  );
+  return !!jsCompletedConfig && context.isStoredNativeConfig(jsCompletedConfig);
 }
 
 export function scheduleNativeSync(
@@ -252,33 +271,15 @@ async function runOnce(
   roundGeneration = resetGeneration;
   roundConfigGeneration = context.getNativeConfigGeneration();
   roundResult = bundlePreparationResult('failed', 'check_failed');
-  const configJson = context.getKv(KEY_CONFIG);
-  roundConfigJson = configJson;
-  if (!configJson) {
-    // No persisted configuration: report the rollout gate to native callers.
-    roundResult = bundlePreparationResult('skipped', 'not_configured');
+  const read = readNativeConfig(context);
+  roundConfigJson = read.json;
+  if (read.rejection !== undefined) {
+    roundResult = read.rejection;
     return;
   }
-  let config: NativeConfig;
-  try {
-    config = JSON.parse(configJson) as NativeConfig;
-    if (!config || typeof config !== 'object' || Array.isArray(config)) {
-      roundResult = bundlePreparationResult('failed', 'invalid_config');
-      return;
-    }
-  } catch (e) {
-    roundResult = bundlePreparationResult('failed', 'invalid_config');
-    return;
-  }
-  if (config.disabled) {
-    roundResult = bundlePreparationResult('skipped', 'disabled');
-    return;
-  }
-  const appKey = config.appKey ?? '';
-  if (!appKey) {
-    roundResult = bundlePreparationResult('failed', 'invalid_config');
-    return;
-  }
+  const configJson = read.json;
+  const config = read.config;
+  const appKey = read.appKey;
   // 从这里起本轮开始做真实工作:留下面包屑,死于轮中时下次启动零延迟续传。
   logger.info(
     TAG,

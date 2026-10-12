@@ -5,7 +5,10 @@
 #include <js_native_api.h>
 #include <js_native_api_types.h>
 
+#include <cerrno>
+#include <cstdint>
 #include <string>
+#include <unistd.h>
 #include <vector>
 
 #include "archive_patch_core.h"
@@ -685,6 +688,69 @@ struct Sha256FileWork {
   std::string hex;
 };
 
+// Digest of a byte range of an fd the caller keeps open (rawfile
+// descriptors: the embedded bundle lives at [offset, offset + length) inside
+// the HAP). The fd is never closed here; JS closes it after the promise
+// settles.
+struct Sha256RangeWork {
+  napi_async_work work = nullptr;
+  napi_deferred deferred = nullptr;
+  int fd = -1;
+  int64_t offset = 0;
+  int64_t length = 0;
+  std::string hex;
+  std::string error;
+};
+
+// pread loop (positioned: never moves a file offset the caller may share).
+// A short read before `length` bytes is an error, not EOF.
+void HashFdRange(Sha256RangeWork* w) {
+  pushy::digest::Sha256 hasher;
+  std::vector<uint8_t> buffer(256 * 1024);
+  int64_t position = w->offset;
+  int64_t remaining = w->length;
+  while (remaining > 0) {
+    const size_t want = static_cast<size_t>(
+        remaining < static_cast<int64_t>(buffer.size())
+            ? remaining
+            : static_cast<int64_t>(buffer.size()));
+    const ssize_t read = pread(w->fd, buffer.data(), want, static_cast<off_t>(position));
+    if (read < 0) {
+      if (errno == EINTR) {
+        continue;
+      }
+      w->error = "sha256HexRawFdAsync: read failed (errno " +
+                 std::to_string(errno) + ")";
+      return;
+    }
+    if (read == 0) {
+      w->error = "sha256HexRawFdAsync: unexpected end of file";
+      return;
+    }
+    hasher.Update(buffer.data(), static_cast<size_t>(read));
+    position += read;
+    remaining -= read;
+  }
+  w->hex = hasher.HexDigest();
+}
+
+bool GetNonNegativeInt64(
+    napi_env env,
+    napi_value value,
+    const char* name,
+    int64_t* out_value) {
+  napi_valuetype type = napi_undefined;
+  if (value == nullptr || !GetValueType(env, value, &type) ||
+      type != napi_number ||
+      napi_get_value_int64(env, value, out_value) != napi_ok ||
+      *out_value < 0) {
+    ThrowError(env, std::string("sha256HexRawFdAsync: ") + name +
+                        " must be a non-negative number");
+    return false;
+  }
+  return true;
+}
+
 napi_value ApplyPatchFromFileSource(napi_env env, napi_callback_info info) {
   napi_value args[1] = {nullptr};
   size_t argc = 1;
@@ -950,6 +1016,87 @@ napi_value Sha256HexFileAsync(napi_env env, napi_callback_info info) {
   return promise;
 }
 
+// sha256HexRawFdAsync(fd, offset, length) -> Promise<hex>, hashed on a libuv
+// worker thread. Used for the embedded bundle (resourceManager.getRawFd): the
+// UI thread neither reads the multi-MB bundle into memory nor hashes it.
+// Rejects on any read failure or short read.
+napi_value Sha256HexRawFdAsync(napi_env env, napi_callback_info info) {
+  napi_value args[3] = {nullptr, nullptr, nullptr};
+  size_t argc = 3;
+  if (!GetArgCount(env, info, &argc, args) || argc < 3) {
+    ThrowError(env, "sha256HexRawFdAsync: expected (fd, offset, length)");
+    return nullptr;
+  }
+  int32_t fd = -1;
+  if (!GetInt32(env, args[0], &fd)) {
+    return nullptr;
+  }
+  if (fd < 0) {
+    ThrowError(env, "sha256HexRawFdAsync: fd must be non-negative");
+    return nullptr;
+  }
+  int64_t offset = 0;
+  int64_t length = 0;
+  if (!GetNonNegativeInt64(env, args[1], "offset", &offset) ||
+      !GetNonNegativeInt64(env, args[2], "length", &length)) {
+    return nullptr;
+  }
+
+  auto* work_data = new Sha256RangeWork();
+  work_data->fd = fd;
+  work_data->offset = offset;
+  work_data->length = length;
+
+  napi_value promise = nullptr;
+  if (napi_create_promise(env, &work_data->deferred, &promise) != napi_ok) {
+    delete work_data;
+    ThrowError(env, "Unable to create promise");
+    return nullptr;
+  }
+
+  napi_value resource_name = nullptr;
+  napi_create_string_utf8(
+      env, "sha256HexRawFdAsync", NAPI_AUTO_LENGTH, &resource_name);
+  if (napi_create_async_work(
+          env,
+          nullptr,
+          resource_name,
+          [](napi_env, void* data) {
+            HashFdRange(static_cast<Sha256RangeWork*>(data));
+          },
+          [](napi_env cb_env, napi_status status, void* data) {
+            auto* w = static_cast<Sha256RangeWork*>(data);
+            if (status != napi_ok) {
+              RejectDeferredWithMessage(cb_env, w->deferred, "async work aborted");
+            } else if (!w->error.empty() || w->hex.empty()) {
+              RejectDeferredWithMessage(
+                  cb_env,
+                  w->deferred,
+                  w->error.empty() ? "sha256HexRawFdAsync: no digest"
+                                   : w->error.c_str());
+            } else {
+              napi_resolve_deferred(cb_env, w->deferred, NewString(cb_env, w->hex));
+            }
+            napi_delete_async_work(cb_env, w->work);
+            delete w;
+          },
+          work_data,
+          &work_data->work) != napi_ok) {
+    RejectDeferredWithMessage(
+        env, work_data->deferred, "Unable to create async work");
+    delete work_data;
+    return promise;
+  }
+  if (napi_queue_async_work(env, work_data->work) != napi_ok) {
+    napi_delete_async_work(env, work_data->work);
+    RejectDeferredWithMessage(
+        env, work_data->deferred, "Unable to queue async work");
+    delete work_data;
+    return promise;
+  }
+  return promise;
+}
+
 bool ExportFunction(
     napi_env env,
     napi_value exports,
@@ -971,71 +1118,6 @@ bool ExportFunction(
 
 }  // namespace
 
-
-// sha256(Uint8Array | ArrayBuffer) -> 小写 hex。同步：bundleHash 的输入是
-// rawfile 里的 bundle(已整体读入内存,与 pdiff 的读法一致),哈希本身毫秒级。
-static napi_value MakeUtf8String(napi_env env, const std::string& value);
-
-// Streaming file digest (bounded memory). Synchronous: small files only —
-// archives and bundles go through sha256HexFileAsync.
-static napi_value Sha256HexFile(napi_env env, napi_callback_info info) {
-  size_t argc = 1;
-  napi_value args[1] = {nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
-    ThrowError(env, "sha256HexFile: missing path argument");
-    return nullptr;
-  }
-  bool ok = false;
-  std::string path = GetString(env, args[0], &ok);
-  if (!ok) {
-    // GetString already raised the pending exception.
-    return nullptr;
-  }
-  return MakeUtf8String(env, pushy::digest::Sha256File(path));
-}
-
-static napi_value Sha256Hex(napi_env env, napi_callback_info info) {
-  size_t argc = 1;
-  napi_value args[1] = {nullptr};
-  if (!GetArgCount(env, info, &argc, args) || argc < 1) {
-    ThrowError(env, "sha256Hex: missing data argument");
-    return nullptr;
-  }
-
-  void* data = nullptr;
-  size_t length = 0;
-  bool is_typedarray = false;
-  napi_is_typedarray(env, args[0], &is_typedarray);
-  if (is_typedarray) {
-    napi_typedarray_type type;
-    napi_value arraybuffer = nullptr;
-    size_t offset = 0;
-    if (napi_get_typedarray_info(
-            env, args[0], &type, &length, &data, &arraybuffer, &offset) !=
-        napi_ok) {
-      ThrowError(env, "sha256Hex: cannot read typed array");
-      return nullptr;
-    }
-  } else {
-    bool is_arraybuffer = false;
-    napi_is_arraybuffer(env, args[0], &is_arraybuffer);
-    if (!is_arraybuffer ||
-        napi_get_arraybuffer_info(env, args[0], &data, &length) != napi_ok) {
-      ThrowError(env, "sha256Hex: expected Uint8Array or ArrayBuffer");
-      return nullptr;
-    }
-  }
-
-  pushy::digest::Sha256 hasher;
-  if (length > 0) {
-    hasher.Update(static_cast<const uint8_t*>(data), length);
-  }
-  const std::string hex = hasher.HexDigest();
-
-  napi_value result = nullptr;
-  napi_create_string_utf8(env, hex.c_str(), hex.size(), &result);
-  return result;
-}
 
 // CRC32(zip/zlib 多项式)。同步:输入是已在内存的 rawfile 资源字节,用于
 // pdiff 拷贝前与 __diff.json copiesCrc 比对(不符则整次 patch 失败落 full)。
@@ -1217,9 +1299,8 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "buildCopyGroups", BuildCopyGroups) ||
       !ExportFunction(env, exports, "applyDeltaFromSource", ApplyPatchFromFileSource) ||
       !ExportFunction(env, exports, "cleanupOldEntries", CleanupOldEntries) ||
-      !ExportFunction(env, exports, "sha256Hex", Sha256Hex) ||
-      !ExportFunction(env, exports, "sha256HexFile", Sha256HexFile) ||
       !ExportFunction(env, exports, "sha256HexFileAsync", Sha256HexFileAsync) ||
+      !ExportFunction(env, exports, "sha256HexRawFdAsync", Sha256HexRawFdAsync) ||
       !ExportFunction(env, exports, "crc32", Crc32) ||
       !ExportFunction(env, exports, "getSupportedDiffVersion", GetSupportedDiffVersion) ||
       !ExportFunction(env, exports, "buildRequestBody", FlowBuildRequestBody) ||

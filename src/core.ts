@@ -1,7 +1,7 @@
 import { NativeEventEmitter, NativeModules, Platform } from 'react-native';
 import { UpdateError } from './error';
 import i18n from './i18n';
-import { emptyModule, error, log } from './utils';
+import { createNonSecureId, emptyModule, error, log } from './utils';
 
 // RN's JS global object. Declared locally because RN 0.87's own typings no
 // longer define `global` (only @types/node did), and this source is
@@ -156,7 +156,7 @@ export async function getCurrentVersionInfo(): Promise<{
 export const pushyNativeEventEmitter = new NativeEventEmitter(PushyModule);
 
 if (!uuid) {
-  uuid = require('nanoid/non-secure').nanoid();
+  uuid = createNonSecureId();
   // If persisting fails the uuid drifts on every launch, which skews gray
   // release bucketing and inflates stats — log it instead of failing silently.
   // Web has nowhere to persist it (nothing runs there anyway).

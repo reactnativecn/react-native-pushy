@@ -8,7 +8,7 @@
 // A method missing on one platform is `undefined` on the JS side, and the JS
 // feature-detects then treat the whole capability as "old native" and skip it
 // silently — exactly how the native cold-start check shipped dark on Harmony
-// for three releases (NATIVE_CHECK_FOLLOWUPS.md, 2026-08-13).
+// for three releases (docs/NATIVE_CHECK_FOLLOWUPS.md, 2026-08-13).
 const fs = require('fs');
 const path = require('path');
 

@@ -31,7 +31,15 @@ just to call this API: resolution consumes first-load and rollback markers.
 The call starts, joins or reuses the process's existing native round. It does not
 reload the running React Native instance or display UI. A successful selection is
 for the **next launch**; preparation can also download without selecting a bundle,
-according to the existing `afterDownload` policy. Callback threading, cancellation,
+according to the existing `afterDownload` policy.
+
+**Config ownership.** With `nativeConfigSource: 'native'` the host keeps the
+configuration and JS never writes it. In the default `'javascript'` mode the host
+may provision the first launch with `configure` and JS takes over once it runs; the
+last completed write wins. A write that is equivalent to the stored configuration
+(same values after defaults are filled in, endpoint trailing `/` removed and
+duplicates dropped, key order ignored) is not a change: it neither invalidates the
+response cache nor cancels an in-flight round. Callback threading, cancellation,
 request deduplication, configuration invalidation and rescue behavior are unchanged.
 
 Result fields (`status`, `reason`, `hash`, `activated`) and existing status strings,
@@ -60,6 +68,10 @@ the API names that existed in the versions they document.
 这是原生源码接口的破坏性重命名，不改变下载、下次启动选包、回滚或救援行为。
 配置完成后，先走宿主正常的 bundle 解析流程，再调用 `prepareBundle`；
 不要为调用接口再次解析 bundle，也不要新建另一个 Harmony provider。
+`nativeConfigSource: 'native'` 时配置归宿主，JS 不写入；默认 `'javascript'`
+模式下可由原生 `configure` 提供首启配置、JS 运行后接管，以最后完成的写入为准。
+与已存配置等价的写入（补齐默认值、去掉服务地址末尾 `/` 并去重、忽略键序后相同）
+不算变更，不会清空响应缓存，也不会作废进行中的轮次。
 `activated` 仍表示已为下次启动选定，而不是当前实例已经重载。
 
 JS SDK、JS 原生桥接接口、服务端路径、配置值、结果字段/状态值和持久化键不变。

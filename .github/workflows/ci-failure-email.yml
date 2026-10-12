@@ -2,9 +2,12 @@ name: CI Failure Issue
 
 on:
   workflow_run:
+    # native-gate is left out on purpose: it only posts a commit status and
+    # its own run stays green whatever that status is.
     workflows:
       - e2e-android
       - e2e-ios
+      - harmony-build
       - lint
       - Publish Package to npmjs
       - test

@@ -5,6 +5,8 @@ import downloadTaskParamsTest from './DownloadTaskParams.test';
 import contentRangeTest from './ContentRange.test';
 import installRecordTest from './InstallRecord.test';
 import errorCodesTest from './ErrorCodes.test';
+import archiveLimitsTest from './ArchiveLimits.test';
+import nativeConfigTest from './NativeConfig.test';
 
 export default function testsuite() {
   manifestParsingTest();
@@ -14,4 +16,6 @@ export default function testsuite() {
   contentRangeTest();
   installRecordTest();
   errorCodesTest();
+  archiveLimitsTest();
+  nativeConfigTest();
 }

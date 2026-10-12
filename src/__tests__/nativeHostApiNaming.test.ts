@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { URL } from 'node:url';
 
 const root = new URL('../../', import.meta.url);
 const android = 'android/src/main/java/cn/reactnative/modules/update/';

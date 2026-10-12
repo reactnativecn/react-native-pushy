@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.io.InputStream;
 
 final class UpdateFileUtils {
-    private static final int BUFFER_SIZE = 8192;
+    private static final int BUFFER_SIZE = 64 * 1024;
 
     private UpdateFileUtils() {
     }
@@ -57,25 +57,39 @@ final class UpdateFileUtils {
         }
     }
 
-    /** Streaming SHA-256 of a file, lowercase hex. */
-    static String sha256Hex(File file) throws IOException {
-        try (InputStream in = new FileInputStream(file)) {
-            java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                md.update(buffer, 0, read);
-            }
-            byte[] digest = md.digest();
-            StringBuilder hex = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                hex.append(Character.forDigit((b >> 4) & 0xf, 16));
-                hex.append(Character.forDigit(b & 0xf, 16));
-            }
-            return hex.toString();
+    static java.security.MessageDigest newSha256() throws IOException {
+        try {
+            return java.security.MessageDigest.getInstance("SHA-256");
         } catch (java.security.NoSuchAlgorithmException e) {
             throw new IOException("SHA-256 unavailable", e);
         }
+    }
+
+    /** Feeds the whole file into digest (streaming, bounded memory). */
+    static void updateDigest(java.security.MessageDigest digest, File file) throws IOException {
+        try (InputStream in = new FileInputStream(file)) {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int read;
+            while ((read = in.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+    }
+
+    static String toHex(byte[] digest) {
+        StringBuilder hex = new StringBuilder(digest.length * 2);
+        for (byte b : digest) {
+            hex.append(Character.forDigit((b >> 4) & 0xf, 16));
+            hex.append(Character.forDigit(b & 0xf, 16));
+        }
+        return hex.toString();
+    }
+
+    /** Streaming SHA-256 of a file, lowercase hex. */
+    static String sha256Hex(File file) throws IOException {
+        java.security.MessageDigest md = newSha256();
+        updateDigest(md, file);
+        return toHex(md.digest());
     }
 
     static void copyFile(File from, File to) throws IOException {

@@ -79,6 +79,9 @@ const pairs = [
     header: 'cpp/patch_core/archive_limits.h',
     mirror: 'harmony/pushy/src/main/ets/ArchiveLimits.ts',
     mirrorName: (cppName) => screamingSnake(cppName),
+    // Must always be parsed from the header (guards the parser itself: a
+    // regex regression would otherwise silently drop the pair's coverage).
+    required: ['UnknownLengthFreeSpaceProbeBytes', 'MaxArchiveBytes'],
   },
   {
     header: 'cpp/patch_core/install_record.h',
@@ -108,6 +111,11 @@ for (const pair of pairs) {
   if (cpp.size === 0) {
     problems.push(`${pair.header}: no constexpr constants parsed`);
     continue;
+  }
+  for (const name of pair.required || []) {
+    if (!cpp.has(name)) {
+      problems.push(`${pair.header}: k${name} not parsed (required)`);
+    }
   }
   for (const [cppName, cppValue] of cpp) {
     const mirrorName = pair.mirrorName(cppName);

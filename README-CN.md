@@ -178,4 +178,4 @@ Hermes 字节码对通用二进制 diff 极不友好，我们在两个环节同�
 原生宿主入口统一为 `prepareBundle`：Android 使用 `PushyRuntime`，
 Apple 平台使用 `RCTPushy`，Harmony 使用已有的 `PushyFileJSBundleProvider`。
 请在正常启动 bundle 解析后调用。改名不改变 JS 桥接契约，但原生接入代码需要迁移并重新构建。
-详见[原生接口迁移说明](NATIVE_HOST_API_MIGRATION.md)。
+详见[原生接口迁移说明](docs/NATIVE_HOST_API_MIGRATION.md)。

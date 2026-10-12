@@ -57,6 +57,23 @@ export function promiseAny<T>(promises: Promise<T>[]) {
   });
 }
 
+// Same alphabet and length as nanoid's default (URL-safe, 21 chars), so ids
+// stay format-compatible with the ones nanoid/non-secure used to generate.
+const ID_ALPHABET =
+  'useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict';
+
+/**
+ * Non-cryptographic random id (installation uuid). Math.random is enough: it
+ * only buckets gray releases, it is not a secret.
+ */
+export const createNonSecureId = (size = 21): string => {
+  let id = '';
+  for (let i = 0; i < size; i++) {
+    id += ID_ALPHABET[Math.floor(Math.random() * 64)];
+  }
+  return id;
+};
+
 export const noop = () => {};
 const emptyModuleTarget: Record<string, typeof noop> = {};
 export const emptyModule = new Proxy(emptyModuleTarget, {
@@ -65,8 +82,11 @@ export const emptyModule = new Proxy(emptyModuleTarget, {
   },
 });
 
+// Web never probes (assertWeb gates every flow); the identity keeps the
+// signature. Not the bare `Promise.resolve`: called unbound through map() it
+// throws.
 const ping = isWeb
-  ? Promise.resolve
+  ? (url: string) => Promise.resolve(url)
   : async (url: string) => {
       try {
         const {

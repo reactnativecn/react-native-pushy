@@ -539,6 +539,16 @@ export const UpdateProvider = ({
     [client]
   );
 
+  // parseTestPayload's identity follows checkUpdate (and through it the
+  // update strategy callbacks); the Linking subscription reads it through a
+  // ref so it is set up once instead of re-running — and replaying the
+  // initial URL — on every such change.
+  const latestParseTestPayload = useRef(parseTestPayload);
+  useEffect(() => {
+    latestParseTestPayload.current = parseTestPayload;
+  }, [parseTestPayload]);
+  const initialUrlHandled = useRef(false);
+
   useEffect(() => {
     if (!assertWeb()) {
       return;
@@ -552,13 +562,18 @@ export const UpdateProvider = ({
       // malformed deep link must not become an unhandled rejection / a throw
       // inside the 'url' event handler.
       const params = parseQueryParams(url);
-      parseTestPayload({
+      latestParseTestPayload.current({
         type: params.type ?? null,
         data: params.data ?? null,
       });
     };
 
-    Linking.getInitialURL().then(parseLinking).catch(noop);
+    // The launch URL is one event: a remount (StrictMode included) must not
+    // replay it.
+    if (!initialUrlHandled.current) {
+      initialUrlHandled.current = true;
+      Linking.getInitialURL().then(parseLinking).catch(noop);
+    }
     const linkingHandler = ({ url }: { url: string }) => {
       parseLinking(url);
     };
@@ -570,7 +585,7 @@ export const UpdateProvider = ({
         linkingListener.remove();
       }
     };
-  }, [parseTestPayload]);
+  }, []);
 
   // progress lives in its own context (see context.ts), so this value only
   // changes when the update state itself changes, not on every progress tick.

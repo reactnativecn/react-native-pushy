@@ -1,5 +1,6 @@
 #include <jni.h>
 
+#include "jni_log.h"
 #include "jni_natives.h"
 #include "obscured_text.h"
 
@@ -20,20 +21,169 @@ using pushy::jni_util::JStringToString;
 using pushy::jni_util::ThrowRuntimeException;
 using pushy::state_ops::StateOperation;
 
+constexpr const char* kStringSig = "Ljava/lang/String;";
+
+// JNI result classes, resolved once in JNI_OnLoad (InitResultClassCache)
+// instead of FindClass + a GetFieldID per field on every state operation.
+// Written only before any native method can run, read-only afterwards.
+struct StateResultIds {
+  bool ready = false;
+  jclass clazz = nullptr;
+  jmethodID constructor = nullptr;
+  jfieldID package_version = nullptr;
+  jfieldID build_time = nullptr;
+  jfieldID current_version = nullptr;
+  jfieldID last_version = nullptr;
+  jfieldID first_time = nullptr;
+  jfieldID first_time_ok = nullptr;
+  jfieldID rolled_back_version = nullptr;
+  jfieldID changed = nullptr;
+  jfieldID stale_version_to_delete = nullptr;
+  jfieldID load_version = nullptr;
+  jfieldID did_rollback = nullptr;
+  jfieldID consumed_first_time = nullptr;
+};
+
+struct PlanResultIds {
+  bool ready = false;
+  jclass clazz = nullptr;
+  jmethodID constructor = nullptr;
+  jfieldID merge_source_subdir = nullptr;
+  jfieldID enable_merge = nullptr;
+};
+
+struct CopyGroupIds {
+  bool ready = false;
+  jclass clazz = nullptr;
+  jclass string_class = nullptr;
+  jmethodID constructor = nullptr;
+  jfieldID from = nullptr;
+  jfieldID to_paths = nullptr;
+};
+
+StateResultIds g_state;
+PlanResultIds g_plan;
+CopyGroupIds g_copy_group;
+
+// Resolves a class to a global ref. Logs and clears the pending exception on
+// failure.
+jclass FindGlobalClass(JNIEnv* env, const std::string& name) {
+  jclass local = env->FindClass(name.c_str());
+  if (local == nullptr) {
+    env->ExceptionClear();
+    PUSHY_JNI_LOGE("JNI result class %s not found", name.c_str());
+    return nullptr;
+  }
+  auto* global = static_cast<jclass>(env->NewGlobalRef(local));
+  env->DeleteLocalRef(local);
+  return global;
+}
+
+// A missing field must never silently default: a lost firstTimeOk would read
+// as false and roll back every launch. Logs the exact member.
+bool LookupField(
+    JNIEnv* env,
+    jclass clazz,
+    const std::string& class_name,
+    const char* name,
+    const char* signature,
+    jfieldID* out) {
+  *out = env->GetFieldID(clazz, name, signature);
+  if (*out == nullptr) {
+    env->ExceptionClear();
+    PUSHY_JNI_LOGE("JNI field %s.%s (%s) not found", class_name.c_str(), name,
+                   signature);
+    return false;
+  }
+  return true;
+}
+
+bool LookupConstructor(
+    JNIEnv* env, jclass clazz, const std::string& class_name, jmethodID* out) {
+  *out = env->GetMethodID(clazz, "<init>", "()V");
+  if (*out == nullptr) {
+    env->ExceptionClear();
+    PUSHY_JNI_LOGE("JNI no-arg constructor of %s not found", class_name.c_str());
+    return false;
+  }
+  return true;
+}
+
+bool InitStateResultIds(JNIEnv* env) {
+  const std::string name = pushy::text::Reveal(
+      "3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c93a99b63511201f9cd97878c695522");
+  StateResultIds ids;
+  ids.clazz = FindGlobalClass(env, name);
+  if (ids.clazz == nullptr) {
+    return false;
+  }
+  bool ok = LookupConstructor(env, ids.clazz, name, &ids.constructor);
+  ok &= LookupField(env, ids.clazz, name, "packageVersion", kStringSig, &ids.package_version);
+  ok &= LookupField(env, ids.clazz, name, "buildTime", kStringSig, &ids.build_time);
+  ok &= LookupField(env, ids.clazz, name, "currentVersion", kStringSig, &ids.current_version);
+  ok &= LookupField(env, ids.clazz, name, "lastVersion", kStringSig, &ids.last_version);
+  ok &= LookupField(env, ids.clazz, name, "firstTime", "Z", &ids.first_time);
+  ok &= LookupField(env, ids.clazz, name, "firstTimeOk", "Z", &ids.first_time_ok);
+  ok &= LookupField(env, ids.clazz, name, "rolledBackVersion", kStringSig, &ids.rolled_back_version);
+  ok &= LookupField(env, ids.clazz, name, "changed", "Z", &ids.changed);
+  ok &= LookupField(env, ids.clazz, name, "staleVersionToDelete", kStringSig, &ids.stale_version_to_delete);
+  ok &= LookupField(env, ids.clazz, name, "loadVersion", kStringSig, &ids.load_version);
+  ok &= LookupField(env, ids.clazz, name, "didRollback", "Z", &ids.did_rollback);
+  ok &= LookupField(env, ids.clazz, name, "consumedFirstTime", "Z", &ids.consumed_first_time);
+  ids.ready = ok;
+  g_state = ids;
+  return ok;
+}
+
+bool InitPlanResultIds(JNIEnv* env) {
+  const std::string name = pushy::text::Reveal(
+      "3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c81af997f5d270bdbc9b181974c55371dc2c8b9926855");
+  PlanResultIds ids;
+  ids.clazz = FindGlobalClass(env, name);
+  if (ids.clazz == nullptr) {
+    return false;
+  }
+  bool ok = LookupConstructor(env, ids.clazz, name, &ids.constructor);
+  ok &= LookupField(env, ids.clazz, name, "mergeSourceSubdir", kStringSig, &ids.merge_source_subdir);
+  ok &= LookupField(env, ids.clazz, name, "enableMerge", "Z", &ids.enable_merge);
+  ids.ready = ok;
+  g_plan = ids;
+  return ok;
+}
+
+bool InitCopyGroupIds(JNIEnv* env) {
+  const std::string name = pushy::text::Reveal(
+      "3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c83b28a6e732301fed897878c695522");
+  CopyGroupIds ids;
+  ids.clazz = FindGlobalClass(env, name);
+  ids.string_class = FindGlobalClass(env, "java/lang/String");
+  if (ids.clazz == nullptr || ids.string_class == nullptr) {
+    return false;
+  }
+  bool ok = LookupConstructor(env, ids.clazz, name, &ids.constructor);
+  ok &= LookupField(env, ids.clazz, name, "from", kStringSig, &ids.from);
+  ok &= LookupField(env, ids.clazz, name, "toPaths", "[Ljava/lang/String;", &ids.to_paths);
+  ids.ready = ok;
+  g_copy_group = ids;
+  return ok;
+}
+
+// Throws (and returns false) when the class needed by a native is unusable;
+// the reason was logged once at load time.
+bool RequireReady(JNIEnv* env, bool ready, const char* what) {
+  if (!ready) {
+    ThrowRuntimeException(
+        env, std::string("JNI result class unavailable: ") + what +
+                 " (see the load-time log for the missing member)");
+  }
+  return ready;
+}
+
 void SetStringField(
     JNIEnv* env,
     jobject target,
-    jclass target_class,
-    const char* field_name,
+    jfieldID field,
     const std::string& value) {
-  jfieldID field =
-      env->GetFieldID(target_class, field_name, "Ljava/lang/String;");
-  if (field == nullptr) {
-    // Clear the pending NoSuchFieldError so subsequent JNI calls are not
-    // executed with an exception pending (undefined behavior / CheckJNI abort).
-    env->ExceptionClear();
-    return;
-  }
   if (value.empty()) {
     env->SetObjectField(target, field, nullptr);
     return;
@@ -44,31 +194,11 @@ void SetStringField(
   env->DeleteLocalRef(java_value);
 }
 
-void SetBooleanField(
-    JNIEnv* env,
-    jobject target,
-    jclass target_class,
-    const char* field_name,
-    bool value) {
-  jfieldID field = env->GetFieldID(target_class, field_name, "Z");
-  if (field == nullptr) {
-    env->ExceptionClear();
-    return;
-  }
+void SetBooleanField(JNIEnv* env, jobject target, jfieldID field, bool value) {
   env->SetBooleanField(target, field, value ? JNI_TRUE : JNI_FALSE);
 }
 
-std::string GetStringField(
-    JNIEnv* env,
-    jobject target,
-    jclass target_class,
-    const char* field_name) {
-  jfieldID field =
-      env->GetFieldID(target_class, field_name, "Ljava/lang/String;");
-  if (field == nullptr) {
-    env->ExceptionClear();
-    return std::string();
-  }
+std::string GetStringField(JNIEnv* env, jobject target, jfieldID field) {
   auto* value = static_cast<jstring>(env->GetObjectField(target, field));
   std::string result = JStringToString(env, value);
   if (value != nullptr) {
@@ -77,60 +207,28 @@ std::string GetStringField(
   return result;
 }
 
-bool GetBooleanField(
-    JNIEnv* env,
-    jobject target,
-    jclass target_class,
-    const char* field_name) {
-  jfieldID field = env->GetFieldID(target_class, field_name, "Z");
-  if (field == nullptr) {
-    env->ExceptionClear();
-    return false;
-  }
+bool GetBooleanField(JNIEnv* env, jobject target, jfieldID field) {
   return env->GetBooleanField(target, field) == JNI_TRUE;
 }
 
-pushy::state::State ReadState(
-    const std::string& package_version,
-    const std::string& build_time,
-    const std::string& current_version,
-    const std::string& last_version,
-    bool first_time,
-    bool first_time_ok,
-    const std::string& rolled_back_version) {
-  pushy::state::State state;
-  state.package_version = package_version;
-  state.build_time = build_time;
-  state.current_version = current_version;
-  state.last_version = last_version;
-  state.first_time = first_time;
-  state.first_time_ok = first_time_ok;
-  state.rolled_back_version = rolled_back_version;
-  return state;
-}
-
+// Caller has checked g_state.ready.
 pushy::state::State ReadStateFromResult(JNIEnv* env, jobject state_result) {
+  pushy::state::State state;
   if (state_result == nullptr) {
-    return pushy::state::State();
+    return state;
   }
-
-  jclass state_class = env->GetObjectClass(state_result);
-  if (state_class == nullptr) {
-    return pushy::state::State();
-  }
-
-  pushy::state::State state = ReadState(
-      GetStringField(env, state_result, state_class, "packageVersion"),
-      GetStringField(env, state_result, state_class, "buildTime"),
-      GetStringField(env, state_result, state_class, "currentVersion"),
-      GetStringField(env, state_result, state_class, "lastVersion"),
-      GetBooleanField(env, state_result, state_class, "firstTime"),
-      GetBooleanField(env, state_result, state_class, "firstTimeOk"),
-      GetStringField(env, state_result, state_class, "rolledBackVersion"));
-  env->DeleteLocalRef(state_class);
+  state.package_version = GetStringField(env, state_result, g_state.package_version);
+  state.build_time = GetStringField(env, state_result, g_state.build_time);
+  state.current_version = GetStringField(env, state_result, g_state.current_version);
+  state.last_version = GetStringField(env, state_result, g_state.last_version);
+  state.first_time = GetBooleanField(env, state_result, g_state.first_time);
+  state.first_time_ok = GetBooleanField(env, state_result, g_state.first_time_ok);
+  state.rolled_back_version =
+      GetStringField(env, state_result, g_state.rolled_back_version);
   return state;
 }
 
+// Caller has checked g_state.ready.
 jobject NewStateCoreResult(
     JNIEnv* env,
     const pushy::state::State& state,
@@ -139,116 +237,67 @@ jobject NewStateCoreResult(
     const std::string& load_version,
     bool did_rollback,
     bool consumed_first_time) {
-  jclass result_class =
-      env->FindClass(
-          pushy::text::Reveal("3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c93a99b63511201f9cd97878c695522").c_str());
-  if (result_class == nullptr) {
-    return nullptr;
-  }
-
-  jmethodID constructor = env->GetMethodID(result_class, "<init>", "()V");
-  if (constructor == nullptr) {
-    return nullptr;
-  }
-
-  jobject result = env->NewObject(result_class, constructor);
+  jobject result = env->NewObject(g_state.clazz, g_state.constructor);
   if (result == nullptr) {
     return nullptr;
   }
 
-  SetStringField(env, result, result_class, "packageVersion", state.package_version);
-  SetStringField(env, result, result_class, "buildTime", state.build_time);
-  SetStringField(env, result, result_class, "currentVersion", state.current_version);
-  SetStringField(env, result, result_class, "lastVersion", state.last_version);
-  SetBooleanField(env, result, result_class, "firstTime", state.first_time);
-  SetBooleanField(env, result, result_class, "firstTimeOk", state.first_time_ok);
+  SetStringField(env, result, g_state.package_version, state.package_version);
+  SetStringField(env, result, g_state.build_time, state.build_time);
+  SetStringField(env, result, g_state.current_version, state.current_version);
+  SetStringField(env, result, g_state.last_version, state.last_version);
+  SetBooleanField(env, result, g_state.first_time, state.first_time);
+  SetBooleanField(env, result, g_state.first_time_ok, state.first_time_ok);
   SetStringField(
-      env,
-      result,
-      result_class,
-      "rolledBackVersion",
-      state.rolled_back_version);
-  SetBooleanField(env, result, result_class, "changed", changed);
+      env, result, g_state.rolled_back_version, state.rolled_back_version);
+  SetBooleanField(env, result, g_state.changed, changed);
   SetStringField(
-      env,
-      result,
-      result_class,
-      "staleVersionToDelete",
-      stale_version_to_delete);
-  SetStringField(env, result, result_class, "loadVersion", load_version);
-  SetBooleanField(env, result, result_class, "didRollback", did_rollback);
+      env, result, g_state.stale_version_to_delete, stale_version_to_delete);
+  SetStringField(env, result, g_state.load_version, load_version);
+  SetBooleanField(env, result, g_state.did_rollback, did_rollback);
   SetBooleanField(
-      env,
-      result,
-      result_class,
-      "consumedFirstTime",
-      consumed_first_time);
+      env, result, g_state.consumed_first_time, consumed_first_time);
   return result;
 }
 
 jobject NewArchivePatchPlanResult(
     JNIEnv* env,
     const pushy::archive_patch::ArchivePatchPlan& plan) {
-  jclass result_class =
-      env->FindClass(
-          pushy::text::Reveal("3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c81af997f5d270bdbc9b181974c55371dc2c8b9926855").c_str());
-  if (result_class == nullptr) {
+  if (!RequireReady(env, g_plan.ready, "archive plan result")) {
     return nullptr;
   }
-
-  jmethodID constructor = env->GetMethodID(result_class, "<init>", "()V");
-  if (constructor == nullptr) {
-    return nullptr;
-  }
-
-  jobject result = env->NewObject(result_class, constructor);
+  jobject result = env->NewObject(g_plan.clazz, g_plan.constructor);
   if (result == nullptr) {
     return nullptr;
   }
 
-  SetStringField(
-      env,
-      result,
-      result_class,
-      "mergeSourceSubdir",
-      plan.merge_source_subdir);
-  SetBooleanField(env, result, result_class, "enableMerge", plan.enable_merge);
+  SetStringField(env, result, g_plan.merge_source_subdir, plan.merge_source_subdir);
+  SetBooleanField(env, result, g_plan.enable_merge, plan.enable_merge);
   return result;
 }
 
+// Caller has checked g_copy_group.ready.
 jobject NewCopyGroupResult(
     JNIEnv* env,
-    jclass result_class,
-    jclass string_class,
     const pushy::archive_patch::CopyGroup& group) {
-  jmethodID constructor = env->GetMethodID(result_class, "<init>", "()V");
-  if (constructor == nullptr) {
-    return nullptr;
-  }
-
-  jobject result = env->NewObject(result_class, constructor);
+  jobject result = env->NewObject(g_copy_group.clazz, g_copy_group.constructor);
   if (result == nullptr) {
     return nullptr;
   }
 
-  SetStringField(env, result, result_class, "from", group.from);
-  jfieldID to_paths_field =
-      env->GetFieldID(result_class, "toPaths", "[Ljava/lang/String;");
-  if (to_paths_field != nullptr) {
-    jobjectArray to_paths = env->NewObjectArray(
-        static_cast<jsize>(group.to_paths.size()), string_class, nullptr);
-    if (to_paths != nullptr) {
-      for (jsize index = 0; index < static_cast<jsize>(group.to_paths.size());
-           ++index) {
-        jstring value = env->NewStringUTF(group.to_paths[index].c_str());
-        env->SetObjectArrayElement(to_paths, index, value);
-        env->DeleteLocalRef(value);
-      }
-      env->SetObjectField(result, to_paths_field, to_paths);
-      env->DeleteLocalRef(to_paths);
+  SetStringField(env, result, g_copy_group.from, group.from);
+  jobjectArray to_paths = env->NewObjectArray(
+      static_cast<jsize>(group.to_paths.size()), g_copy_group.string_class,
+      nullptr);
+  if (to_paths != nullptr) {
+    for (jsize index = 0; index < static_cast<jsize>(group.to_paths.size());
+         ++index) {
+      jstring value = env->NewStringUTF(group.to_paths[index].c_str());
+      env->SetObjectArrayElement(to_paths, index, value);
+      env->DeleteLocalRef(value);
     }
-  } else {
-    env->ExceptionClear();
+    env->SetObjectField(result, g_copy_group.to_paths, to_paths);
+    env->DeleteLocalRef(to_paths);
   }
 
   return result;
@@ -296,6 +345,14 @@ jobject MakeStateResult(
 
 }  // namespace
 
+bool pushy::jni_natives::InitResultClassCache(JNIEnv* env) {
+  // Every class is attempted so the log names all missing members at once.
+  bool ok = InitStateResultIds(env);
+  ok &= InitPlanResultIds(env);
+  ok &= InitCopyGroupIds(env);
+  return ok;
+}
+
 // 客户端可消费的 diff 轨道版本(能力上报,而非 SDK 版本映射);JS 层经
 // getConstants 暴露,随 checkUpdate 以 diffV 上报,服务端据此下发 v2 轨道。
 jint pushy::jni_natives::SupportedDiffVersion(
@@ -314,6 +371,9 @@ jobject pushy::jni_natives::SyncStateWithBinaryVersion(
   // allocations) must not unwind through the JNI boundary: convert them to a
   // Java RuntimeException like every other failure of these entry points.
   try {
+    if (!RequireReady(env, g_state.ready, "state result")) {
+      return nullptr;
+    }
     pushy::state::State state = ReadStateFromResult(env, state_result);
     pushy::state::BinaryVersionSyncResult result = pushy::state::SyncBinaryVersion(
         state,
@@ -337,6 +397,9 @@ jobject pushy::jni_natives::RunStateCore(
     jboolean flag_a,
     jboolean flag_b) {
   try {
+    if (!RequireReady(env, g_state.ready, "state result")) {
+      return nullptr;
+    }
     const pushy::state::State state = ReadStateFromResult(env, state_result);
     switch (static_cast<StateOperation>(operation)) {
       case StateOperation::kSwitchVersion:
@@ -451,30 +514,20 @@ jobjectArray pushy::jni_natives::BuildCopyGroups(
       return nullptr;
     }
 
-    jclass result_class =
-        env->FindClass(
-          pushy::text::Reveal("3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c83b28a6e732301fed897878c695522").c_str());
-    if (result_class == nullptr) {
+    if (!RequireReady(env, g_copy_group.ready, "copy group result")) {
       return nullptr;
     }
-
-    jclass string_class = env->FindClass("java/lang/String");
-    if (string_class == nullptr) {
-      return nullptr;
-    }
-
     jobjectArray result = env->NewObjectArray(
-        static_cast<jsize>(groups.size()), result_class, nullptr);
+        static_cast<jsize>(groups.size()), g_copy_group.clazz, nullptr);
     if (result == nullptr) {
       return nullptr;
     }
 
     for (jsize index = 0; index < static_cast<jsize>(groups.size()); ++index) {
-      jobject group = NewCopyGroupResult(env, result_class, string_class, groups[index]);
+      jobject group = NewCopyGroupResult(env, groups[index]);
       env->SetObjectArrayElement(result, index, group);
       env->DeleteLocalRef(group);
     }
-    env->DeleteLocalRef(string_class);
     return result;
   } catch (const std::exception& error) {
     ThrowRuntimeException(env, error.what());

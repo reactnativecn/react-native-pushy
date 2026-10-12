@@ -89,6 +89,20 @@ Status CleanupOldEntries(
     int max_age_days,
     std::time_t now = 0);
 
+// Same selection as CleanupOldEntries, but each doomed entry is renamed into
+// trash_dir (created if needed; must be on the same file system, e.g. a
+// dot-named child of root_dir so the selection itself skips it) instead of
+// being deleted. Renames are cheap, so a caller can hold its version-files
+// lock across this call and delete trash_dir's contents after releasing it
+// (CleanupOldEntries(trash_dir, {}, 0)). A name already present in trash_dir
+// (left over by an interrupted earlier delete) gets a numeric suffix.
+Status MoveOldEntriesToTrash(
+    const std::string& root_dir,
+    const std::vector<std::string>& keep_names,
+    int max_age_days,
+    const std::string& trash_dir,
+    std::time_t now = 0);
+
 bool IsSafeRelativePath(const std::string& path);
 
 namespace internal {

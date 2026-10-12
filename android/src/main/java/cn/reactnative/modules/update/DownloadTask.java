@@ -8,9 +8,12 @@ import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableMap;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.DigestOutputStream;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -33,7 +36,9 @@ class DownloadTask implements Runnable {
     private static final String BUNDLE_DELTA_ENTRY =
         Texts.reveal("3319f0d4b6c56a502c3b10fcdca0de7d4b3307e9");
 
-    private static final int DOWNLOAD_CHUNK_SIZE = 4096;
+    // Read size per loop iteration (and the buffer for small in-memory
+    // reads); progress events are throttled separately.
+    private static final int DOWNLOAD_CHUNK_SIZE = 64 * 1024;
     // When the server does not report Content-Length we cannot key progress
     // events on percentage change, so throttle by bytes to avoid flooding the
     // bridge (e.g. a 20MB chunked download would otherwise emit ~5000 events).
@@ -42,7 +47,7 @@ class DownloadTask implements Runnable {
     // slow-dripping connection could occupy the single-threaded download
     // executor indefinitely and starve queued tasks. The call timeout is a
     // generous upper bound sized for large full-package downloads.
-    private static final OkHttpClient HTTP_CLIENT = new OkHttpClient.Builder()
+    private static final OkHttpClient HTTP_CLIENT = HttpClients.base().newBuilder()
             .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
             .writeTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
@@ -62,8 +67,15 @@ class DownloadTask implements Runnable {
         return InstallRecord.stagingDirectoryFor(params.unzipDirectory);
     }
 
-    // SHA-256 of the downloaded archive, computed right before extraction.
+    // SHA-256 of the downloaded archive, recorded in the install record.
     private String artifactSha256 = "";
+    // The archive digest computed while its bytes streamed to disk (a resumed
+    // transfer first hashes the prefix already on disk); null when this task
+    // did not stream the whole file itself and it must be hashed from disk.
+    private String streamedArchiveSha256;
+    // Digest of index.bundlejs computed while a full package was extracted;
+    // null when the bundle was produced some other way (patch tasks).
+    private String stagedBundleSha256;
 
     private static final class PatchArchiveContents {
         final ArrayList<String> entryNames = new ArrayList<String>();
@@ -187,6 +199,7 @@ class DownloadTask implements Runnable {
 
     private void downloadFile() throws IOException {
         this.hash = params.hash;
+        streamedArchiveSha256 = null;
         String url = params.url;
         File writePath = params.targetFile;
         File sidecar = resumeSidecarFile(writePath);
@@ -364,10 +377,16 @@ class DownloadTask implements Runnable {
             // than the margin). A throw keeps the partial for a later attempt.
             long freeSpaceReservedUntil = 0;
 
+            // The archive digest is computed as the bytes reach the file, so
+            // the install does not re-read the whole archive afterwards.
+            MessageDigest digest = UpdateFileUtils.newSha256();
+            if (append) {
+                UpdateFileUtils.updateDigest(digest, writePath);
+            }
             try (
                 BufferedSource source = body.source();
-                BufferedSink sink = Okio.buffer(
-                    append ? Okio.appendingSink(writePath) : Okio.sink(writePath))
+                BufferedSink sink = Okio.buffer(Okio.sink(new DigestOutputStream(
+                    new FileOutputStream(writePath, append), digest)))
             ) {
                 while ((bytesRead = source.read(sink.buffer(), DOWNLOAD_CHUNK_SIZE)) != -1) {
                     received += bytesRead;
@@ -385,7 +404,9 @@ class DownloadTask implements Runnable {
                             throw e;
                         }
                     }
-                    sink.emit();
+                    // Write whole segments only: a 64KB read no longer costs
+                    // a write() syscall per partially filled segment.
+                    sink.emitCompleteSegments();
 
                     long overall = baseOffset + received;
                     if (overall > ArchiveLimits.MAX_ARCHIVE_BYTES) {
@@ -415,6 +436,7 @@ class DownloadTask implements Runnable {
                 throw new IOException("Download incomplete: expected " + totalAll
                     + " bytes, got " + writePath.length());
             }
+            streamedArchiveSha256 = UpdateFileUtils.toHex(digest.digest());
             // Final progress event, skipped when the loop already posted this
             // exact value (known length reaching 100% posts it in-loop).
             if (baseOffset + received != lastPostedBytes) {
@@ -564,17 +586,36 @@ class DownloadTask implements Runnable {
         File work = stagingDirectory();
         UpdateFileUtils.removeDirectory(work);
         UpdateFileUtils.ensureDirectory(work);
-        artifactSha256 = UpdateFileUtils.sha256Hex(params.targetFile);
+        artifactSha256 = archiveSha256();
 
+        // The bundle's digest (for the install record) is taken from the
+        // bytes as they are extracted, instead of re-reading the bundle right
+        // after. Any entry resolving to the bundle path counts; the last write
+        // wins on disk and in the digest alike.
+        File bundleTarget = new File(work, "index.bundlejs").getCanonicalFile();
+        stagedBundleSha256 = null;
         try (SafeZipFile zipFile = new SafeZipFile(params.targetFile)) {
             ensureArchiveWithinLimits(params.targetFile, zipFile, work);
             Enumeration<? extends ZipEntry> entries = zipFile.entries();
             while (entries.hasMoreElements()) {
-                zipFile.unzipToPath(entries.nextElement(), work);
+                ZipEntry entry = entries.nextElement();
+                if (!entry.isDirectory()
+                    && new File(work, entry.getName()).getCanonicalFile().equals(bundleTarget)) {
+                    MessageDigest digest = UpdateFileUtils.newSha256();
+                    zipFile.unzipToPath(entry, work, digest);
+                    stagedBundleSha256 = UpdateFileUtils.toHex(digest.digest());
+                } else {
+                    zipFile.unzipToPath(entry, work);
+                }
             }
         }
 
         deleteConsumedArchive();
+    }
+
+    private String archiveSha256() throws IOException {
+        return streamedArchiveSha256 != null
+            ? streamedArchiveSha256 : UpdateFileUtils.sha256Hex(params.targetFile);
     }
 
     /**
@@ -596,7 +637,8 @@ class DownloadTask implements Runnable {
         if (!bundle.isFile()) {
             throw new IOException("bundle missing after install: " + bundle);
         }
-        String bundleSha256 = UpdateFileUtils.sha256Hex(bundle);
+        String bundleSha256 = stagedBundleSha256 != null
+            ? stagedBundleSha256 : UpdateFileUtils.sha256Hex(bundle);
         InstallRecord.write(
             work, InstallRecord.build(params.hash, bundleSha256, artifactSha256));
         if (params.unzipDirectory.exists()) {
@@ -643,7 +685,7 @@ class DownloadTask implements Runnable {
     private void doPatchFromApk() throws IOException, JSONException {
         downloadFile();
         File work = stagingDirectory();
-        artifactSha256 = UpdateFileUtils.sha256Hex(params.targetFile);
+        artifactSha256 = archiveSha256();
         PatchArchiveContents contents = extractPatchArchive(params.targetFile, work);
 
         buildArchivePlan(
@@ -689,7 +731,7 @@ class DownloadTask implements Runnable {
     private void doPatchFromPpk() throws IOException, JSONException {
         downloadFile();
         File work = stagingDirectory();
-        artifactSha256 = UpdateFileUtils.sha256Hex(params.targetFile);
+        artifactSha256 = archiveSha256();
         PatchArchiveContents contents = extractPatchArchive(params.targetFile, work);
 
         ArchivePatchPlanResult plan = buildArchivePlan(
@@ -716,20 +758,38 @@ class DownloadTask implements Runnable {
         deleteConsumedArchive();
     }
 
+    // Dot-named, so the selection under the versions root never picks it.
+    static final String TRASH_DIR_NAME = ".trash";
+
     private void doCleanUp() {
+        final File trash = new File(params.unzipDirectory, TRASH_DIR_NAME);
+        // Phase 1, under the version-files lock: only renames doomed entries
+        // into the trash, so activation is never blocked behind a recursive
+        // delete of several version directories.
         UpdateContext.getInstance(context).runCleanupWithLatestState(
             new UpdateContext.CleanupAction() {
                 @Override
-                public void run(String keepCurrent, String keepPrevious) {
+                public void run(String[] keepNames) {
                     cleanupOldEntries(
                         params.unzipDirectory.getAbsolutePath(),
-                        keepCurrent,
-                        keepPrevious,
-                        params.maxAgeDays
+                        keepNames,
+                        params.maxAgeDays,
+                        trash.getAbsolutePath()
                     );
                 }
             }
         );
+        // Phase 2, lock released: nothing in the trash is reachable as a
+        // version any more. Also purges leftovers of an interrupted run.
+        // Best effort: phase 1 already succeeded, and a leftover the native
+        // delete cannot remove must not fail every later cleanup task.
+        if (trash.isDirectory()) {
+            try {
+                cleanupOldEntries(trash.getAbsolutePath(), new String[0], 0, null);
+            } catch (RuntimeException e) {
+                Log.w(Texts.LOG_TAG, "Failed to purge cleanup trash", e);
+            }
+        }
     }
 
     private void cleanUpAfterFailure(int taskType) {
@@ -931,11 +991,13 @@ class DownloadTask implements Runnable {
         String hbcTransformMeta
     );
 
+    // trashDir non-empty: move the selected entries there instead of
+    // deleting them (see doCleanUp).
     private static native void cleanupOldEntries(
         String rootDir,
-        String keepCurrent,
-        String keepPrevious,
-        int maxAgeDays
+        String[] keepNames,
+        int maxAgeDays,
+        String trashDir
     );
 
     private static native ArchivePatchPlanResult buildArchivePlan(

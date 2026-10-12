@@ -19,7 +19,12 @@ RNU_E2E_SKIP_PREPARE=true npm run test:e2e:harmony
 ```
 
 套件：`local-update.test.ts`（完整更新流：BINARY_BASE → v1 全量 → v2 ppk 差量 →
-重启持久化 → upToDate）；`smoke.test.ts`（驱动自检）。
+bundleHash 与 hap 内 `rawfile/bundle.harmony.js` 的 sha256 一致 → v3 包差量（以 hap
+内置 bundle 为源）→ v4 v2-track 差量 → 重启持久化 → upToDate）；`smoke.test.ts`（驱动自检）。
+
+v3 包差量以已安装 hap 为源，只能在 assembleHap 之后生成：`build-harmony-e2e.sh`
+会在出包后以 `E2E_HARMONY_PACKAGE_DIFF_ONLY=true` 补跑这一步。换了 hap 却没重新生成
+差量（例如只手动 assembleHap），v3 会因源校验失败而卡住。
 
 ## 前置条件
 

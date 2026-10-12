@@ -49,6 +49,12 @@ const androidArchitectures = process.env.DETOX_ANDROID_ARCHS
 const iosBuildBase =
   'xcodebuild -workspace ios/AwesomeProject.xcworkspace -UseNewBuildSystem=NO -scheme AwesomeProject -sdk iphonesimulator -destination "generic/platform=iOS Simulator" -derivedDataPath ios/build';
 
+// One AVD can only be booted once: a second Detox worker on Android retries
+// booting the same emulator until the job times out (the 2026-07-30 e2e
+// breakage). Pin Android to a single worker here instead of on every
+// `detox test` command line.
+const androidRunner = { args: { maxWorkers: 1 } };
+
 /** @type {import('detox').DetoxConfig} */
 const config = {
   logger: {
@@ -57,6 +63,8 @@ const config = {
   testRunner: {
     args: {
       config: 'e2e/jest.config.js',
+      // iOS on CI: two workers, each on its own cloned simulator. Android
+      // overrides this to 1 (androidRunner below).
       maxWorkers: process.env.CI ? 2 : undefined,
       _: ['e2e'],
     },
@@ -128,18 +136,22 @@ const config = {
     'android.att.debug': {
       device: 'attached',
       app: 'android.debug',
+      testRunner: androidRunner,
     },
     'android.att.release': {
       device: 'attached',
       app: 'android.release',
+      testRunner: androidRunner,
     },
     'android.emu.debug': {
       device: 'emulator',
       app: 'android.debug',
+      testRunner: androidRunner,
     },
     'android.emu.release': {
       device: 'emulator',
       app: 'android.release',
+      testRunner: androidRunner,
     },
   },
 };

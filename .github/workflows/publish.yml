@@ -9,17 +9,46 @@ env:
 permissions:
   id-token: write  # Required for OIDC
   contents: read
+  statuses: read  # native-required gate check
 
 jobs:
   check_changes:
     runs-on: ubuntu-latest  # npm --provenance requires a GitHub-hosted runner
+    # Room for the native-required wait below.
+    timeout-minutes: 60
     outputs:
       harmony_changed: ${{ steps.check.outputs.changed }}
       prev_tag: ${{ steps.check.outputs.prev_tag }}
     steps:
-      - uses: actions/checkout@v7
+      # Both publish jobs need this job, so a release can only ship a commit
+      # whose lint/test/native E2E gate (native-gate.yml posts it as the
+      # "native-required" commit status) is green. Pending or not yet posted
+      # (a release cut right after the push) is waited out; failure, error
+      # or a status that never shows up fails the release.
+      - name: Require native-required to be green for the release commit
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.sha }}
+        run: |
+          for attempt in $(seq 1 45); do
+            state="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
+              --jq '[.statuses[] | select(.context == "native-required")][0].state // "missing"')"
+            echo "native-required for $SHA: $state"
+            case "$state" in
+              success) exit 0 ;;
+              pending|missing) sleep 60 ;;
+              *) echo "::error::native-required is $state for $SHA; fix CI before publishing"; exit 1 ;;
+            esac
+          done
+          echo "::error::native-required for $SHA did not turn green within 45 minutes"
+          exit 1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          # Only tags, commits and trees are read (git tag --merged, git diff
+          # --name-only); skip the blobs of the whole history.
+          filter: blob:none
       - name: Check Harmony changes
         id: check
         shell: bash
@@ -69,7 +98,7 @@ jobs:
       # Keep in sync with PINNED_NDK_VERSION in scripts/build-android-so.sh.
       NDK_VERSION: 28.2.13676358
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Install pinned NDK
@@ -80,7 +109,7 @@ jobs:
         # resolution order — force the pinned one so published .so files don't
         # drift with runner image upgrades.
         run: ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$NDK_VERSION" bash scripts/build-android-so.sh
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-so
           path: android/lib/
@@ -94,18 +123,18 @@ jobs:
     container: ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image:latest@sha256:2836142b7b6ae8837ad0e36cacc650f00e8c88f55b4e9f34be66cc98a731c5da
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Configure git safe.directory
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git submodule foreach --recursive 'git config --global --add safe.directory "$toplevel/$sm_path"'
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.0
       # Setup .npmrc file to publish to npm
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
@@ -116,7 +145,7 @@ jobs:
       - name: Remove committed Android native libraries
         run: rm -rf android/lib
       - name: Use CI-built Android native libraries
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: android-so
           path: android/lib
@@ -145,18 +174,18 @@ jobs:
     runs-on: ubuntu-latest  # npm --provenance requires a GitHub-hosted runner
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
       - name: Configure git safe.directory
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git submodule foreach --recursive 'git config --global --add safe.directory "$toplevel/$sm_path"'
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.0
       # Setup .npmrc file to publish to npm
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
@@ -167,14 +196,15 @@ jobs:
       - name: Remove committed Android native libraries
         run: rm -rf android/lib
       - name: Use CI-built Android native libraries
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: android-so
           path: android/lib
       - name: Verify Android native libraries
         run: node scripts/verify-android-so.js
       # Fail closed: the package must always ship harmony/pushy.har
-      # (.npmignore explicitly whitelists it). If the previous release can't
+      # (package.json `files` lists it and check-packlist.js --release
+      # requires it). If the previous release can't
       # be fetched, fix the cause or re-run — never publish a HAR-less package.
       - name: Fetch previous Harmony HAR
         shell: bash

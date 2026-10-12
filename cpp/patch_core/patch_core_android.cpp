@@ -77,15 +77,20 @@ void pushy::jni_natives::CleanupOldEntries(
     JNIEnv* env,
     jclass,
     jstring root_dir,
-    jstring keep_current,
-    jstring keep_previous,
-    jint max_age_days) {
+    jobjectArray keep_names,
+    jint max_age_days,
+    jstring trash_dir) {
   try {
-    const pushy::delta::Status status = pushy::delta::CleanupOldEntries(
-        JStringToString(env, root_dir),
-        JStringToString(env, keep_current),
-        JStringToString(env, keep_previous),
-        static_cast<int>(max_age_days));
+    const std::string root = JStringToString(env, root_dir);
+    const std::vector<std::string> keep = JArrayToVector(env, keep_names);
+    const std::string trash = JStringToString(env, trash_dir);
+    // A trash directory turns the delete into renames (cheap enough to run
+    // under the caller's version-files lock); the caller purges it later.
+    const pushy::delta::Status status = trash.empty()
+        ? pushy::delta::CleanupOldEntries(
+              root, keep, static_cast<int>(max_age_days))
+        : pushy::delta::MoveOldEntriesToTrash(
+              root, keep, static_cast<int>(max_age_days), trash);
     if (!status.ok) {
       ThrowRuntimeException(env, status.message);
     }

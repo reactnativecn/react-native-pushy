@@ -12,7 +12,6 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
@@ -29,6 +28,10 @@ public class UpdateContext {
     private final File rootDir;
     private final Executor executor;
     private final SharedPreferences sp;
+    // The native check's raw response cache (SyncCoordinator.KEY_RESP_CACHE)
+    // lives in its own file: it is a whole server response, and keeping it in
+    // sp made every small state commit rewrite it.
+    private final SharedPreferences checkCacheSp;
     // Our own PackageInfo, looked up once: every getPackageInfo call is a
     // Binder IPC, and the constructor, the bundle-hash cache and the native
     // check all need the version name / install time.
@@ -48,6 +51,16 @@ public class UpdateContext {
     // running app has not loaded yet. Volatile: written during launch, read
     // from the state serial and download executors.
     private volatile String launchVersion;
+    // bundleSha256 of launchVersion's install record, read once at launch
+    // resolution so getConstants does not hit the file system on the JS
+    // thread. {hash, sha256}; null until a version was resolved.
+    private volatile String[] launchBundleSha256;
+    // bundleHash of the embedded bundle, computed once per process on its own
+    // thread (see startBundleHashComputation); null until known.
+    private final Object bundleHashLock = new Object();
+    private String bundleHash;
+    private java.util.ArrayList<BundleHashListener> pendingBundleHashListeners =
+        new java.util.ArrayList<>();
     private static final int STATE_OP_SWITCH_VERSION = 1;
     private static final int STATE_OP_MARK_SUCCESS = 2;
     private static final int STATE_OP_ROLLBACK = 3;
@@ -114,6 +127,8 @@ public class UpdateContext {
         }
 
         this.sp = this.context.getSharedPreferences(Texts.reveal("2f07f0d0ba8e"), Context.MODE_PRIVATE);
+        this.checkCacheSp = this.context.getSharedPreferences(
+            Texts.reveal("2f07f0d0ba8e") + "_check", Context.MODE_PRIVATE);
         this.packageInfo = lookupPackageInfo(this.context);
         this.reactInstanceManager = pendingReactInstanceManager;
 
@@ -132,6 +147,23 @@ public class UpdateContext {
             editor.clear();
             applyState(editor, nextState);
             persistEditor(editor, "sync state with binary version");
+            clearNativeCheckCache();
+        } else {
+            migrateNativeCheckCache();
+        }
+        startBundleHashComputation();
+    }
+
+    // One-time move of the response cache out of the main state file.
+    private void migrateNativeCheckCache() {
+        String legacy = sp.getString(SyncCoordinator.KEY_RESP_CACHE, null);
+        if (legacy == null) {
+            return;
+        }
+        if (checkCacheSp.edit().putString(SyncCoordinator.KEY_RESP_CACHE, legacy).commit()) {
+            SharedPreferences.Editor editor = sp.edit();
+            editor.remove(SyncCoordinator.KEY_RESP_CACHE);
+            persistEditor(editor, "migrate check cache");
         }
     }
 
@@ -177,32 +209,92 @@ public class UpdateContext {
      * identity of the binary itself, not of whatever hot update is currently
      * running. Hashes exactly the bytes pdiff patches from: the hardcoded
      * "index.android.bundle" asset read via AssetManager, same as
-     * DownloadTask.copyBundledAssetToFile. Runs on the download executor;
-     * never fails — an empty string means "unknown" and the server falls back
-     * to the buildTime heuristic.
+     * DownloadTask.copyBundledAssetToFile. Never fails — an empty string
+     * means "unknown" and the server falls back to the buildTime heuristic.
      *
-     * Deliberately java.security.MessageDigest instead of the C++
-     * pushy::digest: librnpushy.so is a prebuilt artifact and this must not
-     * force a rebuild. The NIST vectors in the patch_core tests anchor both
-     * implementations to the same standard.
+     * Computed once per process on a dedicated thread started by the
+     * constructor (not on the download executor, where it used to queue
+     * behind cleanup and downloads and make the first JS checkUpdate send an
+     * empty hash). The listener runs on that thread, or on the caller's when
+     * the value is already known.
+     *
+     * java.security.MessageDigest rather than the C++ pushy::digest: the
+     * bytes come from an AssetManager stream on the Java side, and the
+     * platform digest is native-backed already. The NIST vectors in the
+     * patch_core tests anchor both implementations to the same standard.
      */
     public void getBundleHash(final BundleHashListener listener) {
-        if (DEBUG) {
-            // Metro serves the bundle in debug; mirror the dev buildTime behaviour.
-            listener.onBundleHash("");
-            return;
-        }
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                listener.onBundleHash(computeBundleHash());
+        String known;
+        synchronized (bundleHashLock) {
+            known = bundleHash;
+            if (known == null) {
+                pendingBundleHashListeners.add(listener);
+                return;
             }
-        });
+        }
+        listener.onBundleHash(known);
     }
 
     // Package-private: also the native cold-start check's request input
-    // (SyncCoordinator). Blocking — call off the main thread.
+    // (SyncCoordinator). Blocks until the shared computation finished — call
+    // off the main thread.
     String computeBundleHash() {
+        synchronized (bundleHashLock) {
+            while (bundleHash == null) {
+                try {
+                    bundleHashLock.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return "";
+                }
+            }
+            return bundleHash;
+        }
+    }
+
+    private void startBundleHashComputation() {
+        if (DEBUG) {
+            // Metro serves the bundle in debug; mirror the dev buildTime behaviour.
+            publishBundleHash("");
+            return;
+        }
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String hash = "";
+                try {
+                    hash = loadOrHashBundledAsset();
+                } catch (Throwable e) {
+                    Log.w(TAG, "bundle hash failed: " + e);
+                } finally {
+                    publishBundleHash(hash);
+                }
+            }
+        }, "pushy-bundle-hash");
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private void publishBundleHash(String hash) {
+        java.util.ArrayList<BundleHashListener> listeners;
+        synchronized (bundleHashLock) {
+            bundleHash = hash;
+            listeners = pendingBundleHashListeners;
+            pendingBundleHashListeners = null;
+            bundleHashLock.notifyAll();
+        }
+        if (listeners != null) {
+            for (BundleHashListener listener : listeners) {
+                try {
+                    listener.onBundleHash(hash);
+                } catch (Throwable e) {
+                    Log.w(TAG, "bundle hash listener failed: " + e);
+                }
+            }
+        }
+    }
+
+    private String loadOrHashBundledAsset() {
         String cachePrefix = getPackageVersion() + "|" + getPackageLastUpdateTime() + "|";
         String cached = sp.getString(KEY_BUNDLE_HASH_CACHE, null);
         if (cached != null && cached.startsWith(cachePrefix)) {
@@ -223,20 +315,14 @@ public class UpdateContext {
 
     private String sha256OfBundledAsset(String assetName) {
         try (InputStream in = context.getAssets().open(assetName)) {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            MessageDigest md = UpdateFileUtils.newSha256();
             byte[] buffer = new byte[64 * 1024];
             int read;
             while ((read = in.read(buffer)) != -1) {
                 md.update(buffer, 0, read);
             }
-            byte[] digest = md.digest();
-            StringBuilder hex = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                hex.append(Character.forDigit((b >> 4) & 0xf, 16));
-                hex.append(Character.forDigit(b & 0xf, 16));
-            }
-            return hex.toString();
-        } catch (IOException | NoSuchAlgorithmException e) {
+            return UpdateFileUtils.toHex(md.digest());
+        } catch (IOException e) {
             // Expected when there is no embedded bundle (custom name, no
             // release bundle); "unknown" is a valid answer, not an error.
             Log.i(TAG, "Cannot hash bundled asset " + assetName + ": " + e);
@@ -407,6 +493,16 @@ public class UpdateContext {
     }
 
     /**
+     * Asynchronous variant for the getConstants path (JS thread): the
+     * in-memory state changes immediately, the disk write happens on the
+     * SharedPreferences writer. Losing it to a crash only re-reports the
+     * one-shot markers on the next launch.
+     */
+    private static void applyEditor(SharedPreferences.Editor editor) {
+        editor.apply();
+    }
+
+    /**
      * Persistence for operations whose result is promised to a caller
      * (switchVersion / markSuccess / setLocalHashInfo / the cold-start round):
      * a commit that did not reach disk is a failed operation, never a
@@ -518,9 +614,9 @@ public class UpdateContext {
 
     /**
      * Reads and clears the first-load marker and the rollback mark in one
-     * commit. getConstants runs this synchronously on the JS thread (a
-     * TurboModule constant read), so the two writes are folded into a single
-     * editor; persistence is best-effort on this launch path.
+     * editor. getConstants runs this synchronously on the JS thread (a
+     * TurboModule constant read), so the write is applied asynchronously;
+     * persistence is best-effort on this launch path.
      */
     LaunchMarkers consumeLaunchMarkers() {
         LaunchMarkers markers;
@@ -543,7 +639,7 @@ public class UpdateContext {
                     );
                     applyState(editor, nextState);
                 }
-                persistEditor(editor, "consume launch markers");
+                applyEditor(editor);
             }
         }
         if (markers.rolledBackVersion != null) {
@@ -606,6 +702,11 @@ public class UpdateContext {
         resetState.firstTime = false;
         resetState.firstTimeOk = true;
         String uuid = sp.getString("uuid", null);
+        // The cached check response still advertises the version this reset
+        // removes; drop it first so a failure aborts before the state wipe.
+        if (!clearNativeCheckCache()) {
+            throw new IllegalStateException("Failed to persist state for reset check cache");
+        }
         SharedPreferences.Editor editor = sp.edit();
         editor.clear();
         applyState(editor, resetState);
@@ -614,8 +715,6 @@ public class UpdateContext {
         }
         persistEditorOrThrow(editor, "reset to packaged bundle");
         ignoreRollback = false;
-        // editor.clear() above already dropped the cached check response; it
-        // still advertised the version this reset removed.
         Log.i(TAG, "Reset to packaged bundle");
 
         DownloadTaskParams params = new DownloadTaskParams();
@@ -721,6 +820,8 @@ public class UpdateContext {
                         continue;
                     }
                     launchVersion = currentVersion;
+                    launchBundleSha256 = new String[] {
+                        currentVersion, readBundleSha256(currentVersion)};
                     syncRolledBackVersion = rolledBackVersion();
                     return bundleFile.toString();
                 }
@@ -747,15 +848,22 @@ public class UpdateContext {
 
     void setNativeConfig(String config) {
         synchronized (commitLock) {
-            boolean changed = !config.equals(sp.getString(SyncCoordinator.KEY_CONFIG, null));
+            // Canonical comparison (ConfigEquivalence): re-sending the same
+            // config with another key order or trailing slashes must not
+            // cancel an in-flight round or drop its cache.
+            boolean changed = !ConfigEquivalence.equivalent(
+                config, sp.getString(SyncCoordinator.KEY_CONFIG, null));
             SharedPreferences.Editor editor = sp.edit();
             if (changed) {
                 // Also invalidate on a failed persistence attempt: an older
                 // round must not commit over uncertain configuration state.
                 resetGeneration.incrementAndGet();
                 nativeConfigGeneration.incrementAndGet();
-                editor.remove(SyncCoordinator.KEY_RESP_CACHE);
                 SyncCoordinator.recordJsRound(null);
+                if (!clearNativeCheckCache()) {
+                    throw new IllegalStateException(
+                        "Failed to persist state for configuration check cache");
+                }
             }
             // A native-only first launch needs a stable gray-release identity
             // before JS initializes. Never replace an existing installation ID.
@@ -820,12 +928,19 @@ public class UpdateContext {
             if (switching) {
                 applyState(editor, computeSwitchState(hash));
             }
-            if (responseCacheJson != null) {
-                editor.putString(SyncCoordinator.KEY_RESP_CACHE, responseCacheJson);
-            }
+            // The round is over once its result lands: clear the
+            // interrupted-round breadcrumb in the same commit.
+            editor.remove(SyncCoordinator.KEY_ROUND_INCOMPLETE);
             persistEditorOrThrow(editor, "commit sync result");
             if (switching) {
                 ignoreRollback = false;
+            }
+            // Advisory cache, separate file: written after the state it
+            // describes, still under commitLock so a reset cannot interleave.
+            if (responseCacheJson != null
+                && !checkCacheSp.edit()
+                    .putString(SyncCoordinator.KEY_RESP_CACHE, responseCacheJson).commit()) {
+                Log.w(TAG, "Failed to persist native sync response cache");
             }
             return true;
         }
@@ -837,11 +952,36 @@ public class UpdateContext {
      * unreadable record. Exposed to JS for crash-report attribution.
      */
     String currentBundleSha256(String hash) {
+        String[] cached = launchBundleSha256;
+        if (cached != null && cached[0].equals(hash)) {
+            return cached[1];
+        }
+        return readBundleSha256(hash);
+    }
+
+    private String readBundleSha256(String hash) {
         if (hash == null || hash.isEmpty() || !UpdateFileUtils.isSafePathComponent(hash)) {
             return "";
         }
         JSONObject record = InstallRecord.read(new File(rootDir, hash));
         return record == null ? "" : record.optString("bundleSha256", "");
+    }
+
+    /** Raw native check response for JS (§10.3); null when absent. */
+    @Nullable
+    String getNativeCheckCache() {
+        return checkCacheSp.getString(SyncCoordinator.KEY_RESP_CACHE, null);
+    }
+
+    private boolean clearNativeCheckCache() {
+        if (!checkCacheSp.contains(SyncCoordinator.KEY_RESP_CACHE)) {
+            return true;
+        }
+        if (!checkCacheSp.edit().remove(SyncCoordinator.KEY_RESP_CACHE).commit()) {
+            Log.e(TAG, "Failed to clear native sync response cache");
+            return false;
+        }
+        return true;
     }
 
     boolean hasCompletedVersion(String hash) {
@@ -884,10 +1024,15 @@ public class UpdateContext {
     }
 
     interface CleanupAction {
-        void run(@Nullable String keepCurrent, @Nullable String keepPrevious);
+        void run(String[] keepNames);
     }
 
-    /** Resolve keep names immediately before deletion, never when enqueued. */
+    /**
+     * Resolve keep names immediately before the cleanup acts, never when
+     * enqueued. The action runs under versionFilesLock, so it must stay cheap
+     * (DownloadTask only renames doomed entries into a trash directory and
+     * deletes them after this returns).
+     */
     void runCleanupWithLatestState(CleanupAction action) {
         synchronized (versionFilesLock) {
             final String[] keepNames;
@@ -898,13 +1043,7 @@ public class UpdateContext {
                     launchVersion
                 );
             }
-            if (keepNames == null) {
-                // JNI has only two keep slots; three distinct live versions are
-                // safer to defer until the next process than to delete one.
-                Log.i(TAG, "Skipping cleanup: three live versions need protection");
-                return;
-            }
-            action.run(keepNames[0], keepNames[1]);
+            action.run(keepNames);
         }
     }
 

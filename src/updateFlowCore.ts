@@ -118,6 +118,107 @@ export const dedupeEndpoints = (
   return result;
 };
 
+// Values the natives assume for keys a persisted native check config omits.
+const NATIVE_CONFIG_DEFAULTS: Record<string, unknown> = {
+  disabled: false,
+  queryUrls: [],
+  rnu: '',
+  rn: '',
+  afterDownload: 'none',
+};
+
+const jsonDeepEqual = (a: unknown, b: unknown): boolean => {
+  if (a === b) {
+    return true;
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return (
+      Array.isArray(a) &&
+      Array.isArray(b) &&
+      a.length === b.length &&
+      a.every((value, index) => jsonDeepEqual(value, b[index]))
+    );
+  }
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object') {
+    return false;
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const leftKeys = Object.keys(left);
+  return (
+    leftKeys.length === Object.keys(right).length &&
+    leftKeys.every(
+      (key) => Object.hasOwn(right, key) && jsonDeepEqual(left[key], right[key])
+    )
+  );
+};
+
+// Each string loses every trailing '/', then entries (strings or not) are
+// deduplicated by JSON value, keeping the first occurrence.
+const canonicalUrlList = (value: unknown): unknown => {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+  const result: unknown[] = [];
+  const visited = new Set<string>();
+  for (const item of value) {
+    if (typeof item === 'string') {
+      const url = item.replace(/\/+$/, '');
+      if (!visited.has(url)) {
+        visited.add(url);
+        result.push(url);
+      }
+    } else if (!result.some((existing) => jsonDeepEqual(existing, item))) {
+      result.push(item);
+    }
+  }
+  return result;
+};
+
+/**
+ * Canonical form of a persisted native check config (shared contract C1 with
+ * the Android/iOS/Harmony natives): absent keys take their native defaults,
+ * `endpoints`/`queryUrls` lose trailing '/' and duplicates (first occurrence
+ * kept). Undefined when the JSON is unparseable or not an object.
+ */
+export function canonicalizeNativeConfig(
+  configJson: string
+): Record<string, unknown> | undefined {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(configJson);
+  } catch {
+    return undefined;
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return undefined;
+  }
+  const canonical: Record<string, unknown> = {
+    ...NATIVE_CONFIG_DEFAULTS,
+    ...(parsed as Record<string, unknown>),
+  };
+  for (const key of ['endpoints', 'queryUrls']) {
+    if (key in canonical) {
+      canonical[key] = canonicalUrlList(canonical[key]);
+    }
+  }
+  return canonical;
+}
+
+/**
+ * Whether two native check config JSON strings describe the same config
+ * (contract C1): their canonical forms are deep-equal, key order ignored.
+ * Anything unparseable is never equivalent.
+ */
+export function nativeConfigsEquivalent(
+  leftJson: string,
+  rightJson: string
+): boolean {
+  const left = canonicalizeNativeConfig(leftJson);
+  const right = canonicalizeNativeConfig(rightJson);
+  return !!left && !!right && jsonDeepEqual(left, right);
+}
+
 /**
  * The endpoint plan: dedupe, then move the sampled pick to the front (load
  * spreading), keeping the rest in configured order as the fallback sequence.

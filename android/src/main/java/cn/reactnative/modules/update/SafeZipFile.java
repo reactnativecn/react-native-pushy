@@ -1,11 +1,12 @@
 package cn.reactnative.modules.update;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.security.DigestOutputStream;
+import java.security.MessageDigest;
 import java.util.Enumeration;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -17,7 +18,7 @@ public class SafeZipFile extends ZipFile {
         super(file);
     }
 
-    private static final int BUFFER_SIZE = 8192;
+    private static final int BUFFER_SIZE = 64 * 1024;
 
     // Bytes written by unzipToFile across the archive: the sum of the central
     // directory's declared sizes is checked up front (inspect), the actual
@@ -124,6 +125,11 @@ public class SafeZipFile extends ZipFile {
     }
 
     public void unzipToPath(ZipEntry ze, File targetPath) throws IOException {
+        unzipToPath(ze, targetPath, null);
+    }
+
+    /** As above; a non-null digest is fed every byte written for the entry. */
+    void unzipToPath(ZipEntry ze, File targetPath, MessageDigest digest) throws IOException {
         String name = ze.getName();
         File target = new File(targetPath, name);
 
@@ -141,10 +147,14 @@ public class SafeZipFile extends ZipFile {
             target.mkdirs();
             return;
         }
-        unzipToFile(ze, target);
+        unzipToFile(ze, target, digest);
     }
 
     public void unzipToFile(ZipEntry ze, File target) throws IOException {
+        unzipToFile(ze, target, null);
+    }
+
+    private void unzipToFile(ZipEntry ze, File target, MessageDigest digest) throws IOException {
         File parent = target.getParentFile();
         if (parent != null && !parent.exists() && !parent.mkdirs() && !parent.exists()) {
             throw new IOException("Failed to create parent dir for " + target);
@@ -157,9 +167,12 @@ public class SafeZipFile extends ZipFile {
             ? Math.min(declared, ArchiveLimits.MAX_ENTRY_BYTES)
             : ArchiveLimits.MAX_ENTRY_BYTES;
         long written = 0;
-        try (InputStream inputStream = getInputStream(ze)) {
-            try (BufferedOutputStream output = new BufferedOutputStream(new FileOutputStream(target));
-                 BufferedInputStream input = new BufferedInputStream(inputStream)) {
+        // One 64KB buffer, no extra buffered wrappers: every read/write is
+        // already a large block.
+        try (InputStream input = getInputStream(ze)) {
+            try (OutputStream output = digest == null
+                     ? new FileOutputStream(target)
+                     : new DigestOutputStream(new FileOutputStream(target), digest)) {
                 byte[] buffer = new byte[BUFFER_SIZE];
                 int n;
                 while ((n = input.read(buffer, 0, BUFFER_SIZE)) >= 0) {

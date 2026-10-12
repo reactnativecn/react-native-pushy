@@ -45,6 +45,8 @@ public class UpdateModuleImpl {
         String currentVersion = updateContext.getCurrentVersion();
         constants.put("currentVersion", currentVersion);
         constants.put("currentVersionInfo", updateContext.getKv("hash_" + currentVersion));
+        // Served from the value cached at launch resolution (no file read on
+        // the JS thread) when currentVersion is the launched version.
         constants.put("currentBundleSha256", updateContext.currentBundleSha256(currentVersion));
         constants.put("buildTime", updateContext.getBuildTime());
         constants.put("isUsingBundleUrl", updateContext.getIsUsingBundleUrl());
@@ -284,7 +286,7 @@ public class UpdateModuleImpl {
     }
 
     public void getBundleHash(final Promise promise) {
-        // Threading lives in UpdateContext (download executor); resolve is
+        // Threading lives in UpdateContext (its bundle-hash thread); resolve is
         // thread-safe. Never rejects — empty string means "unknown".
         updateContext.getBundleHash(new UpdateContext.BundleHashListener() {
             @Override
@@ -310,7 +312,7 @@ public class UpdateModuleImpl {
      * rejects.
      */
     public void getNativeCheckCache(final Promise promise) {
-        String cached = updateContext.getKv(SyncCoordinator.KEY_RESP_CACHE);
+        String cached = updateContext.getNativeCheckCache();
         promise.resolve(cached == null ? "" : cached);
     }
 
