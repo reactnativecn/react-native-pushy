@@ -1,8 +1,6 @@
 package cn.reactnative.modules.update;
 
 import android.content.Context;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -32,9 +30,9 @@ final class BundledResourceCopier {
         }
     }
 
-    // Holds the exact archive a CRC32 match came from, so the fallback copy
-    // reads from that archive even if another APK exposes the same entry name
-    // with different bytes.
+    // An entry together with the exact archive it came from, so a copy reads
+    // from that archive even if another APK exposes the same entry name with
+    // different bytes.
     private static final class ZipSource {
         final ZipEntry entry;
         final SafeZipFile zipFile;
@@ -54,9 +52,9 @@ final class BundledResourceCopier {
         HashMap<String, Long> crcByFrom
     ) throws IOException {
         ArrayList<String> apkPaths = collectApkPaths();
-        HashMap<String, ZipEntry> availableEntries = new HashMap<String, ZipEntry>();
-        HashMap<String, SafeZipFile> zipFileMap = new HashMap<String, SafeZipFile>();
-        HashMap<String, SafeZipFile> entryToZipFileMap = new HashMap<String, SafeZipFile>();
+        ArrayList<SafeZipFile> zipFiles = new ArrayList<SafeZipFile>();
+        // Entry name -> first archive (base APK first) that carries it.
+        HashMap<String, ZipSource> availableEntries = new HashMap<String, ZipSource>();
         // Content checksum index: CRC32 -> matched archive source. Lets us
         // locate a file by content when its origin path is not present verbatim
         // on device (e.g. APK baseline diff applied on an AAB/split-apk install
@@ -66,18 +64,18 @@ final class BundledResourceCopier {
         try {
             for (String apkPath : apkPaths) {
                 SafeZipFile zipFile = new SafeZipFile(new File(apkPath));
-                zipFileMap.put(apkPath, zipFile);
+                zipFiles.add(zipFile);
                 Enumeration<? extends ZipEntry> entries = zipFile.entries();
                 while (entries.hasMoreElements()) {
                     ZipEntry ze = entries.nextElement();
-                    String entryName = ze.getName();
-                    if (!availableEntries.containsKey(entryName)) {
-                        availableEntries.put(entryName, ze);
-                        entryToZipFileMap.put(entryName, zipFile);
+                    ZipSource source = new ZipSource(ze, zipFile);
+                    // No Map.putIfAbsent: it is API 24+ and minSdk is 21.
+                    if (!availableEntries.containsKey(ze.getName())) {
+                        availableEntries.put(ze.getName(), source);
                     }
                     long crc = ze.getCrc();
                     if (crc != -1L && !crcToEntry.containsKey(crc)) {
-                        crcToEntry.put(crc, new ZipSource(ze, zipFile));
+                        crcToEntry.put(crc, source);
                     }
                 }
             }
@@ -85,10 +83,11 @@ final class BundledResourceCopier {
             HashMap<String, String> normalizedEntryMap = new HashMap<String, String>();
             for (String entryName : availableEntries.keySet()) {
                 String normalized = normalizeResPath(entryName);
-                normalizedEntryMap.putIfAbsent(normalized, entryName);
+                if (!normalizedEntryMap.containsKey(normalized)) {
+                    normalizedEntryMap.put(normalized, entryName);
+                }
             }
 
-            SafeZipFile baseZipFile = zipFileMap.get(context.getPackageResourcePath());
             HashMap<String, ArrayList<File>> remainingFiles =
                 new HashMap<String, ArrayList<File>>(resToCopy);
             // Track copies that were located but failed to write. These are real
@@ -109,9 +108,8 @@ final class BundledResourceCopier {
                     continue;
                 }
 
-                ZipEntry entry = availableEntries.get(fromPath);
+                ZipSource entry = availableEntries.get(fromPath);
                 String actualSourcePath = fromPath;
-                SafeZipFile matchedZipFile = null;
                 ResolvedResourceSource resolvedResource = null;
                 Long wantedCrc = crcByFrom != null ? crcByFrom.get(fromPath) : null;
 
@@ -130,7 +128,8 @@ final class BundledResourceCopier {
                 // locate the expected content elsewhere. An entry with an
                 // unknown CRC (-1) cannot be verified and is accepted as-is.
                 if (entry != null && wantedCrc != null
-                    && entry.getCrc() != -1L && entry.getCrc() != wantedCrc.longValue()) {
+                    && entry.entry.getCrc() != -1L
+                    && entry.entry.getCrc() != wantedCrc.longValue()) {
                     entry = null;
                     actualSourcePath = fromPath;
                 }
@@ -141,8 +140,7 @@ final class BundledResourceCopier {
                 if (entry == null && wantedCrc != null) {
                     ZipSource matched = crcToEntry.get(wantedCrc);
                     if (matched != null) {
-                        entry = matched.entry;
-                        matchedZipFile = matched.zipFile;
+                        entry = matched;
                         actualSourcePath = matched.entry.getName();
                     }
                 }
@@ -166,7 +164,7 @@ final class BundledResourceCopier {
                         // archives so the right variant is used. (openRawResource
                         // would re-resolve the id at the current configuration
                         // density and ignore the requested one.)
-                        ZipEntry resolvedEntry = availableEntries.get(actualSourcePath);
+                        ZipSource resolvedEntry = availableEntries.get(actualSourcePath);
                         if (resolvedEntry != null) {
                             entry = resolvedEntry;
                             resolvedResource = null;
@@ -184,13 +182,7 @@ final class BundledResourceCopier {
                         if (lastTarget != null) {
                             UpdateFileUtils.copyFile(lastTarget, target);
                         } else if (entry != null) {
-                            SafeZipFile sourceZipFile = matchedZipFile != null
-                                ? matchedZipFile
-                                : entryToZipFileMap.get(actualSourcePath);
-                            if (sourceZipFile == null) {
-                                sourceZipFile = baseZipFile;
-                            }
-                            sourceZipFile.unzipToFile(entry, target);
+                            entry.zipFile.unzipToFile(entry.entry, target);
                         } else {
                             InputStream in = openResolvedResourceStream(resolvedResource);
                             UpdateFileUtils.copyInputStreamToFile(in, target);
@@ -235,7 +227,7 @@ final class BundledResourceCopier {
                 );
             }
         } finally {
-            closeZipFiles(zipFileMap);
+            closeZipFiles(zipFiles);
         }
     }
 
@@ -354,29 +346,21 @@ final class BundledResourceCopier {
         }
     }
 
+    // The base APK first, then the split APKs of an AAB install.
     private ArrayList<String> collectApkPaths() {
         ArrayList<String> apkPaths = new ArrayList<String>();
         apkPaths.add(context.getPackageResourcePath());
-
-        try {
-            ApplicationInfo appInfo =
-                context.getPackageManager().getApplicationInfo(context.getPackageName(), 0);
-            if (appInfo.splitSourceDirs != null) {
-                for (String splitPath : appInfo.splitSourceDirs) {
-                    apkPaths.add(splitPath);
-                }
-            }
-        } catch (PackageManager.NameNotFoundException e) {
-            if (UpdateContext.DEBUG) {
-                Log.w(Texts.LOG_TAG, "Failed to get application info: " + e.getMessage());
+        String[] splitSourceDirs = context.getApplicationInfo().splitSourceDirs;
+        if (splitSourceDirs != null) {
+            for (String splitPath : splitSourceDirs) {
+                apkPaths.add(splitPath);
             }
         }
-
         return apkPaths;
     }
 
-    private void closeZipFiles(HashMap<String, SafeZipFile> zipFileMap) {
-        for (SafeZipFile zipFile : zipFileMap.values()) {
+    private void closeZipFiles(ArrayList<SafeZipFile> zipFiles) {
+        for (SafeZipFile zipFile : zipFiles) {
             try {
                 zipFile.close();
             } catch (IOException e) {
