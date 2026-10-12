@@ -51,6 +51,12 @@ class Value {
   }
   static Value Array() { return Value(Kind::Array); }
   static Value Object() { return Value(Kind::Object); }
+  // The members must have distinct keys (Set's invariant).
+  static Value Object(Members members) {
+    Value v(Kind::Object);
+    v.members_ = std::move(members);
+    return v;
+  }
 
   Kind kind() const { return kind_; }
   bool IsUndefined() const { return kind_ == Kind::Undefined; }
@@ -121,6 +127,15 @@ constexpr size_t kMaxNodes = 65536;
 // Number parsing/printing is locale-independent (never strtod/LC_NUMERIC).
 // Lone surrogate escapes decode to U+FFFD so the output is always valid UTF-8.
 Value Parse(const std::string& text, bool* ok);
+
+// Same parser under caller-chosen caps, for documents whose size is bounded
+// by something other than a checkUpdate response (the patch core's
+// __diff.json manifest, cpp/patch_core/patch_manifest.h).
+struct ParseLimits {
+  size_t max_input_bytes = kMaxInputBytes;
+  size_t max_nodes = kMaxNodes;
+};
+Value Parse(const std::string& text, const ParseLimits& limits, bool* ok);
 
 }  // namespace flowjson
 

@@ -174,6 +174,29 @@ int RunParserRobustness() {
     }
   }
 
+  // Same duplicate-key rule once an object is large enough to be parsed
+  // through the hash index: k0..k19, then k0 and k17 again.
+  {
+    std::string input = "{";
+    std::string expected = "{";
+    for (int i = 0; i < 20; i++) {
+      const std::string key = "\"k" + std::to_string(i) + "\":";
+      input += key + std::to_string(i) + ",";
+      expected += key +
+                  (i == 0 ? std::string("100") : i == 17 ? std::string("117")
+                                                         : std::to_string(i)) +
+                  (i == 19 ? "}" : ",");
+    }
+    input += "\"k0\":100,\"k17\":117}";
+    bool ok = false;
+    std::string actual = Stringify(Parse(input, &ok));
+    if (!ok || actual != expected) {
+      std::fprintf(stderr, "robustness: large duplicate-key object -> %s\n",
+                   actual.c_str());
+      failures++;
+    }
+  }
+
   return failures;
 }
 
@@ -297,6 +320,39 @@ int RunInputCaps() {
                      elements, ok, expected);
         failures++;
       }
+    }
+  }
+  {
+    // Caller-chosen caps (ParseLimits) replace both defaults, in either
+    // direction.
+    flowjson::ParseLimits limits;
+    limits.max_input_bytes = 8;
+    limits.max_nodes = 3;
+    bool ok = false;
+    Parse("[1,2]", limits, &ok);
+    if (!ok) {
+      std::fprintf(stderr, "caps: 3 nodes within an 8-byte cap must parse\n");
+      failures++;
+    }
+    ok = true;
+    Parse("[1,2,3]", limits, &ok);
+    if (ok) {
+      std::fprintf(stderr, "caps: a 4th node over max_nodes must be rejected\n");
+      failures++;
+    }
+    ok = true;
+    Parse("\"abcdefg\"", limits, &ok);
+    if (ok) {
+      std::fprintf(stderr, "caps: 9 bytes over max_input_bytes must be rejected\n");
+      failures++;
+    }
+    limits.max_input_bytes = flowjson::kMaxInputBytes + 16;
+    limits.max_nodes = 1;
+    ok = false;
+    Parse("\"" + std::string(flowjson::kMaxInputBytes, 'a') + "\"", limits, &ok);
+    if (!ok) {
+      std::fprintf(stderr, "caps: a raised max_input_bytes must admit the document\n");
+      failures++;
     }
   }
   {

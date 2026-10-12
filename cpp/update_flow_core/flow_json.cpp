@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <unordered_map>
 
 namespace flowjson {
 
@@ -266,6 +267,8 @@ namespace {
 // stack limit (size and node count are capped in flow_json.h). Real
 // responses nest ~4 levels.
 constexpr int kMaxDepth = 64;
+// Objects with more members than this get a hash index while parsing.
+constexpr size_t kIndexedObjectMembers = 16;
 
 // Locale-independent decimal -> double. strtod() honours LC_NUMERIC, so a
 // host process that called setlocale() into a comma-decimal locale would stop
@@ -361,7 +364,8 @@ double DecimalToDouble(const std::string& token) {
 
 class Parser {
  public:
-  Parser(const std::string& text) : text_(text) {}
+  Parser(const std::string& text, size_t max_nodes)
+      : text_(text), max_nodes_(max_nodes) {}
 
   Value Run(bool* ok) {
     Value v = ParseValue();
@@ -410,7 +414,7 @@ class Parser {
       ok_ = false;
       return Value::Undefined();
     }
-    if (++nodes_ > kMaxNodes) {
+    if (++nodes_ > max_nodes_) {
       ok_ = false;
       return Value::Undefined();
     }
@@ -443,20 +447,51 @@ class Parser {
     }
   }
 
+  // Duplicate keys keep the first position and the last value (Value::Set
+  // semantics). Large objects (a patch manifest's copies map has thousands
+  // of members) look keys up through a hash index instead of Set's linear
+  // scan, which would make parsing quadratic in the member count.
   Value ParseObject() {
-    Value obj = Value::Object();
     Consume('{');
     SkipWs();
     if (pos_ < text_.size() && text_[pos_] == '}') {
       pos_++;
-      return obj;
+      return Value::Object();
     }
+    Members members;
+    std::unordered_map<std::string, size_t> index;
     while (ok_) {
       SkipWs();
       std::string key = ParseString();
       SkipWs();
       Consume(':');
-      obj.Set(key, ParseValue());
+      Value value = ParseValue();
+      if (members.size() == kIndexedObjectMembers && index.empty()) {
+        for (size_t i = 0; i < members.size(); i++) {
+          index.emplace(members[i].first, i);
+        }
+      }
+      size_t existing = members.size();
+      if (index.empty()) {
+        for (size_t i = 0; i < members.size(); i++) {
+          if (members[i].first == key) {
+            existing = i;
+            break;
+          }
+        }
+      } else {
+        auto found = index.find(key);
+        if (found != index.end()) {
+          existing = found->second;
+        } else {
+          index.emplace(key, members.size());
+        }
+      }
+      if (existing < members.size()) {
+        members[existing].second = std::move(value);
+      } else {
+        members.emplace_back(std::move(key), std::move(value));
+      }
       SkipWs();
       if (pos_ < text_.size() && text_[pos_] == ',') {
         pos_++;
@@ -465,7 +500,7 @@ class Parser {
       Consume('}');
       break;
     }
-    return obj;
+    return Value::Object(std::move(members));
   }
 
   Value ParseArray() {
@@ -669,6 +704,7 @@ class Parser {
   }
 
   const std::string& text_;
+  const size_t max_nodes_;
   size_t pos_ = 0;
   int depth_ = 0;
   size_t nodes_ = 0;
@@ -678,11 +714,15 @@ class Parser {
 }  // namespace
 
 Value Parse(const std::string& text, bool* ok) {
-  if (text.size() > kMaxInputBytes) {
+  return Parse(text, ParseLimits(), ok);
+}
+
+Value Parse(const std::string& text, const ParseLimits& limits, bool* ok) {
+  if (text.size() > limits.max_input_bytes) {
     *ok = false;
     return Value::Undefined();
   }
-  Parser parser(text);
+  Parser parser(text, limits.max_nodes);
   return parser.Run(ok);
 }
 
