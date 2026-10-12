@@ -163,7 +163,7 @@ Android 已兜住：`Application.mk` 改 `-fexceptions`，每个 JNI 入口经 `
 ### 仍开放
 
 **5.7（P2）https→http 降级**（部分修复）
-已做：配置端点全为 https 时 `SyncCoordinator.ts` 丢弃非 https 远程端点与 `http:` 产物 URL；`harmony/pushy/src/README.md` 要求消费者 `network_config.json` 设 `cleartextTrafficPermitted:false`。
+已做：配置端点全为 https 时共享轮次内核（`cpp/update_flow_core/native_round.cpp`，三端共用）丢弃非 https 远程端点与 `http:` 产物 URL；`harmony/pushy/src/README.md` 要求消费者 `network_config.json` 设 `cleartextTrafficPermitted:false`。
 剩余：`@ohos.net.http` 内部跟随重定向且不暴露最终 URL，https→http 的重定向降级仍可能发生；可接受 HMS-only 的话 RCP（`autoRedirect=false` + effective URL）能完全关闭。
 
 **5.8（P2）鸿蒙 CI 门**（部分修复）
@@ -171,8 +171,8 @@ Android 已兜住：`Application.mk` 改 `-fexceptions`，每个 JNI 入口经 `
 剩余：`e2e_harmony.yml` 仅手动，不在门内（无托管鸿蒙 runner）。
 
 **5.15（P3）测试**（部分修复）
-已覆盖：ContentRange、InstallRecord、ErrorCodes、ArchiveLimits、NativeConfig、EventHub；C++ 头文件 ↔ ArkTS/Java/JS 镜像的常量对等由 `scripts/check-constant-parity.js`（`bun lint`）断言。
-未覆盖：`readString/readBoolean`、`normalizeEndpointBase`、`buildResponseCacheJson`、flush-batch 深度语义。
+已覆盖：ContentRange、InstallRecord、ErrorCodes、ArchiveLimits、NativeConfig、EventHub、原生轮次（请求体、端点查询、响应缓存：`native-round-vectors.json`）；C++ 头文件 ↔ ArkTS/Java/JS 镜像的常量对等由 `scripts/check-constant-parity.js`（`bun lint`）断言。
+未覆盖：`readString/readBoolean`、flush-batch 深度语义。
 
 **§5 P4 余项**
 - `transferArchive`（`DownloadTask.ts`）仍约 470 行、大量闭包捕获的可变局部，未拆。
