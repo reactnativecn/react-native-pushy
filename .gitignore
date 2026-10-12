@@ -72,7 +72,6 @@ Example/harmony_use_pushy/harmony/entry/src/main/resources/rawfile/meta.json
 **/.hvigor
 Example/harmony_use_pushy/harmony/entry/src/main/cpp/generated
 Example/testHotUpdate/.e2e-artifacts
-harmony/pushy/src/main/cpp/android-generated
 **/ios/.xcode.env.local
 .bun-cache
 .ohpm-cache

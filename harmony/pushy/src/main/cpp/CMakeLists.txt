@@ -7,20 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 set(CMAKE_VERBOSE_MAKEFILE on)
 
+# The shared native sources are compiled in place from the repository root
+# (or the npm package root, which ships android/jni and cpp/).
 set(REPO_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../../../)
-set(STAGED_NATIVE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/android-generated)
 set(ANDROID_JNI_DIR ${REPO_ROOT}/android/jni)
-if(NOT EXISTS ${ANDROID_JNI_DIR}/hpatch.c)
-    set(ANDROID_JNI_DIR ${STAGED_NATIVE_DIR}/jni)
-endif()
 set(PATCH_CORE_DIR ${REPO_ROOT}/cpp/patch_core)
-if(NOT EXISTS ${PATCH_CORE_DIR}/patch_core.cpp)
-    set(PATCH_CORE_DIR ${STAGED_NATIVE_DIR}/patch_core)
-endif()
 set(UPDATE_FLOW_CORE_DIR ${REPO_ROOT}/cpp/update_flow_core)
-if(NOT EXISTS ${UPDATE_FLOW_CORE_DIR}/update_flow_core.cpp)
-    set(UPDATE_FLOW_CORE_DIR ${STAGED_NATIVE_DIR}/update_flow_core)
-endif()
 
 # Always compile from source. A prebuilt-import branch used to live here, but
 # it had no symbol verification: a stale libs/<abi>/librnpushy.so missing a
