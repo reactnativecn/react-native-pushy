@@ -3,82 +3,61 @@
 using namespace facebook;
 using namespace rnoh;
 
+// The JS-visible method table: (name, argument count, SYNC | ASYNC).
+//
+// This table is the only bridge RNOH gives JS into the ArkTS module: a method
+// missing here is `undefined` on the JS side, and the JS feature-detects then
+// treat the whole capability as "old native" and silently skip it — which is
+// how the native cold-start check shipped dark on Harmony. Every spec method
+// (src/NativePushy.ts) MUST be listed.
+//
+// Only the constants and the RN event plumbing are SYNC. Every
+// Promise-returning spec method MUST be ASYNC: a sync registration converts
+// the ArkTS Promise into an empty jsi object and its rejection becomes an
+// unhandled ArkTS rejection, so JS would report e.g. setNeedUpdate as
+// successful while nothing was switched. scripts/check-native-spec-parity.js
+// enforces both rules against this table.
+#define PUSHY_METHODS(X)                 \
+  X(getConstants, 0, SYNC)               \
+  X(addListener, 1, SYNC)                \
+  X(removeListeners, 1, SYNC)            \
+  X(setLocalHashInfo, 2, ASYNC)          \
+  X(getLocalHashInfo, 1, ASYNC)          \
+  X(setUuid, 1, ASYNC)                   \
+  X(reloadUpdate, 1, ASYNC)              \
+  X(restartApp, 0, ASYNC)                \
+  X(setNeedUpdate, 1, ASYNC)             \
+  X(markSuccess, 0, ASYNC)               \
+  X(downloadPatchFromPpk, 1, ASYNC)      \
+  X(downloadPatchFromPackage, 1, ASYNC)  \
+  X(downloadFullUpdate, 1, ASYNC)        \
+  X(downloadAndInstallApk, 1, ASYNC)     \
+  X(syncNativeConfig, 1, ASYNC)          \
+  X(getNativeCheckCache, 0, ASYNC)       \
+  X(markJsCheckCompleted, 1, ASYNC)      \
+  X(getBundleHash, 0, ASYNC)             \
+  X(resetToPackagedBundle, 0, ASYNC)
+
+// ArkTSTurboModule entry point per kind.
+#define PUSHY_INVOKE_SYNC call
+#define PUSHY_INVOKE_ASYNC callAsync
+
 namespace {
 
-jsi::Value CallSync(
-    jsi::Runtime &rt,
-    react::TurboModule &turboModule,
-    const char *methodName,
-    const jsi::Value *args,
-    size_t count) {
-  return jsi::Value(
-      static_cast<ArkTSTurboModule &>(turboModule).call(
-          rt, methodName, args, count));
-}
-
-jsi::Value CallAsync(
-    jsi::Runtime &rt,
-    react::TurboModule &turboModule,
-    const char *methodName,
-    const jsi::Value *args,
-    size_t count) {
-  return jsi::Value(
-      static_cast<ArkTSTurboModule &>(turboModule).callAsync(
-          rt, methodName, args, count));
-}
-
-#define PUSHY_SYNC_METHOD(method_name)                                   \
-  static jsi::Value HostFunction_##method_name(                          \
+#define PUSHY_HOST_FUNCTION(method_name, arg_count, kind)                \
+  jsi::Value HostFunction_##method_name(                                 \
       jsi::Runtime &rt,                                                  \
       react::TurboModule &turboModule,                                   \
       const jsi::Value *args,                                            \
       size_t count) {                                                    \
-    return CallSync(rt, turboModule, #method_name, args, count);         \
+    return jsi::Value(                                                   \
+        static_cast<ArkTSTurboModule &>(turboModule)                     \
+            .PUSHY_INVOKE_##kind(rt, #method_name, args, count));        \
   }
 
-#define PUSHY_ASYNC_METHOD(method_name)                                  \
-  static jsi::Value HostFunction_##method_name(                          \
-      jsi::Runtime &rt,                                                  \
-      react::TurboModule &turboModule,                                   \
-      const jsi::Value *args,                                            \
-      size_t count) {                                                    \
-    return CallAsync(rt, turboModule, #method_name, args, count);        \
-  }
+PUSHY_METHODS(PUSHY_HOST_FUNCTION)
 
-// Only the constants and the RN event plumbing are synchronous. Every
-// Promise-returning spec method (src/NativePushy.ts) MUST be registered
-// with PUSHY_ASYNC_METHOD: a sync registration converts the ArkTS Promise
-// into an empty jsi object and its rejection becomes an unhandled ArkTS
-// rejection, so JS would report e.g. setNeedUpdate as successful while
-// nothing was switched. scripts/check-native-spec-parity.js enforces this.
-PUSHY_SYNC_METHOD(getConstants)
-PUSHY_SYNC_METHOD(addListener)
-PUSHY_SYNC_METHOD(removeListeners)
-
-PUSHY_ASYNC_METHOD(setLocalHashInfo)
-PUSHY_ASYNC_METHOD(getLocalHashInfo)
-PUSHY_ASYNC_METHOD(setUuid)
-PUSHY_ASYNC_METHOD(setNeedUpdate)
-PUSHY_ASYNC_METHOD(markSuccess)
-PUSHY_ASYNC_METHOD(reloadUpdate)
-PUSHY_ASYNC_METHOD(restartApp)
-PUSHY_ASYNC_METHOD(downloadPatchFromPpk)
-PUSHY_ASYNC_METHOD(downloadPatchFromPackage)
-PUSHY_ASYNC_METHOD(downloadFullUpdate)
-PUSHY_ASYNC_METHOD(downloadAndInstallApk)
-// 10.50+ additions. This table is the only bridge RNOH gives JS into the
-// ArkTS module: a method missing here is `undefined` on the JS side, and the
-// JS feature-detects then treat the whole capability as "old native" and
-// silently skip it — which is how the native cold-start check shipped dark
-// on Harmony. Every new spec method MUST be registered here.
-PUSHY_ASYNC_METHOD(syncNativeConfig)
-PUSHY_ASYNC_METHOD(getNativeCheckCache)
-PUSHY_ASYNC_METHOD(markJsCheckCompleted)
-PUSHY_ASYNC_METHOD(getBundleHash)
-PUSHY_ASYNC_METHOD(resetToPackagedBundle)
-
-#undef PUSHY_SYNC_METHOD
-#undef PUSHY_ASYNC_METHOD
+#undef PUSHY_HOST_FUNCTION
 
 } // namespace
 
@@ -86,33 +65,15 @@ PushyTurboModule::PushyTurboModule(
     const ArkTSTurboModule::Context ctx,
     const std::string name)
     : ArkTSTurboModule(ctx, name) {
-  const auto registerMethod =
-      [this](const std::string &methodName,
-             size_t argCount,
-             auto hostFunction) {
-        methodMap_[methodName] = MethodMetadata{argCount, hostFunction};
-      };
+#define PUSHY_REGISTER_METHOD(method_name, arg_count, kind) \
+  methodMap_[#method_name] =                                \
+      MethodMetadata{arg_count, HostFunction_##method_name};
 
-  registerMethod("getConstants", 0, HostFunction_getConstants);
-  registerMethod("setLocalHashInfo", 2, HostFunction_setLocalHashInfo);
-  registerMethod("getLocalHashInfo", 1, HostFunction_getLocalHashInfo);
-  registerMethod("setUuid", 1, HostFunction_setUuid);
-  registerMethod("reloadUpdate", 1, HostFunction_reloadUpdate);
-  registerMethod("restartApp", 0, HostFunction_restartApp);
-  registerMethod("setNeedUpdate", 1, HostFunction_setNeedUpdate);
-  registerMethod("markSuccess", 0, HostFunction_markSuccess);
-  registerMethod("downloadPatchFromPpk", 1, HostFunction_downloadPatchFromPpk);
-  registerMethod(
-      "downloadPatchFromPackage", 1, HostFunction_downloadPatchFromPackage);
-  registerMethod("downloadFullUpdate", 1, HostFunction_downloadFullUpdate);
-  registerMethod(
-      "downloadAndInstallApk", 1, HostFunction_downloadAndInstallApk);
-  registerMethod("addListener", 1, HostFunction_addListener);
-  registerMethod("removeListeners", 1, HostFunction_removeListeners);
-  registerMethod("syncNativeConfig", 1, HostFunction_syncNativeConfig);
-  registerMethod("getNativeCheckCache", 0, HostFunction_getNativeCheckCache);
-  registerMethod("markJsCheckCompleted", 1, HostFunction_markJsCheckCompleted);
-  registerMethod("getBundleHash", 0, HostFunction_getBundleHash);
-  registerMethod(
-      "resetToPackagedBundle", 0, HostFunction_resetToPackagedBundle);
+  PUSHY_METHODS(PUSHY_REGISTER_METHOD)
+
+#undef PUSHY_REGISTER_METHOD
 }
+
+#undef PUSHY_INVOKE_SYNC
+#undef PUSHY_INVOKE_ASYNC
+#undef PUSHY_METHODS

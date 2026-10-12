@@ -222,7 +222,7 @@ export class PushyTurboModule extends UITurboModule {
   }
 
   // 以下方法在 JS spec(src/NativePushy.ts)里都返回 Promise,C++ 方法表
-  // (PushyTurboModule.cpp)相应用 PUSHY_ASYNC_METHOD 注册:同步注册会把
+  // (PushyTurboModule.cpp 的 PUSHY_METHODS)相应登记为 ASYNC:同步注册会把
   // ArkTS 的 Promise 变成空对象、把 reject 丢成 ArkTS 侧的 unhandled rejection。
   // 每个拒绝都带稳定错误码(ErrorCodes.ts):`code` 属性 + `[CODE] ` 消息前缀。
 
