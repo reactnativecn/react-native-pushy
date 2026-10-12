@@ -130,7 +130,11 @@ describe('harmony query endpoint fallback', () => {
     const { result, requests } = await run(
       { endpoints, queryUrls: ['https://list'] },
       {
-        'https://list': JSON.stringify(['https://r0', 'https://r1', 'https://r2']),
+        'https://list': JSON.stringify([
+          'https://r0',
+          'https://r1',
+          'https://r2',
+        ]),
         'https://r2/q/key': VALID,
       }
     );

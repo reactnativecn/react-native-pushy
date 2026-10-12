@@ -3,10 +3,10 @@ import { readFileSync } from 'node:fs';
 import { URL } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import {
+  createPushyError,
   ERROR_DELTA_FAILED,
   ERROR_DOWNLOAD_FAILED,
   PushyError,
-  createPushyError,
 } from '../../harmony/pushy/src/main/ets/ErrorCodes';
 
 // The download strategy loop of the Harmony cold-start orchestrator
@@ -47,22 +47,19 @@ function harness(failures: Map<string, unknown>) {
     downloadPatchFromPackage: (url: string) => fail(url),
     downloadFullUpdate: (url: string) => fail(url),
   };
-  const performAttempts = runInNewContext(
-    `${javascript}\nperformAttempts;`,
-    {
-      PushyError,
-      ERROR_DELTA_FAILED,
-      ERROR_DOWNLOAD_FAILED,
-      createPushyError,
-      getErrorMessage: (error: unknown) => String(error),
-      logger: { info() {}, warn() {}, error() {} },
-      monotonicNowMs: () => performance.now(),
-      setTimeout,
-      clearTimeout,
-      BundlePreparationRound: class {},
-      bundlePreparationResult: () => ({}),
-    }
-  ) as (
+  const performAttempts = runInNewContext(`${javascript}\nperformAttempts;`, {
+    PushyError,
+    ERROR_DELTA_FAILED,
+    ERROR_DOWNLOAD_FAILED,
+    createPushyError,
+    getErrorMessage: (error: unknown) => String(error),
+    logger: { info() {}, warn() {}, error() {} },
+    monotonicNowMs: () => performance.now(),
+    setTimeout,
+    clearTimeout,
+    BundlePreparationRound: class {},
+    bundlePreparationResult: () => ({}),
+  }) as (
     ctx: typeof context,
     attempts: Attempt[],
     hash: string,
@@ -103,7 +100,9 @@ describe('harmony download attempts', () => {
   });
 
   test('an uncoded error is retryable', async () => {
-    const h = harness(new Map([['https://a/full', new Error('socket closed')]]));
+    const h = harness(
+      new Map([['https://a/full', new Error('socket closed')]])
+    );
     const ok = await h.run([
       { type: 'full', urls: ['https://a/full', 'https://b/full'] },
     ]);
@@ -119,7 +118,9 @@ describe('harmony download attempts', () => {
       ])
     );
     expect(
-      await h.run([{ type: 'full', urls: ['https://a/full', 'https://b/full'] }])
+      await h.run([
+        { type: 'full', urls: ['https://a/full', 'https://b/full'] },
+      ])
     ).toBe(false);
     expect(h.calls).toEqual(['https://a/full']);
   });
