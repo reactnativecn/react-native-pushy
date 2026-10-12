@@ -87,12 +87,6 @@ describe('native text encoding', () => {
       'android/src/main/java/cn/reactnative/modules/update/BundlePreparationResult.java: noUpdate',
       // Public ArkTS option type (compile-time only).
       'harmony/pushy/src/main/ets/PushyConfiguration.ts: setNeedUpdate',
-      // JS bridge method names registered with RNOH.
-      'harmony/pushy/src/main/cpp/PushyTurboModule.cpp: reloadUpdate',
-      'harmony/pushy/src/main/cpp/PushyTurboModule.cpp: setNeedUpdate',
-      'harmony/pushy/src/main/cpp/PushyTurboModule.cpp: downloadPatchFromPpk',
-      'harmony/pushy/src/main/cpp/PushyTurboModule.cpp: downloadPatchFromPackage',
-      'harmony/pushy/src/main/cpp/PushyTurboModule.cpp: downloadFullUpdate',
     ];
     const wording = /update|patch|rescue|reload|hotfix/i;
     const literal =
