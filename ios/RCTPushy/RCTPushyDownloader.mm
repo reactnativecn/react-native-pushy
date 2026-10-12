@@ -527,19 +527,18 @@ didReceiveResponse:(NSURLResponse *)response
         [dataTask cancel];
         return;
     }
-    if (self.expectedTotal <= 0
-        && self.receivedBytes + (long long)data.length > self.freeSpaceReservedUntil) {
-        // Unknown/encoded length: the response-time check could only
-        // reserve the margin, so probe before any write that would run past
-        // the bytes reserved so far, each probe reserving at least the next
-        // PROBE bytes (more when one callback carries a larger buffer) — no
-        // write can ever eat into the margin. The archive cap alone (512
-        // MiB) is far more than the margin protects. The partial stays: a
-        // later attempt may find the space.
-        long long reserve = MAX(pushy::archive_limits::kUnknownLengthFreeSpaceProbeBytes,
-                                (long long)data.length);
-        self.freeSpaceReservedUntil = self.receivedBytes + reserve;
-        NSString *shortfall = RCTPushyFreeSpaceShortfall(self.savePath, reserve);
+    // Unknown/encoded length: the response-time check could only reserve the
+    // margin, so the disk is probed before any write that would run past the
+    // bytes reserved so far (archive_limits::PlanUnknownLengthFreeSpaceProbe)
+    // — no write can ever eat into the margin. The partial stays: a later
+    // attempt may find the space.
+    pushy::archive_limits::FreeSpaceProbe plan =
+        pushy::archive_limits::PlanUnknownLengthFreeSpaceProbe(
+            self.expectedTotal, self.receivedBytes, (long long)data.length,
+            self.freeSpaceReservedUntil);
+    self.freeSpaceReservedUntil = plan.reserved_until;
+    if (plan.probe) {
+        NSString *shortfall = RCTPushyFreeSpaceShortfall(self.savePath, plan.reserve);
         if (shortfall != nil) {
             [self failWithDescription:shortfall code:-1];
             [dataTask cancel];

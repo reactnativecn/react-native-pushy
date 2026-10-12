@@ -11,6 +11,8 @@
 #include "../../cpp/patch_core/install_record.h"
 #include "../../cpp/patch_core/patch_core.h"
 
+#include <memory>
+
 // file def
 static NSString *const SOURCE_PATCH_NAME = @"__diff.json";
 static NSString *const ERROR_FILE_OPERATION = @"file operation error";
@@ -68,32 +70,47 @@ static NSError *PushyEnsureFreeSpace(NSString *path, long long bytesToWrite) {
     return PushyErrorWithCode(pushy::error_codes::kDeltaFailed, shortfall);
 }
 
-// SSZipArchive delegate enforcing cpp/patch_core/archive_limits.h while the
-// archive is walked (entry count, per-entry size, total size, compression
-// ratio) plus two entry-shape rules Android's java.util.zip gets for free:
-//  - no symlinks: SSZipArchive materialises them with any target regardless
-//    of preserveAttributes, so `assets -> ../../Documents` followed by
-//    `assets/x` would write outside the version directory;
-//  - no ".pushy-" reserved names at any depth: the completion marker is
-//    written by this SDK only, after the whole install succeeded. An archive
-//    shipping its own would be trusted as a finished install even if the
-//    patch step that follows fails.
+// SSZipArchive delegate feeding cpp/patch_core/archive_limits.h's
+// EntryAccumulator while the archive is walked (entry count, sizes, ratios,
+// symlinks: SSZipArchive materialises them with any target regardless of
+// preserveAttributes, so `assets -> ../../Documents` followed by `assets/x`
+// would write outside the version directory). The entry name is only exposed
+// once the entry is on disk, so the reserved `.pushy-` names (the completion
+// record is the SDK's alone) are checked in the did-unzip callback.
 // A NO from zipArchiveShouldUnzipFileAtIndex: cancels the whole unzip (the
 // 2.x contract the podspec pins), and the completion handler turns the
 // recorded violation into a hard PATCH_FAILED; the caller then discards the
 // staging directory.
 @interface PushyUnzipGuard : NSObject <SSZipArchiveDelegate>
 @property (nonatomic, copy) NSString *violation;
-@property (nonatomic, assign) long long totalUncompressed;
+- (instancetype)initWithArchiveBytes:(long long)archiveBytes destination:(NSString *)destination;
 @end
 
-@implementation PushyUnzipGuard
+@implementation PushyUnzipGuard {
+    std::unique_ptr<pushy::archive_limits::EntryAccumulator> _accumulator;
+    NSArray<NSString *> *_destinationComponents;
+}
+
+- (instancetype)initWithArchiveBytes:(long long)archiveBytes destination:(NSString *)destination {
+    if ((self = [super init])) {
+        _accumulator.reset(new pushy::archive_limits::EntryAccumulator(archiveBytes));
+        // Joined the way SSZipArchive builds each unpacked path
+        // (stringByAppendingPathComponent:), so a trailing slash compares equal.
+        NSArray<NSString *> *probe =
+            [destination stringByAppendingPathComponent:@"x"].pathComponents;
+        _destinationComponents = [probe subarrayWithRange:NSMakeRange(0, probe.count - 1)];
+    }
+    return self;
+}
+
+- (void)recordStatus:(const pushy::delta::Status &)status {
+    if (!status.ok && self.violation == nil) {
+        self.violation = @(status.message.c_str());
+    }
+}
 
 - (void)zipArchiveWillUnzipArchiveAtPath:(NSString *)path zipInfo:(unz_global_info)zipInfo {
-    if ((long long)zipInfo.number_entry > pushy::archive_limits::kMaxEntries) {
-        self.violation = [NSString stringWithFormat:@"archive has too many entries (%lu)",
-                          (unsigned long)zipInfo.number_entry];
-    }
+    [self recordStatus:pushy::archive_limits::CheckEntryCount((long long)zipInfo.number_entry)];
 }
 
 - (BOOL)zipArchiveShouldUnzipFileAtIndex:(NSInteger)fileIndex
@@ -105,44 +122,37 @@ static NSError *PushyEnsureFreeSpace(NSString *path, long long bytesToWrite) {
     }
     // Unix mode bits travel in the high 16 bits of the external attributes
     // (the same field SSZipArchive keys its own symlink branch on).
-    if (((fileInfo.external_fa >> 16) & S_IFMT) == S_IFLNK) {
-        self.violation = [NSString stringWithFormat:@"archive entry #%ld is a symlink",
-                          (long)fileIndex];
-        return NO;
-    }
-    long long size = (long long)fileInfo.uncompressed_size;
-    long long compressed = (long long)fileInfo.compressed_size;
-    if (size > pushy::archive_limits::kMaxEntryBytes) {
-        self.violation = [NSString stringWithFormat:@"archive entry #%ld too large (%lld bytes)",
-                          (long)fileIndex, size];
-        return NO;
-    }
-    self.totalUncompressed += size;
-    if (self.totalUncompressed > pushy::archive_limits::kMaxTotalUncompressedBytes) {
-        self.violation = [NSString stringWithFormat:@"archive expands beyond %lld bytes",
-                          pushy::archive_limits::kMaxTotalUncompressedBytes];
-        return NO;
-    }
-    if (compressed > 0 && size > pushy::archive_limits::kRatioCheckMinBytes
-        && size / compressed > pushy::archive_limits::kMaxCompressionRatio) {
-        self.violation = [NSString stringWithFormat:@"archive entry #%ld compression ratio too high",
-                          (long)fileIndex];
-        return NO;
-    }
-    return YES;
+    BOOL symlink = ((fileInfo.external_fa >> 16) & S_IFMT) == S_IFLNK;
+    [self recordStatus:_accumulator->Accept((long long)fileInfo.uncompressed_size,
+                                            (long long)fileInfo.compressed_size,
+                                            symlink, std::string())];
+    return self.violation == nil;
 }
 
-// The entry name is only exposed once the entry is on disk (shouldUnzip
-// runs before the name is read). A reserved name is flagged here; the next
-// shouldUnzip refuses (cancelling the unzip) or, for the last entry, the
-// completion handler picks the violation up. Either way the caller drops
-// the whole staging directory, so the written file never survives.
+// A reserved name is flagged here (any component of the path below the
+// destination); the next shouldUnzip refuses (cancelling the unzip) or, for
+// the last entry, the completion handler picks the violation up. Either way
+// the caller drops the whole staging directory, so the written file never
+// survives.
 - (void)zipArchiveDidUnzipFileAtIndex:(NSInteger)fileIndex
                            totalFiles:(NSInteger)totalFiles
                           archivePath:(NSString *)archivePath
                      unzippedFilePath:(NSString *)unzippedFilePath {
-    NSString *name = unzippedFilePath.lastPathComponent;
-    if (self.violation == nil && [name hasPrefix:@".pushy-"]) {
+    if (self.violation != nil) {
+        return;
+    }
+    NSArray<NSString *> *components = unzippedFilePath.pathComponents;
+    NSUInteger base = _destinationComponents.count;
+    if (components.count <= base
+        || ![[components subarrayWithRange:NSMakeRange(0, base)]
+               isEqualToArray:_destinationComponents]) {
+        self.violation = [NSString stringWithFormat:@"archive entry #%ld outside the destination",
+                          (long)fileIndex];
+        return;
+    }
+    NSString *name = [[components subarrayWithRange:NSMakeRange(base, components.count - base)]
+                      componentsJoinedByString:@"/"];
+    if (pushy::archive_limits::IsReservedEntryName(PushyToStdString(name))) {
         self.violation = [NSString stringWithFormat:@"archive contains reserved entry %@", name];
     }
 }
@@ -535,8 +545,7 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
         // (cpp/patch_core/archive_limits.h). SSZipArchive only exposes the
         // entry count up front (zipArchiveWillUnzipArchiveAtPath:zipInfo:),
         // not the uncompressed total, so the disk check uses a 2x-archive
-        // heuristic; the delegate below enforces the exact caps entry by
-        // entry.
+        // heuristic; the guard enforces the exact caps entry by entry.
         long long archiveBytes = RCTPushyFileSize(path);
         NSError *preflight = nil;
         if (archiveBytes > pushy::archive_limits::kMaxArchiveBytes) {
@@ -551,7 +560,8 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
             return;
         }
 
-        PushyUnzipGuard *guard = [PushyUnzipGuard new];
+        PushyUnzipGuard *guard = [[PushyUnzipGuard alloc] initWithArchiveBytes:archiveBytes
+                                                                    destination:destination];
         // preserveAttributes:NO — the archive's mode/mtime bits have no use
         // here and are one less thing a hostile package controls.
         [SSZipArchive unzipFileAtPath:path
