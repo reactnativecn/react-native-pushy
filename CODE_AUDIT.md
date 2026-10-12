@@ -87,7 +87,7 @@
 - **3.1** 缺 PrivacyInfo.xcprivacy — 已修 77b5488c（`ios/PrivacyInfo.xcprivacy` 经 `s.resource_bundles` 发布）
 - **3.2** `packageVersion/buildTime` 无前缀 defaults key — 已修 77b5488c（`REACTNATIVECN_PUSHY_*` + 旧 key 回退迁移；未改用 suite）
 - **3.3** 归档 symlink 条目被物化 — 已修 77b5488c（unzip guard 拒绝 `S_IFLNK` 与 `.pushy-` 名，`preserveAttributes:NO`）
-- **3.4** 畸形 `__diff.json` 抛 ObjC 异常 — 已修 77b5488c（`PushyPatchManifestFromJson` 全量 `isKindOfClass:` 校验，返回原因；下沉 C++ 见 3.14）
+- **3.4** 畸形 `__diff.json` 抛 ObjC 异常 — 已修 77b5488c（`PushyPatchManifestFromJson` 全量 `isKindOfClass:` 校验，返回原因）；现由共享 C++ 解析器取代，见 3.14
 - **3.5** 归档大小/剩余空间检查在落盘之后 — 已修 77b5488c（`didReceiveResponse` 前置检查 + `didReceiveData` 流式上限）
 - **3.6** `use_frameworks!` 下 `buildTime` 资源找不到 — 已修 77b5488c（mainBundle → `bundleForClass:` → Info.plist mtime 回退）
 - **3.7** 重载路径预消费首载状态、失败仍 resolve — 已修 77b5488c（去掉 `RCTReloadCommandSetBundleURL`，无可用 bridge 时 reject `RESTART_FAILED`）
@@ -107,8 +107,9 @@
 已做：重复实现已合并（`.resume` 后缀、文件大小、`runCheckRequest` 单一 `queryEndpoints`）；拆出 `RCTPushyOrchestrator.mm` 与共享的 `RCTPushyInternal.h`。
 剩余：`RCTPushy.mm` 仍约 2150 行（目标约 900）；`PushyInstallRecord` / `PushyArchiveGuard` / `PushyDownloadRegistry` / `PushyState` / `PushyCrashRescue` 未拆。
 
-**3.14（P3，可测试性）纯决策下沉 C++ + XCTest**（未做）
-应下沉到 `cpp/` 的纯决策：`__diff.json` → `PatchManifest` 解析含类型校验（替代 `PushyPatchManifestFromJson` 与 Java `DownloadTask` 的解析）；安装记录校验 `install_record::Validate(json, hash)` 三端共用（目前 `install_record.h` 只有常量）；归档限额累加器；下载注册表 join/defer 规则与 `Content-Range` 解析（Java/ObjC 各一份）；crash-rescue 门控与检查端点尝试策略；`PushyIsSafePathComponent` 放到 `IsSafeRelativePath` 旁边。另建 `ios/Tests` XCTest target：`RCTPushyDownloader` 对 `NSURLProtocol` stub（416/206/redirect/encoded）、`unzipFileAtPath` 对夹具 zip（symlink、保留名、比值炸弹）。
+**3.14（P3，可测试性）纯决策下沉 C++ + XCTest**（部分）
+已做：`__diff.json` → `PatchManifest` 解析含类型校验下沉 `cpp/patch_core/patch_manifest.h`（`ParsePatchManifest`，向量 `cpp/patch_core/tests/patch-manifest-vectors.json` + fuzz），三端经 `archive_patch::ApplyArchivePatch` 直接传 manifest 原文，`PushyPatchManifestFromJson`、Java `appendManifestEntries`、Harmony `parseManifestToArrays` 已删。
+剩余应下沉到 `cpp/` 的纯决策：安装记录校验 `install_record::Validate(json, hash)` 三端共用（目前 `install_record.h` 只有常量）；归档限额累加器；下载注册表 join/defer 规则与 `Content-Range` 解析（Java/ObjC 各一份）；crash-rescue 门控与检查端点尝试策略；`PushyIsSafePathComponent` 放到 `IsSafeRelativePath` 旁边。另建 `ios/Tests` XCTest target：`RCTPushyDownloader` 对 `NSURLProtocol` stub（416/206/redirect/encoded）、`unzipFileAtPath` 对夹具 zip（symlink、保留名、比值炸弹）。
 
 ---
 

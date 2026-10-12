@@ -69,16 +69,6 @@ const BundleRebuilder& DefaultBundleRebuilder();
 
 Status ValidateManifest(const PatchManifest& manifest);
 
-// Assembles a manifest from the parallel copy source/target lists the
-// platform bridges receive (deletes are taken as-is). Fails without touching
-// *out when the two copy lists differ in length; path safety is still
-// ValidateManifest's job.
-Status BuildPatchManifest(
-    std::vector<std::string> copy_froms,
-    std::vector<std::string> copy_tos,
-    std::vector<std::string> deletes,
-    PatchManifest* out);
-
 Status ApplyPatchFromFileSource(
     const FileSourcePatchOptions& options,
     const BundleRebuilder& bundle_patcher = DefaultBundleRebuilder());

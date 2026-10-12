@@ -482,35 +482,6 @@ void TestIsSafeRelativePathRejectsControlBytes() {
       "manifest with a NUL-bearing delete must be rejected");
 }
 
-void TestBuildPatchManifestPairsCopiesAndRejectsMismatch() {
-  PatchManifest manifest;
-  pushy::delta::Status status = pushy::delta::BuildPatchManifest(
-      {"assets/a.png", "assets/b.png"}, {"x/a.png", "x/b.png"}, {"old.png"},
-      &manifest);
-  Expect(status.ok, "matching copy lists must build: " + status.message);
-  Expect(manifest.copies.size() == 2, "both copies kept");
-  Expect(
-      manifest.copies[1].from == "assets/b.png" &&
-          manifest.copies[1].to == "x/b.png" &&
-          !manifest.copies[1].has_expected_crc,
-      "copies pair up by index");
-  Expect(
-      manifest.deletes.size() == 1 && manifest.deletes[0] == "old.png",
-      "deletes kept as-is");
-
-  PatchManifest untouched;
-  untouched.deletes.push_back("keep");
-  status = pushy::delta::BuildPatchManifest(
-      {"a", "b"}, {"a"}, {}, &untouched);
-  Expect(!status.ok, "copy list length mismatch must fail");
-  Expect(
-      status.message == "copy_froms and copy_tos length mismatch",
-      "mismatch message is stable: " + status.message);
-  Expect(
-      untouched.copies.empty() && untouched.deletes.size() == 1,
-      "a failed build leaves the output untouched");
-}
-
 // Builds `levels` nested directories under `base` and returns the deepest.
 std::string MakeDeepTree(const std::string& base, int levels) {
   std::string deep = base;
@@ -1490,8 +1461,6 @@ int main(int argc, char** argv) {
       {"ApplyPatchFromFileSourceCanLimitMergeSubdir", TestApplyPatchFromFileSourceCanLimitMergeSubdir},
       {"ApplyPatchFromFileSourceRejectsUnsafePaths", TestApplyPatchFromFileSourceRejectsUnsafePaths},
       {"IsSafeRelativePathRejectsControlBytes", TestIsSafeRelativePathRejectsControlBytes},
-      {"BuildPatchManifestPairsCopiesAndRejectsMismatch",
-       TestBuildPatchManifestPairsCopiesAndRejectsMismatch},
       {"DirectoryWalkersBoundNestingDepth", TestDirectoryWalkersBoundNestingDepth},
       {"HpatchRejectsOversizedLzmaDictionary", TestHpatchRejectsOversizedLzmaDictionary},
       {"CleanupOldEntriesRemovesOnlyExpiredPaths", TestCleanupOldEntriesRemovesOnlyExpiredPaths},
