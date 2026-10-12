@@ -3,7 +3,7 @@ name: harmony-build
 # Compiles the HarmonyOS HAR on pull requests that touch its inputs, in the
 # same pinned container publish.yml uses. Until this job existed the HAR was
 # only compiled at release time, so an ArkTS type error, a broken NAPI export
-# or a stale C++ method table (NATIVE_CHECK_FOLLOWUPS.md, 2026-08-13) was
+# or a stale C++ method table (docs/NATIVE_CHECK_FOLLOWUPS.md, 2026-08-13) was
 # first seen when publishing. assembleHar runs the ArkTS compiler over the
 # .ets/.ts sources, which is the real type check; check-harmony-types.js
 # adds a strict tsc pass over the .ts sources and must not skip here.
