@@ -490,14 +490,6 @@ Status MergeDirectoryRecursively(
 
 }  // namespace
 
-Status Status::Ok() {
-  return Status{true, std::string()};
-}
-
-Status Status::Error(const std::string& message) {
-  return Status{false, message};
-}
-
 Status ValidateManifest(const PatchManifest& manifest) {
   return ValidateManifestImpl(manifest);
 }

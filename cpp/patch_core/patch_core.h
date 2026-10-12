@@ -17,8 +17,12 @@ struct Status {
 
   explicit operator bool() const { return ok; }
 
-  static Status Ok();
-  static Status Error(const std::string& message);
+  // Inline so a core that only reports a Status (install_record.cpp) links
+  // without patch_core.cpp and its hpatch dependencies.
+  static Status Ok() { return Status{true, std::string()}; }
+  static Status Error(const std::string& message) {
+    return Status{false, message};
+  }
 };
 
 struct CopyOperation {
