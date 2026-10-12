@@ -37,7 +37,9 @@ const javaNatives = () =>
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/\/\/.*$/gm, '');
       return [
-        ...source.matchAll(/\bnative\s+([\w[\]]+)\s+(\w+)\s*\(([^)]*)\)\s*;/g),
+        ...source.matchAll(
+          /\bnative\s+([\w[\]]+)\s+(\w+)\s*\(([^)]*)\)\s*(?:throws\s+[\w.,\s]+)?;/g
+        ),
       ].map((match) => {
         const params = match[3]
           .split(',')
@@ -73,7 +75,7 @@ const registered = () => {
 describe('JNI registration table', () => {
   test('matches every Java native declaration', () => {
     const natives = javaNatives();
-    expect(natives.length).toBe(16);
+    expect(natives.length).toBe(18);
     expect(registered()).toEqual(natives);
   });
 

@@ -115,6 +115,16 @@ const javaDir = 'android/src/main/java/cn/reactnative/modules/update';
 // Must always be parsed from the header (guards the parser itself: a regex
 // regression would otherwise silently drop the pair's coverage).
 const archiveLimitsRequired = ['UnknownLengthFreeSpaceProbeBytes', 'MaxArchiveBytes'];
+// The accounting itself lives in archive_limits.cpp; each host mirrors only
+// the caps it still compares against on its own (download, manifest,
+// streamed-bytes backstop, free-space margin).
+const archiveLimitsMirroredByJava = [
+  'MaxArchiveBytes',
+  'MaxTotalUncompressedBytes',
+  'MaxEntryBytes',
+  'MaxManifestBytes',
+  'FreeDiskMarginBytes',
+];
 const errorCodesRequired = ['DeltaFailed', 'InvalidOptions'];
 // The record logic itself lives in install_record.cpp; the hosts only mirror
 // the staging suffix they still build their unpack directory from.
@@ -134,6 +144,7 @@ const pairs = [
     parse: parseJavaConstants,
     mirrorName: screamingSnake,
     required: archiveLimitsRequired,
+    only: archiveLimitsMirroredByJava,
   },
   {
     header: 'cpp/patch_core/install_record.h',

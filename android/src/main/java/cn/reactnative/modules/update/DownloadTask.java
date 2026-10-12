@@ -333,10 +333,9 @@ class DownloadTask implements Runnable {
             long lastPostedBytes = baseOffset;
             // Unknown length: the response-time check could only reserve the
             // margin, so the disk is probed before any write that would run
-            // past the bytes reserved so far, each probe reserving at least
-            // the next PROBE bytes (more when one chunk is larger) — no write
-            // can ever eat into the margin (the archive cap alone is far more
-            // than the margin). A throw keeps the partial for a later attempt.
+            // past the bytes reserved so far (the shared probe plan,
+            // ArchiveLimits.planFreeSpaceProbe) — no write can ever eat into
+            // the margin. A throw keeps the partial for a later attempt.
             long freeSpaceReservedUntil = 0;
 
             // The archive digest is computed as the bytes reach the file, so
@@ -351,13 +350,13 @@ class DownloadTask implements Runnable {
                     new FileOutputStream(writePath, append), digest)))
             ) {
                 while ((bytesRead = source.read(sink.buffer(), UpdateFileUtils.BUFFER_SIZE)) != -1) {
+                    long[] probe = ArchiveLimits.planFreeSpaceProbe(
+                        totalAll, received, bytesRead, freeSpaceReservedUntil);
                     received += bytesRead;
-                    if (totalAll <= 0 && received > freeSpaceReservedUntil) {
-                        long reserve = Math.max(
-                            ArchiveLimits.UNKNOWN_LENGTH_FREE_SPACE_PROBE_BYTES, bytesRead);
-                        freeSpaceReservedUntil = received - bytesRead + reserve;
+                    freeSpaceReservedUntil = probe[1];
+                    if (probe[0] > 0) {
                         try {
-                            ArchiveLimits.ensureFreeSpace(writePath, reserve);
+                            ArchiveLimits.ensureFreeSpace(writePath, probe[0]);
                         } catch (IOException e) {
                             // The chunk is still only buffered; closing the
                             // sink would flush it onto the disk that just
@@ -530,8 +529,7 @@ class DownloadTask implements Runnable {
         if (archiveBytes > ArchiveLimits.MAX_ARCHIVE_BYTES) {
             throw new IOException("archive too large: " + archiveBytes + " bytes");
         }
-        SafeZipFile.Inspection inspection = zipFile.inspect();
-        ArchiveLimits.ensureFreeSpace(unzipDirectory, inspection.totalUncompressed);
+        ArchiveLimits.ensureFreeSpace(unzipDirectory, zipFile.inspect(archiveBytes));
     }
 
     // The archive and its resume sidecar live and die together: once the

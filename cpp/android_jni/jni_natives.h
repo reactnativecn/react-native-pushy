@@ -31,6 +31,8 @@ jstring InstallRecordCheckActivation(JNIEnv* env, jclass, jstring version_dir, j
 jstring InstallRecordSeal(JNIEnv* env, jclass, jstring staging_dir, jstring version_hash, jstring bundle_file_name, jstring artifact_sha256, jstring known_bundle_sha256);
 jstring InstallRecordPromote(JNIEnv* env, jclass, jstring staging_dir, jstring version_dir);
 jstring InstallRecordBundleSha256(JNIEnv* env, jclass, jstring version_dir);
+jlong ArchiveCheckEntries(JNIEnv* env, jclass, jlong archive_bytes, jobjectArray names, jlongArray sizes, jlongArray compressed_sizes);
+jlongArray ArchivePlanFreeSpaceProbe(JNIEnv* env, jclass, jlong known_total, jlong written_before, jlong chunk_bytes, jlong reserved_until);
 
 }  // namespace jni_natives
 }  // namespace pushy

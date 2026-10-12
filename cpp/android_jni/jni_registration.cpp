@@ -75,6 +75,13 @@ const std::vector<NativeClass>& NativeClasses() {
        {"3802fad5a28e5b4d236d49aff9b5", "723bfed0b88a274923311bb6e5a7826444205fa8d2d1b98373002008e8c4ef8e8e655d3f09b0",
         reinterpret_cast<void*>(&pushy::jni_natives::InstallRecordBundleSha256)},
    }},
+  {"3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c81af997f5d270bc7c1a88b8b6f",  // ArchiveLimits
+   {
+       {"391ff1d2a5ae6651303619ea", "723dcffda48a7e446d331df7d1fca379582e0ae6a5e092ae580606",
+        reinterpret_cast<void*>(&pushy::jni_natives::ArchiveCheckEntries)},
+       {"2a1bf5df88996d40112f1dfad38382624822", "723ddefb84c2536f",
+        reinterpret_cast<void*>(&pushy::jni_natives::ArchivePlanFreeSpaceProbe)},
+   }},
   };
   return classes;
 }
