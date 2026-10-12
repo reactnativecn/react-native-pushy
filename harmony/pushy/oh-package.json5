@@ -4,7 +4,7 @@
   name: 'pushy',
   description: '',
   main: 'index.ets',
-  version: '10.59.2',
+  version: '10.60.0',
   dependencies: {
     '@rnoh/react-native-openharmony': '>=0.72.96',
   },
