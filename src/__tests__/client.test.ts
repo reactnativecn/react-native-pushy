@@ -187,7 +187,7 @@ describe('Pushy server config', () => {
     ]);
   });
 
-  test('filters remote endpoints against all configured main endpoints', async () => {
+  test('dedupes remote endpoints (the fallback drops configured ones)', async () => {
     setupClientMocks();
     (globalThis as any).fetch = mock(async () =>
       createJsonResponse([
@@ -203,7 +203,9 @@ describe('Pushy server config', () => {
     const client = new Pushy({ appKey: 'demo-app' });
 
     expect(await client.getRemoteEndpoints()).toEqual([
+      'https://update.react-native.cn/api',
       'https://edge-a.example.com',
+      'https://update.reactnative.cn/api',
       'https://edge-b.example.com',
     ]);
   });

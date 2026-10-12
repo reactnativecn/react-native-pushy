@@ -19,7 +19,7 @@ import {
   setLocalHashInfo,
   supportedDiffVersion,
 } from './core';
-import { dedupeEndpoints, executeEndpointFallback } from './endpoint';
+import { executeEndpointFallback } from './endpoint';
 import {
   readErrorCode,
   toUpdateError,
@@ -54,6 +54,7 @@ import {
   type DownloadPlan,
   type DownloadStrategyType,
   decideDownload,
+  dedupeEndpoints,
   isMirrorRetryableCode,
   isValidCheckResult,
   jsonDeepEqual,
@@ -116,14 +117,6 @@ const RELOAD_WATCHDOG_MS = 5000;
 // Non-2xx check responses are usually HTML error pages; keep only the head
 // for the error message (it can end up in an alert) and the logger.
 const MAX_HTTP_ERROR_TEXT = 200;
-
-const excludeConfiguredEndpoints = (
-  endpoints: string[],
-  configuredEndpoints: string[]
-) => {
-  const configured = new Set(configuredEndpoints);
-  return endpoints.filter((endpoint) => !configured.has(endpoint));
-};
 
 assertWeb();
 
@@ -881,16 +874,9 @@ export class Pushy {
     }
     return true;
   };
-  getCheckUrl = (endpoint: string) => {
-    return `${endpoint}/checkUpdate/${this.options.appKey}`;
-  };
-  getConfiguredCheckEndpoints = () => {
-    const { server } = this.options;
-    if (!server) {
-      return [];
-    }
-    return dedupeEndpoints(server.main);
-  };
+  // server.main is deduplicated on assignment (cloneServerConfig), and the
+  // endpoint plan dedupes again anyway.
+  getConfiguredCheckEndpoints = () => this.options.server?.main ?? [];
   getRemoteEndpoints = async () => {
     const { server } = this.options;
     if (!server?.queryUrls?.length) {
@@ -903,11 +889,7 @@ export class Pushy {
       // with an error page must not beat the healthy one.
       const remoteEndpoints = await promiseAny(
         server.queryUrls.map(async (queryUrl) => {
-          const resp = await fetchWithTimeout(
-            queryUrl,
-            {},
-            DEFAULT_FETCH_TIMEOUT_MS
-          );
+          const resp = await fetchWithTimeout(queryUrl, {});
           if (!resp.ok) {
             throw Error(`${queryUrl}: ${resp.status}`);
           }
@@ -919,16 +901,15 @@ export class Pushy {
         })
       );
       log('fetch endpoints:', remoteEndpoints);
-      return excludeConfiguredEndpoints(
-        dedupeEndpoints(
-          remoteEndpoints.filter(
-            // The list is fetched from a public mirror; it may add
-            // endpoints but never move the check outside TLS.
-            (endpoint): endpoint is string =>
-              typeof endpoint === 'string' && /^https:\/\//i.test(endpoint)
-          )
-        ),
-        this.getConfiguredCheckEndpoints()
+      // Configured and already-failed endpoints are dropped by the endpoint
+      // fallback itself.
+      return dedupeEndpoints(
+        remoteEndpoints.filter(
+          // The list is fetched from a public mirror; it may add endpoints
+          // but never move the check outside TLS.
+          (endpoint): endpoint is string =>
+            typeof endpoint === 'string' && /^https:\/\//i.test(endpoint)
+        )
       );
     } catch (e) {
       log('failed to fetch endpoints from: ', server.queryUrls, e);
@@ -939,54 +920,50 @@ export class Pushy {
     endpoint: string,
     fetchPayload: Parameters<typeof fetch>[1],
     signal?: AbortSignal
-  ) => {
-    const resp = await fetchWithTimeout(
-      this.getCheckUrl(endpoint),
-      fetchPayload,
-      DEFAULT_FETCH_TIMEOUT_MS,
-      signal
-    );
-
-    if (!resp.ok) {
-      const respText = (await resp.text()).slice(0, MAX_HTTP_ERROR_TEXT);
-      throw new UpdateError(
-        this.t('error_http_status', {
-          status: resp.status,
-          statusText: respText,
-        }),
-        'HTTP_STATUS',
-        { extra: { status: resp.status } }
+  ): Promise<CheckResult> => {
+    try {
+      const resp = await fetchWithTimeout(
+        `${endpoint}/checkUpdate/${this.options.appKey}`,
+        fetchPayload,
+        DEFAULT_FETCH_TIMEOUT_MS,
+        signal
       );
-    }
 
-    const result: unknown = await resp.json();
-    if (!isValidCheckResult(result)) {
-      // A 2xx that is not a verdict (`{"error": ...}`, a captive-portal page
-      // that parsed, ...) is a failed endpoint: throwing keeps the fallback
-      // moving to the next one instead of treating it as "no update".
-      throw new UpdateError(
-        this.t('error_invalid_check_response'),
-        'INVALID_RESPONSE'
-      );
+      if (!resp.ok) {
+        const respText = (await resp.text()).slice(0, MAX_HTTP_ERROR_TEXT);
+        throw new UpdateError(
+          this.t('error_http_status', {
+            status: resp.status,
+            statusText: respText,
+          }),
+          'HTTP_STATUS',
+          { extra: { status: resp.status } }
+        );
+      }
+
+      const result: unknown = await resp.json();
+      if (!isValidCheckResult(result)) {
+        // A 2xx that is not a verdict (`{"error": ...}`, a captive-portal
+        // page that parsed, ...) is a failed endpoint: throwing keeps the
+        // fallback moving to the next one instead of treating it as "no
+        // update".
+        throw new UpdateError(
+          this.t('error_invalid_check_response'),
+          'INVALID_RESPONSE'
+        );
+      }
+      return result;
+    } catch (e) {
+      log('check endpoint failed', endpoint, e);
+      throw e;
     }
-    return result;
   };
   fetchCheckResult = async (fetchPayload: Parameters<typeof fetch>[1]) => {
     const { endpoint, value } = await executeEndpointFallback<CheckResult>({
       configuredEndpoints: this.getConfiguredCheckEndpoints(),
       getRemoteEndpoints: this.getRemoteEndpoints,
-      tryEndpoint: async (currentEndpoint, signal) => {
-        try {
-          return await this.requestCheckResult(
-            currentEndpoint,
-            fetchPayload,
-            signal
-          );
-        } catch (e) {
-          log('check endpoint failed', currentEndpoint, e);
-          throw e;
-        }
-      },
+      tryEndpoint: (currentEndpoint, signal) =>
+        this.requestCheckResult(currentEndpoint, fetchPayload, signal),
       onFirstFailure: ({ error }) => {
         this.report({
           type: 'errorChecking',
