@@ -37,11 +37,6 @@ interface RestartWant {
   abilityName?: string;
 }
 
-// applicationContext.restartApp 是 API 12 才有的可选能力,按结构探测。
-interface RestartableApplicationContext {
-  restartApp?: (want: RestartWant) => void;
-}
-
 interface RestartEventEmitter {
   emit(event: string, payload: Object): void;
 }
@@ -122,13 +117,10 @@ export class PushyTurboModule extends UITurboModule {
       abilityName: this.mUiCtx.abilityInfo?.name,
     };
     try {
-      const applicationContext =
-        this.mUiCtx.getApplicationContext() as unknown as RestartableApplicationContext;
-      if (applicationContext && typeof applicationContext.restartApp === 'function') {
-        logger.debug(TAG, 'restartAbility via applicationContext.restartApp');
-        applicationContext.restartApp(want);
-        return;
-      }
+      // applicationContext.restartApp exists since API 12, the HAR's minimum.
+      logger.debug(TAG, 'restartAbility via applicationContext.restartApp');
+      this.mUiCtx.getApplicationContext().restartApp(want);
+      return;
     } catch (e) {
       logger.error(TAG, `restartAbility via restartApp failed: ${getErrorMessage(e)}`);
     }
