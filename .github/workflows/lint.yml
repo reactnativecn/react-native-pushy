@@ -20,21 +20,19 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v7
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: 1.4.0
 
       - name: Install Dependency
         run: bun install --frozen-lockfile
 
+      # `bun lint` ends with check-native-spec-parity.js: every
+      # src/NativePushy.ts method must be exported by all four native
+      # bindings, with the right sync/async kind on Harmony.
       - name: Run lint
         run: bun lint
 
       - name: Verify publish file list
         run: node scripts/check-packlist.js
-
-      # Every src/NativePushy.ts method must be exported by all four native
-      # bindings, with the right sync/async kind on Harmony.
-      - name: Verify JS <-> native method parity
-        run: node scripts/check-native-spec-parity.js

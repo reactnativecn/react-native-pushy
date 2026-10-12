@@ -37,7 +37,8 @@ const forbidden = [
   /^\.github\//,
   /^\.gitmodules$/,
   /^biome\.json$/,
-  /^(BUNDLEHASH|NATIVE_CHECK|CODE_AUDIT)[A-Z_]*\.md$/,
+  /^docs\//,
+  /^CODE_AUDIT\.md$/,
   /\.(log|tgz|zip|ppk|apk)$/,
 ];
 
