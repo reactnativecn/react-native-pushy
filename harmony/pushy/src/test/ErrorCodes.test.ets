@@ -5,7 +5,6 @@ import {
   PushyError,
   createPushyError,
   getErrorMessage,
-  parseErrorCodePrefix,
   toPushyError,
 } from '../main/ets/ErrorCodes';
 
@@ -35,19 +34,6 @@ export default function errorCodesTest() {
       const fromString = toPushyError('raw', ERROR_DOWNLOAD_FAILED);
       expect(fromString instanceof PushyError).assertTrue();
       expect(fromString.message).assertEqual('[DOWNLOAD_FAILED] raw');
-    });
-  });
-
-  describe('ErrorCodes.parseErrorCodePrefix', () => {
-    it('extracts a well-formed code', 0, () => {
-      expect(parseErrorCodePrefix('[PATCH_FAILED] boom')).assertEqual('PATCH_FAILED');
-    });
-
-    it('returns an empty string otherwise', 0, () => {
-      expect(parseErrorCodePrefix('boom')).assertEqual('');
-      expect(parseErrorCodePrefix('[lower] boom')).assertEqual('');
-      expect(parseErrorCodePrefix('[] boom')).assertEqual('');
-      expect(parseErrorCodePrefix('[NO_SPACE]boom')).assertEqual('');
     });
   });
 

@@ -19,7 +19,6 @@ import {
   scheduleNativeSync,
 } from './SyncCoordinator';
 import NativePatchCore, {
-  STATE_OP_CLEAR_FIRST_TIME,
   STATE_OP_CLEAR_ROLLBACK_MARK,
   STATE_OP_MARK_SUCCESS,
   STATE_OP_RESOLVE_LAUNCH,
@@ -500,13 +499,9 @@ export class UpdateContext {
 
   private async executeTask(params: DownloadTaskParams): Promise<void> {
     await this.enqueueSerialTask(() => {
-      const isPatchTask =
-        params.type === DownloadTaskParams.TASK_TYPE_PATCH_FULL ||
-        params.type === DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP ||
-        params.type === DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
       // Re-check only when this queued job actually starts. A JS download may
       // have completed while the cold-start duplicate waited behind it.
-      if (isPatchTask && this.hasDownloadedVersion(params.hash)) {
+      if (this.hasDownloadedVersion(params.hash)) {
         return Promise.resolve();
       }
       const downloadTask = new DownloadTask(this.context);
@@ -594,10 +589,6 @@ export class UpdateContext {
     return this.flushPreferences(`remove key ${key}`);
   }
 
-  public isFirstTime(): boolean {
-    return this.getStateSnapshot().firstTime;
-  }
-
   public rolledBackVersion(): string {
     return this.getStateSnapshot().rolledBackVersion || '';
   }
@@ -612,14 +603,6 @@ export class UpdateContext {
       cleanUp: true,
     });
     await this.flushPreferences('mark success');
-  }
-
-  public async clearFirstTime(): Promise<void> {
-    this.runStateOperation(STATE_OP_CLEAR_FIRST_TIME, '', {
-      cleanUp: true,
-      clearFirstLoadMarker: true,
-    });
-    await this.flushPreferences('clear first time');
   }
 
   /** getConstants(同步)里调用:落盘失败只记日志。 */

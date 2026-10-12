@@ -1237,25 +1237,7 @@ export class DownloadTask {
     }
   }
 
-  private async doCleanUp(params: DownloadTaskParams): Promise<void> {
-    try {
-      await NativePatchCore.cleanupOldEntries(
-        params.unzipDirectory,
-        [params.hash, params.originHash].filter(name => !!name),
-        3,
-      );
-    } catch (error) {
-      const message = `Cleanup failed: ${getErrorMessage(error)}`;
-      logger.error(TAG, message);
-      throw createPushyError(ERROR_FILE_OPERATION_FAILED, message);
-    }
-  }
-
   public async execute(params: DownloadTaskParams): Promise<void> {
-    const isPatchTask =
-      params.type === DownloadTaskParams.TASK_TYPE_PATCH_FULL ||
-      params.type === DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP ||
-      params.type === DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
     try {
       switch (params.type) {
         case DownloadTaskParams.TASK_TYPE_PATCH_FULL:
@@ -1267,24 +1249,13 @@ export class DownloadTask {
         case DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK:
           await this.doPatchFromPpk(params);
           break;
-        case DownloadTaskParams.TASK_TYPE_CLEANUP:
-          await this.doCleanUp(params);
-          break;
-        case DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD:
-          await this.downloadFile(params);
-          // 文件在完成时即是最终产物——残留的 sidecar 会让下次同 URL 的
-          // 下载不发请求直接返回这份旧字节。
-          await this.deleteResumeSidecar(params.targetFile);
-          break;
         default:
           throw createPushyError(
             ERROR_INVALID_OPTIONS,
             `Unknown task type: ${params.type}`,
           );
       }
-      if (isPatchTask) {
-        await this.promoteStaging(params);
-      }
+      await this.promoteStaging(params);
     } catch (rawError) {
       // 稳定错误码:下载阶段的失败是 DOWNLOAD_FAILED;归档收齐之后的失败
       // (解压/hpatch/资源拷贝含 copiesCrc 校验/完成记录)一律 PATCH_FAILED,
@@ -1295,29 +1266,22 @@ export class DownloadTask {
         this.downloadPhaseCompleted ? ERROR_DELTA_FAILED : ERROR_DOWNLOAD_FAILED,
       );
       logger.error(TAG, `Task execution failed: ${error.message}`);
-      if (params.type !== DownloadTaskParams.TASK_TYPE_CLEANUP) {
-        try {
-          if (params.type === DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD) {
-            await fileIo.unlink(params.targetFile);
-            await this.deleteResumeSidecar(params.targetFile);
-          } else {
-            // Only the staging directory is ours to drop: the final version
-            // directory is never touched by a failed install, so a failed
-            // duplicate task cannot remove an earlier task's install.
-            await this.removeDirectory(this.stagingDirectory(params));
-            if (this.downloadPhaseCompleted) {
-              // 收齐后才失败的是解压/patch 失败:归档有毒,续传只会撞上
-              // 同一个失败。下载阶段的失败则保留 partial + sidecar——那
-              // 就是续传状态。
-              await this.deleteArchiveAndSidecar(params.targetFile);
-            }
-          }
-        } catch (cleanupError) {
-          logger.error(
-            TAG,
-            `Cleanup after error failed: ${getErrorMessage(cleanupError)}`,
-          );
+      try {
+        // Only the staging directory is ours to drop: the final version
+        // directory is never touched by a failed install, so a failed
+        // duplicate task cannot remove an earlier task's install.
+        await this.removeDirectory(this.stagingDirectory(params));
+        if (this.downloadPhaseCompleted) {
+          // 收齐后才失败的是解压/patch 失败:归档有毒,续传只会撞上
+          // 同一个失败。下载阶段的失败则保留 partial + sidecar——那
+          // 就是续传状态。
+          await this.deleteArchiveAndSidecar(params.targetFile);
         }
+      } catch (cleanupError) {
+        logger.error(
+          TAG,
+          `Cleanup after error failed: ${getErrorMessage(cleanupError)}`,
+        );
       }
       throw error;
     }

@@ -18,9 +18,6 @@
 #include "state_core.h"
 #include "state_ops.h"
 
-extern "C" {
-}
-
 namespace {
 
 using pushy::state_ops::StateOperation;

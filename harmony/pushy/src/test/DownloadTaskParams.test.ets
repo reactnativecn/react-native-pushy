@@ -4,16 +4,14 @@ import { DownloadTaskParams } from '../main/ets/DownloadTaskParams';
 export default function downloadTaskParamsTest() {
   describe('DownloadTaskParams', () => {
     it('has correct task type constants', 0, () => {
-      expect(DownloadTaskParams.TASK_TYPE_CLEANUP).assertEqual(0);
       expect(DownloadTaskParams.TASK_TYPE_PATCH_FULL).assertEqual(1);
       expect(DownloadTaskParams.TASK_TYPE_PATCH_FROM_APP).assertEqual(2);
       expect(DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK).assertEqual(3);
-      expect(DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD).assertEqual(4);
     });
 
     it('has correct default values', 0, () => {
       const params = new DownloadTaskParams();
-      expect(params.type).assertEqual(DownloadTaskParams.TASK_TYPE_CLEANUP);
+      expect(params.type).assertEqual(DownloadTaskParams.TASK_TYPE_PATCH_FULL);
       expect(params.url).assertEqual('');
       expect(params.hash).assertEqual('');
       expect(params.originHash).assertEqual('');

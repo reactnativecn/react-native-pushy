@@ -22,8 +22,8 @@
  * SOFTWARE.
  */
 
-#ifndef GEO_LOCATION_PACKAGE_H
-#define GEO_LOCATION_PACKAGE_H
+#ifndef PUSHY_PACKAGE_H
+#define PUSHY_PACKAGE_H
 
 #include "RNOH/Package.h"
 #include "PushyTurboModule.h"
