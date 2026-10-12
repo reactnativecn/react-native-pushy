@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
+import { URL } from 'node:url';
 import { decodeNativeText } from '../../scripts/encode-native-text';
 
 // JNI_OnLoad binds Android native methods from an encoded name/signature table
