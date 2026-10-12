@@ -150,7 +150,7 @@ public class UpdateModule extends NativePushySpec {
         if (hash == null) {
             return;
         }
-        updateContext.downloadFullUpdate(url, hash, downloadListener(promise));
+        updateContext.downloadFullUpdate(url, hash, downloadListener(promise), 0);
     }
 
     @ReactMethod
@@ -210,7 +210,7 @@ public class UpdateModule extends NativePushySpec {
         if (hash == null) {
             return;
         }
-        updateContext.downloadPatchFromApk(url, hash, downloadListener(promise));
+        updateContext.downloadPatchFromApk(url, hash, downloadListener(promise), 0);
     }
 
     @ReactMethod
@@ -228,7 +228,7 @@ public class UpdateModule extends NativePushySpec {
         if (originHash == null) {
             return;
         }
-        updateContext.downloadPatchFromPpk(url, hash, originHash, downloadListener(promise));
+        updateContext.downloadPatchFromPpk(url, hash, originHash, downloadListener(promise), 0);
     }
 
     @ReactMethod

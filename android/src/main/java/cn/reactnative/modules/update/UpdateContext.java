@@ -66,7 +66,6 @@ public class UpdateContext {
     private static final int STATE_OP_CLEAR_ROLLBACK_MARK = 5;
     private static final int STATE_OP_RESOLVE_LAUNCH = 6;
     private static final String KEY_FIRST_LOAD_MARKED = "firstLoadMarked";
-    static final String VERSION_COMPLETE_FILE = InstallRecord.FILE_NAME;
     // Bumped by resetToPackagedBundle. The cold-start check runs for minutes
     // and may already hold a decision when the app resets to the packaged
     // bundle; the orchestrator samples this counter and abandons activation
@@ -135,7 +134,7 @@ public class UpdateContext {
 
         if (nextState.changed) {
             // Execute cleanUp before clearing SharedPreferences to avoid race condition
-            this.cleanUp();
+            cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
             SharedPreferences.Editor editor = this.sp.edit();
             editor.clear();
             applyState(editor, nextState);
@@ -335,16 +334,30 @@ public class UpdateContext {
         void onDownloadFailed(Throwable error);
     }
 
-    public void downloadFullUpdate(String url, String hash, DownloadFileListener listener) {
-        downloadFullUpdate(url, hash, listener, 0);
+    /**
+     * Params shared by every download task. deadlineNanos is an absolute
+     * System.nanoTime deadline for orchestrated (native cold-start) tasks; 0
+     * keeps the per-call timeout of a JS-initiated download.
+     */
+    private static DownloadTaskParams downloadParams(
+        int type, String url, String hash, DownloadFileListener listener, long deadlineNanos
+    ) {
+        DownloadTaskParams params = new DownloadTaskParams();
+        params.type = type;
+        params.url = url;
+        params.hash = hash;
+        params.listener = listener;
+        params.deadlineNanos = deadlineNanos;
+        return params;
     }
 
-    /**
-     * The deadline-taking overloads (native cold-start check) return the
-     * queued task's params so the orchestrator can cancel the task when its
-     * phase budget expires (CODE_AUDIT 2.12); null when the request was
-     * rejected up front (the listener has already been told).
+    /*
+     * The patch downloads return the queued task's params so the native
+     * orchestrator can cancel the task when its phase budget expires
+     * (CODE_AUDIT 2.12); null when the request was rejected up front (the
+     * listener has already been told).
      */
+
     @Nullable
     DownloadTaskParams downloadFullUpdate(
         String url, String hash, DownloadFileListener listener, long deadlineNanos
@@ -352,35 +365,23 @@ public class UpdateContext {
         if (rejectUnsafeComponent(hash, listener)) {
             return null;
         }
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FULL;
-        params.url = url;
-        params.hash = hash;
-        params.listener = listener;
-        params.deadlineNanos = deadlineNanos;
+        DownloadTaskParams params = downloadParams(
+            DownloadTaskParams.TASK_TYPE_PATCH_FULL, url, hash, listener, deadlineNanos);
         params.targetFile = new File(rootDir, hash + ".ppk");
         params.unzipDirectory = new File(rootDir, hash);
         enqueue(params);
         return params;
     }
 
+    /** A plain file download into the root dir; hash only keys progress events. */
     public void downloadFile(String url, String hash, String fileName, DownloadFileListener listener) {
         if (rejectUnsafeComponent(fileName, listener)) {
             return;
         }
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD;
-        params.url = url;
-        params.hash = hash;
-        params.listener = listener;
-
+        DownloadTaskParams params = downloadParams(
+            DownloadTaskParams.TASK_TYPE_PLAIN_DOWNLOAD, url, hash, listener, 0);
         params.targetFile = new File(rootDir, fileName);
-//        params.unzipDirectory = new File(rootDir, hash);
         enqueue(params);
-    }
-
-    public void downloadPatchFromApk(String url, String hash, DownloadFileListener listener) {
-        downloadPatchFromApk(url, hash, listener, 0);
     }
 
     @Nullable
@@ -390,20 +391,12 @@ public class UpdateContext {
         if (rejectUnsafeComponent(hash, listener)) {
             return null;
         }
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK;
-        params.url = url;
-        params.hash = hash;
-        params.listener = listener;
-        params.deadlineNanos = deadlineNanos;
+        DownloadTaskParams params = downloadParams(
+            DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK, url, hash, listener, deadlineNanos);
         params.targetFile = new File(rootDir, hash + Texts.reveal("7416e4dae09b69512137"));
         params.unzipDirectory = new File(rootDir, hash);
         enqueue(params);
         return params;
-    }
-
-    public void downloadPatchFromPpk(String url, String hash, String originHash, DownloadFileListener listener) {
-        downloadPatchFromPpk(url, hash, originHash, listener, 0);
     }
 
     @Nullable
@@ -417,13 +410,9 @@ public class UpdateContext {
         if (rejectUnsafeComponent(hash, listener) || rejectUnsafeComponent(originHash, listener)) {
             return null;
         }
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK;
-        params.url = url;
-        params.hash = hash;
+        DownloadTaskParams params = downloadParams(
+            DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK, url, hash, listener, deadlineNanos);
         params.originHash = originHash;
-        params.listener = listener;
-        params.deadlineNanos = deadlineNanos;
         params.targetFile = new File(rootDir, originHash + "-" + hash + Texts.reveal("7407e4dae09b69512137"));
         params.unzipDirectory = new File(rootDir, hash);
         params.originDirectory = new File(rootDir, originHash);
@@ -481,16 +470,6 @@ public class UpdateContext {
     }
 
     /**
-     * Asynchronous variant for the getConstants path (JS thread): the
-     * in-memory state changes immediately, the disk write happens on the
-     * SharedPreferences writer. Losing it to a crash only re-reports the
-     * one-shot markers on the next launch.
-     */
-    private static void applyEditor(SharedPreferences.Editor editor) {
-        editor.apply();
-    }
-
-    /**
      * Persistence for operations whose result is promised to a caller
      * (switchVersion / markSuccess / setLocalHashInfo / the cold-start round):
      * a commit that did not reach disk is a failed operation, never a
@@ -542,13 +521,12 @@ public class UpdateContext {
      * holds commitLock and has run verifySwitchTarget.
      */
     private StateCoreResult computeSwitchState(String hash) {
-        return runStateCore(
-            STATE_OP_SWITCH_VERSION,
-            getStateSnapshot(),
-            hash,
-            false,
-            false
-        );
+        return runStateOp(STATE_OP_SWITCH_VERSION, hash);
+    }
+
+    /** One state-core operation on the current snapshot; caller holds commitLock. */
+    private StateCoreResult runStateOp(int operation, @Nullable String hash) {
+        return runStateCore(operation, getStateSnapshot(), hash, false, false);
     }
 
     public void switchVersion(String hash) {
@@ -614,21 +592,18 @@ public class UpdateContext {
                     editor.remove(KEY_FIRST_LOAD_MARKED);
                 }
                 if (rolledBackVersion != null) {
-                    StateCoreResult nextState = runStateCore(
-                        STATE_OP_CLEAR_ROLLBACK_MARK,
-                        getStateSnapshot(),
-                        null,
-                        false,
-                        false
-                    );
-                    applyState(editor, nextState);
+                    applyState(editor, runStateOp(STATE_OP_CLEAR_ROLLBACK_MARK, null));
                 }
-                applyEditor(editor);
+                // Asynchronous on purpose: the in-memory state changes
+                // immediately, the disk write happens on the
+                // SharedPreferences writer. Losing it to a crash only
+                // re-reports the one-shot markers on the next launch.
+                editor.apply();
             }
         }
         if (markers.rolledBackVersion != null) {
             // The rolled-back version's directory is now eligible for cleanup.
-            this.cleanUp();
+            cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
         }
         return markers;
     }
@@ -642,14 +617,7 @@ public class UpdateContext {
             return;
         }
         synchronized (commitLock) {
-            StateCoreResult currentState = getStateSnapshot();
-            StateCoreResult nextState = runStateCore(
-                STATE_OP_MARK_SUCCESS,
-                currentState,
-                null,
-                false,
-                false
-            );
+            StateCoreResult nextState = runStateOp(STATE_OP_MARK_SUCCESS, null);
             SharedPreferences.Editor editor = sp.edit();
             applyState(editor, nextState);
             if (nextState.staleVersionToDelete != null) {
@@ -658,7 +626,7 @@ public class UpdateContext {
             persistEditorOrThrow(editor, "mark success");
         }
 
-        this.cleanUp();
+        cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
     }
 
     /**
@@ -700,14 +668,7 @@ public class UpdateContext {
         persistEditorOrThrow(editor, "reset to packaged bundle");
         ignoreRollback = false;
         Log.i(TAG, "Reset to packaged bundle");
-
-        DownloadTaskParams params = new DownloadTaskParams();
-        params.type = DownloadTaskParams.TASK_TYPE_CLEANUP;
-        params.maxAgeDays = 0;
-        // Keep names are resolved by the queued task at execution time, so a
-        // later activation is protected too.
-        params.unzipDirectory = rootDir;
-        enqueue(params);
+        cleanUp(0);
     }
 
     public static void setCustomInstanceManager(ReactInstanceManager instanceManager) {
@@ -821,7 +782,6 @@ public class UpdateContext {
         }
     }
 
-    /** Sampled/compared by the native check orchestrator; see resetGeneration. */
     /** Shared by JS and native hosts. Config replacement invalidates old native decisions. */
     private static final java.util.concurrent.atomic.AtomicLong nativeConfigGeneration =
         new java.util.concurrent.atomic.AtomicLong(0);
@@ -863,7 +823,11 @@ public class UpdateContext {
         SyncCoordinator.onConfigured(this);
     }
 
-    // Native-decision generation: bumped by reset AND configuration replacement.
+    /**
+     * Native-decision generation, sampled/compared by the native check
+     * orchestrator: bumped by reset AND configuration replacement (see
+     * resetGeneration).
+     */
     static long getResetGeneration() {
         return resetGeneration.get();
     }
@@ -977,15 +941,9 @@ public class UpdateContext {
 
     private String rollBack() {
         synchronized (commitLock) {
-            StateCoreResult currentState = getStateSnapshot();
-            StateCoreResult nextState = runStateCore(
-                STATE_OP_ROLLBACK,
-                currentState,
-                null,
-                false,
-                false
-            );
-            Log.e(TAG, "Rolling back version " + currentState.currentVersion
+            String rollingBack = getCurrentVersion();
+            StateCoreResult nextState = runStateOp(STATE_OP_ROLLBACK, null);
+            Log.e(TAG, "Rolling back version " + rollingBack
                 + " to " + nextState.currentVersion);
             SharedPreferences.Editor editor = sp.edit();
             applyState(editor, nextState);
@@ -1029,9 +987,15 @@ public class UpdateContext {
         }
     }
 
-    private void cleanUp() {
+    /**
+     * Queues removal of every version entry older than maxAgeDays (0: all)
+     * except the keep names, which the queued task resolves at execution
+     * time so a later activation is protected too.
+     */
+    private void cleanUp(int maxAgeDays) {
         DownloadTaskParams params = new DownloadTaskParams();
         params.type = DownloadTaskParams.TASK_TYPE_CLEANUP;
+        params.maxAgeDays = maxAgeDays;
         params.unzipDirectory = rootDir;
         enqueue(params);
     }
