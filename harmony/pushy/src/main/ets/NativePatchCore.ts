@@ -3,11 +3,9 @@ import NativeCore from 'librnpushy.so';
 export const STATE_OP_SWITCH_VERSION = 1;
 export const STATE_OP_MARK_SUCCESS = 2;
 export const STATE_OP_ROLLBACK = 3;
-export const STATE_OP_CLEAR_FIRST_TIME = 4;
 export const STATE_OP_CLEAR_ROLLBACK_MARK = 5;
 export const STATE_OP_RESOLVE_LAUNCH = 6;
 
-export const ARCHIVE_PATCH_TYPE_FULL = 1;
 export const ARCHIVE_PATCH_TYPE_FROM_PACKAGE = 2;
 export const ARCHIVE_PATCH_TYPE_FROM_PPK = 3;
 

@@ -53,7 +53,8 @@ export async function withRawFd<T>(
   }
 }
 
-async function writeFully(
+/** 把 buffer 的前 length 字节完整写入 fd(处理短写)。 */
+export async function writeFully(
   fd: number,
   buffer: ArrayBuffer,
   length: number,
@@ -66,6 +67,13 @@ async function writeFully(
       throw new Error(`Short write: ${written}/${length} bytes`);
     }
     written += count;
+  }
+}
+
+/** 文件存在则删除(删除失败照常抛出)。 */
+export async function unlinkIfExists(path: string): Promise<void> {
+  if (fs.accessSync(path)) {
+    await fs.unlink(path);
   }
 }
 

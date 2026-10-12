@@ -37,11 +37,6 @@ interface RestartWant {
   abilityName?: string;
 }
 
-// applicationContext.restartApp 是 API 12 才有的可选能力,按结构探测。
-interface RestartableApplicationContext {
-  restartApp?: (want: RestartWant) => void;
-}
-
 interface RestartEventEmitter {
   emit(event: string, payload: Object): void;
 }
@@ -122,13 +117,10 @@ export class PushyTurboModule extends UITurboModule {
       abilityName: this.mUiCtx.abilityInfo?.name,
     };
     try {
-      const applicationContext =
-        this.mUiCtx.getApplicationContext() as unknown as RestartableApplicationContext;
-      if (applicationContext && typeof applicationContext.restartApp === 'function') {
-        logger.debug(TAG, 'restartAbility via applicationContext.restartApp');
-        applicationContext.restartApp(want);
-        return;
-      }
+      // applicationContext.restartApp exists since API 12, the HAR's minimum.
+      logger.debug(TAG, 'restartAbility via applicationContext.restartApp');
+      this.mUiCtx.getApplicationContext().restartApp(want);
+      return;
     } catch (e) {
       logger.error(TAG, `restartAbility via restartApp failed: ${getErrorMessage(e)}`);
     }
@@ -206,23 +198,17 @@ export class PushyTurboModule extends UITurboModule {
       uuid,
       supportedDiffVersion: NativePatchCore.getSupportedDiffVersion(),
     };
-    const logResult = {
-      downloadRootDir: result.downloadRootDir,
-      currentVersionInfo: result.currentVersionInfo,
-      packageVersion: result.packageVersion,
-      currentVersion: result.currentVersion,
-      buildTime: result.buildTime,
-      isUsingBundleUrl: result.isUsingBundleUrl,
-      isFirstTime: result.isFirstTime,
-      rolledBackVersion: result.rolledBackVersion,
-      uuidSet: !!result.uuid,
-    };
-    logger.info(TAG, `,getConstants result: ${JSON.stringify(logResult)}`);
+    // The install uuid stays out of the logs; only whether it is set.
+    const { uuid: _uuid, ...logResult } = result;
+    logger.info(
+      TAG,
+      `,getConstants result: ${JSON.stringify({ ...logResult, uuidSet: !!uuid })}`,
+    );
     return result;
   }
 
   // 以下方法在 JS spec(src/NativePushy.ts)里都返回 Promise,C++ 方法表
-  // (PushyTurboModule.cpp)相应用 PUSHY_ASYNC_METHOD 注册:同步注册会把
+  // (PushyTurboModule.cpp 的 PUSHY_METHODS)相应登记为 ASYNC:同步注册会把
   // ArkTS 的 Promise 变成空对象、把 reject 丢成 ArkTS 侧的 unhandled rejection。
   // 每个拒绝都带稳定错误码(ErrorCodes.ts):`code` 属性 + `[CODE] ` 消息前缀。
 

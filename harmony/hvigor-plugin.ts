@@ -156,26 +156,18 @@ export function reactNativeUpdatePlugin() {
         console.log(`Build time written to ${metaFilePath} (${buildMode})`);
       };
 
-      if (typeof safeNode.registerTask === 'function') {
-        try {
-          safeNode.registerTask({
-            name: TASK_NAME,
-            run: writeMeta,
-            dependencies: ['default@PreBuild'],
-            postDependencies: ['default@ProcessResource'],
-          });
-          return;
-        } catch (e) {
-          console.warn(
-            `reactNativeUpdatePlugin: task registration failed (${
-              e instanceof Error ? e.message : String(e)
-            }), writing meta.json at apply time`,
-          );
-        }
+      if (typeof safeNode.registerTask !== 'function') {
+        throw new Error(
+          'reactNativeUpdatePlugin: this hvigor cannot register build tasks; ' +
+            'apply the plugin from a module hvigorfile with hvigor 5 or later.',
+        );
       }
-      // Very old hvigor without task registration: keep the previous
-      // behaviour (write at apply time), still only for assemble builds.
-      writeMeta();
+      safeNode.registerTask({
+        name: TASK_NAME,
+        run: writeMeta,
+        dependencies: ['default@PreBuild'],
+        postDependencies: ['default@ProcessResource'],
+      });
     },
   };
 }

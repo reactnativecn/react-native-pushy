@@ -9,7 +9,9 @@ import { isSafePathComponent } from './PathUtils';
 import { QUERY_PATH, STATUS_NONE } from './Texts';
 import { monotonicNowMs } from './MonotonicClock';
 import {
+  ERROR_DELTA_FAILED,
   ERROR_DOWNLOAD_FAILED,
+  PushyError,
   createPushyError,
   getErrorMessage,
 } from './ErrorCodes';
@@ -385,6 +387,32 @@ async function runConfiguredRound(
   }
   // Anchor cache freshness to response arrival, before download/patch work.
   const responseAtSeconds = Math.floor(Date.now() / 1000);
+  const responseCacheJson = buildResponseCacheJson(
+    configJson,
+    body,
+    responseText,
+    responseAtSeconds,
+  );
+  // Commits the round's persistent outcome (see commitSyncResult) and maps
+  // it to the round result; a reset during the round wins over `result`.
+  const commit = async (
+    hash: string,
+    hashInfoJson: string,
+    activate: boolean,
+    result: BundlePreparationResult,
+  ): Promise<boolean> => {
+    const committed = await context.commitSyncResult(
+      resetGeneration,
+      hash,
+      hashInfoJson,
+      activate,
+      responseCacheJson,
+    );
+    roundResult = committed
+      ? result
+      : bundlePreparationResult('cancelled', 'reset');
+    return committed;
+  };
 
   const decisionJson = NativePatchCore.handleResponse(
     responseText,
@@ -397,16 +425,12 @@ async function runConfiguredRound(
   }
   const decision = JSON.parse(decisionJson) as Decision;
   if (decision.action !== 'download') {
-    const committed = await context.commitSyncResult(
-      resetGeneration,
+    await commit(
       '',
       '',
       false,
-      buildResponseCacheJson(configJson, body, responseText, responseAtSeconds),
+      bundlePreparationResult(STATUS_NONE, decision.reason ?? ''),
     );
-    roundResult = committed
-      ? bundlePreparationResult(STATUS_NONE, decision.reason ?? '')
-      : bundlePreparationResult('cancelled', 'reset');
     logger.info(TAG, `nothing to do (${decision.reason ?? ''})`);
     return;
   }
@@ -432,16 +456,7 @@ async function runConfiguredRound(
   }
   if (!downloaded) {
     logger.warn(TAG, `all download attempts for ${hash} failed`);
-    const committed = await context.commitSyncResult(
-      resetGeneration,
-      '',
-      '',
-      false,
-      buildResponseCacheJson(configJson, body, responseText, responseAtSeconds),
-    );
-    roundResult = committed
-      ? bundlePreparationResult('failed', 'download_failed')
-      : bundlePreparationResult('cancelled', 'reset');
+    await commit('', '', false, bundlePreparationResult('failed', 'download_failed'));
     return;
   }
 
@@ -474,12 +489,11 @@ async function runConfiguredRound(
   const activate = decision.activate === true;
   let committed = false;
   try {
-    committed = await context.commitSyncResult(
-      resetGeneration,
+    committed = await commit(
       hash,
       hashInfoJson,
       activate,
-      buildResponseCacheJson(configJson, body, responseText, responseAtSeconds),
+      bundlePreparationResult('downloaded', '', hash, activate),
     );
   } catch (e) {
     logger.error(TAG, `commit failed: ${getErrorMessage(e)}`);
@@ -493,9 +507,6 @@ async function runConfiguredRound(
   } else {
     logger.info(TAG, `downloaded ${hash}, activation left to JS`);
   }
-  roundResult = committed
-    ? bundlePreparationResult('downloaded', '', hash, activate)
-    : bundlePreparationResult('cancelled', 'reset');
 }
 
 function buildResponseCacheJson(
@@ -588,25 +599,44 @@ async function runQueryRequest(
   const ordered = JSON.parse(orderedJson) as string[];
   const tried = new Set<string>();
   let httpAttempts = 0;
-  for (const rawBase of ordered) {
+  // Claims one HTTP request from the round's budget (endpoint queries and
+  // remote list fetches alike); false once it is spent.
+  const claimAttempt = (): boolean => httpAttempts++ < MAX_QUERY_HTTP_ATTEMPTS;
+  // Queries one endpoint base unless it is empty, already tried or (for
+  // remotely injected bases) a cleartext downgrade. Resolves to the valid
+  // response, to null once the budget is spent (stop), or to undefined
+  // (continue with the next base).
+  const tryBase = async (
+    rawBase: string,
+    rejectCleartext: boolean,
+  ): Promise<string | null | undefined> => {
     const base = normalizeEndpointBase(rawBase);
     if (!base || tried.has(base)) {
-      continue;
-    }
-    if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
       return undefined;
+    }
+    if (rejectCleartext && !isHttpsUrl(base)) {
+      // 远程注入的端点不得把 https 配置降级成明文。
+      logger.warn(TAG, `ignoring non-https remote endpoint ${base}`);
+      return undefined;
+    }
+    if (!claimAttempt()) {
+      return null;
     }
     tried.add(base);
     const response = await httpRequest(`${base}${QUERY_PATH}${appKey}`, body);
-    if (isValidResponse(response)) {
-      return response;
+    return isValidResponse(response) ? response : undefined;
+  };
+  for (const rawBase of ordered) {
+    const response = await tryBase(rawBase, false);
+    if (response !== undefined) {
+      return response ?? undefined;
     }
   }
   for (const listUrl of config.queryUrls ?? []) {
     if (!listUrl) {
       continue;
     }
-    if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
+    if (!claimAttempt()) {
       return undefined;
     }
     const listText = await httpRequest(listUrl);
@@ -627,22 +657,9 @@ async function runQueryRequest(
       if (typeof rawBase !== 'string') {
         continue;
       }
-      const base = normalizeEndpointBase(rawBase);
-      if (!base || tried.has(base)) {
-        continue;
-      }
-      if (httpsOnly && !isHttpsUrl(base)) {
-        // 远程注入的端点不得把 https 配置降级成明文。
-        logger.warn(TAG, `ignoring non-https remote endpoint ${base}`);
-        continue;
-      }
-      if (httpAttempts++ >= MAX_QUERY_HTTP_ATTEMPTS) {
-        return undefined;
-      }
-      tried.add(base);
-      const response = await httpRequest(`${base}${QUERY_PATH}${appKey}`, body);
-      if (isValidResponse(response)) {
-        return response;
+      const response = await tryBase(rawBase, httpsOnly);
+      if (response !== undefined) {
+        return response ?? undefined;
       }
     }
     // 拉到一份可解析的远程列表就够了。
@@ -745,8 +762,19 @@ async function performAttempts(
         return true;
       } catch (e) {
         logger.warn(TAG, `${type} attempt failed: ${getErrorMessage(e)}`);
+        if (!isMirrorRetryable(e)) {
+          // The bytes arrived but could not be applied: every mirror serves
+          // the same artifact, so move on to the next strategy instead of
+          // re-downloading it (update_flow_core IsMirrorRetryableCode, JS
+          // client.ts isMirrorRetryableCode).
+          break;
+        }
       }
     }
   }
   return false;
+}
+
+function isMirrorRetryable(error: unknown): boolean {
+  return !(error instanceof PushyError && error.code === ERROR_DELTA_FAILED);
 }

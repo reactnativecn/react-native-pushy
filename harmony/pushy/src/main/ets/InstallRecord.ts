@@ -1,6 +1,7 @@
 import fileIo from '@ohos.file.fs';
 import { util } from '@kit.ArkTS';
 import NativePatchCore from './NativePatchCore';
+import { unlinkIfExists } from './SaveFile';
 import {
   ERROR_DELTA_FAILED,
   ERROR_SWITCH_VERSION_FAILED,
@@ -65,9 +66,7 @@ export async function writeInstallRecord(
   recordJson: string,
 ): Promise<void> {
   const path = `${versionDir}/${INSTALL_RECORD_FILE_NAME}`;
-  if (fileIo.accessSync(path)) {
-    await fileIo.unlink(path);
-  }
+  await unlinkIfExists(path);
   const file = await fileIo.open(
     path,
     fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,
@@ -121,6 +120,11 @@ export function readInstallRecord(versionDir: string): InstallRecordData | null 
   }
 }
 
+/** 历史空记录(SDK < 10.53 写的空文件):视为完整安装,无摘要可验。 */
+function isLegacyRecord(record: InstallRecordData): boolean {
+  return Object.keys(record).length === 0;
+}
+
 /** 记录是否宣告本版本完整安装(历史空记录视为是)。纯函数。 */
 export function isRecordForVersion(
   record: InstallRecordData | null,
@@ -129,11 +133,10 @@ export function isRecordForVersion(
   if (record === null) {
     return false;
   }
-  if (Object.keys(record).length === 0) {
-    return true;
-  }
   return (
-    record.schema === INSTALL_RECORD_SCHEMA && record.versionHash === versionHash
+    isLegacyRecord(record) ||
+    (record.schema === INSTALL_RECORD_SCHEMA &&
+      record.versionHash === versionHash)
   );
 }
 
@@ -157,20 +160,15 @@ export function expectedBundleSha256ForActivation(
       `Bundle version ${versionHash} has no valid completion record.`,
     );
   }
-  if (Object.keys(record).length === 0) {
+  if (isLegacyRecord(record)) {
     return '';
   }
-  if (
-    record.schema !== INSTALL_RECORD_SCHEMA ||
-    record.versionHash !== versionHash
-  ) {
-    throw createPushyError(
-      ERROR_SWITCH_VERSION_FAILED,
-      `Bundle version ${versionHash} completion record mismatch.`,
-    );
-  }
   const expected = record.bundleSha256;
-  if (typeof expected !== 'string' || expected.length === 0) {
+  if (
+    !isRecordForVersion(record, versionHash) ||
+    typeof expected !== 'string' ||
+    expected.length === 0
+  ) {
     throw createPushyError(
       ERROR_SWITCH_VERSION_FAILED,
       `Bundle version ${versionHash} completion record mismatch.`,

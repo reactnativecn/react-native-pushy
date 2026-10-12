@@ -62,16 +62,3 @@ export function toPushyError(error: unknown, defaultCode: string): PushyError {
   }
   return new PushyError(defaultCode, getErrorMessage(error));
 }
-
-/** 从 `[CODE] message` 形式的消息里解析错误码;无前缀返回空串。 */
-export function parseErrorCodePrefix(message: string): string {
-  if (typeof message !== 'string' || !message.startsWith('[')) {
-    return '';
-  }
-  const end = message.indexOf('] ');
-  if (end <= 1) {
-    return '';
-  }
-  const code = message.substring(1, end);
-  return /^[A-Z][A-Z0-9_]*$/.test(code) ? code : '';
-}
