@@ -28,13 +28,11 @@ jobs:
       - name: Install Dependency
         run: bun install --frozen-lockfile
 
+      # `bun lint` ends with check-native-spec-parity.js: every
+      # src/NativePushy.ts method must be exported by all four native
+      # bindings, with the right sync/async kind on Harmony.
       - name: Run lint
         run: bun lint
 
       - name: Verify publish file list
         run: node scripts/check-packlist.js
-
-      # Every src/NativePushy.ts method must be exported by all four native
-      # bindings, with the right sync/async kind on Harmony.
-      - name: Verify JS <-> native method parity
-        run: node scripts/check-native-spec-parity.js

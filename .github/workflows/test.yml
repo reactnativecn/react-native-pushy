@@ -15,6 +15,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The native jobs below only run when their inputs change. A job skipped by
+  # its `if:` still reports success, so required checks and native-gate (which
+  # looks at the workflow conclusion) are satisfied on unrelated changes.
+  changes:
+    name: Detect changed native inputs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      cpp: ${{ steps.filter.outputs.cpp }}
+      ios: ${{ steps.filter.outputs.ios }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            cpp:
+              - '.github/workflows/test.yml'
+              - '.gitmodules'
+              - 'cpp/**'
+              - 'android/jni/**'
+              - 'scripts/test-*'
+            ios:
+              - '.github/workflows/test.yml'
+              - 'ios/**'
+              - 'cpp/**'
+              - 'scripts/test-ios-purge-restore.sh'
+              - 'scripts/tests/ios-purge-restore/**'
+
   js-test:
     name: JS Unit Tests
     runs-on: ubuntu-latest
@@ -34,6 +66,8 @@ jobs:
 
   cpp-test:
     name: C++ Unit Tests
+    needs: changes
+    if: needs.changes.outputs.cpp == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -76,12 +110,15 @@ jobs:
       # libFuzzer is unavailable on the runner.
       - name: Fuzz parsers (bounded)
         run: |
+          sudo apt-get update
           sudo apt-get install -y clang
           FUZZ=1 ./scripts/test-update-flow-core.sh
           FUZZ=1 ./scripts/test-patch-core.sh
 
   ios-purge-restore-test:
     name: Native purge-restore ordering
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
     runs-on: macos-latest
     timeout-minutes: 5
 
