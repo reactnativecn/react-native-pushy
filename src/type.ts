@@ -41,21 +41,6 @@ interface RootResult {
   bundleStatus?: 'matched' | 'rebuiltSameJs' | 'unknownBundle';
 }
 
-export type UpToDateCheckResult = RootResult & {
-  upToDate: true;
-};
-
-export type UpdateAvailableCheckResult = RootResult &
-  Partial<VersionInfo> & {
-    update: true;
-    expVersion?: VersionInfo;
-  };
-
-export type ExpiredCheckResult = RootResult & {
-  expired: true;
-  downloadUrl: string;
-};
-
 export type CheckResult = RootResult &
   Partial<VersionInfo> & {
     expVersion?: VersionInfo;

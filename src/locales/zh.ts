@@ -1,10 +1,6 @@
 export default {
   // Common messages
-  checking_update: '正在检查更新...',
   update_failed: '更新失败',
-
-  // Progress messages with interpolation
-  download_progress: '下载进度: {{progress}}%',
 
   // Alert messages
   alert_title: '提示',

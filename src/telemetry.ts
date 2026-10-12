@@ -14,19 +14,6 @@ export type ServerEventType =
 // Failure detail is stored server-side in a VARCHAR(512); stay under it.
 export const MAX_DETAIL_LENGTH = 500;
 
-export interface ServerReportPayload {
-  type: ServerEventType;
-  hash: string;
-  packageVersion?: string;
-  cInfo?: {
-    rnu?: string;
-    rn?: string;
-    os?: string;
-    uuid?: string;
-  };
-  detail?: string;
-}
-
 /**
  * Maps a local report event to the server-side aggregate type, or undefined
  * for events the server does not collect. A DOWNLOAD_FAILED whose underlying

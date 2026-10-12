@@ -19,62 +19,66 @@ export const emitAppStateChange = (state: string) => {
   });
 };
 
+// The react-native stand-in every test starts from (the real package cannot
+// load outside an app). Tests that need another platform spread it and
+// override, so a leaked mock still has every export.
+export const baseReactNative = () => ({
+  Platform: {
+    OS: 'ios',
+    Version: 13,
+  },
+  Alert: {
+    alert: mockAlert,
+  },
+  AppState: {
+    currentState: 'active',
+    addEventListener: (_type: string, handler: (state: string) => void) => {
+      appStateListeners.add(handler);
+      return {
+        remove: () => {
+          appStateListeners.delete(handler);
+        },
+      };
+    },
+  },
+  Linking: {
+    openURL: mock(() => Promise.resolve()),
+    getInitialURL: () => Promise.resolve(null),
+    addEventListener: () => ({ remove: () => {} }),
+  },
+  DeviceEventEmitter: {
+    addListener: () => ({ remove: () => {} }),
+  },
+  NativeModules: {
+    Pushy: {
+      currentVersionInfo: '{}',
+      downloadRootDir: '/tmp',
+      packageVersion: '1.0.0',
+      currentVersion: 'hash',
+      isFirstTime: false,
+      rolledBackVersion: 'rolled-back-hash',
+      buildTime: '2023-01-01',
+      uuid: 'uuid',
+      setLocalHashInfo: () => {},
+      getLocalHashInfo: () => Promise.resolve('{}'),
+      setUuid: () => {},
+    },
+  },
+  NativeEventEmitter: class {
+    addListener = () => ({ remove: () => {} });
+    removeAllListeners = () => {};
+  },
+});
+
 const installBaseMocks = () => {
-  mock.module('react-native', () => {
-    return {
-      Platform: {
-        OS: 'ios',
-        Version: 13,
-      },
-      Alert: {
-        alert: mockAlert,
-      },
-      AppState: {
-        currentState: 'active',
-        addEventListener: (_type: string, handler: (state: string) => void) => {
-          appStateListeners.add(handler);
-          return {
-            remove: () => {
-              appStateListeners.delete(handler);
-            },
-          };
-        },
-      },
-      Linking: {
-        openURL: mock(() => Promise.resolve()),
-        getInitialURL: () => Promise.resolve(null),
-        addEventListener: () => ({ remove: () => {} }),
-      },
-      DeviceEventEmitter: {
-        addListener: () => ({ remove: () => {} }),
-      },
-      NativeModules: {
-        Pushy: {
-          currentVersionInfo: '{}',
-          downloadRootDir: '/tmp',
-          packageVersion: '1.0.0',
-          currentVersion: 'hash',
-          isFirstTime: false,
-          rolledBackVersion: 'rolled-back-hash',
-          buildTime: '2023-01-01',
-          uuid: 'uuid',
-          setLocalHashInfo: () => {},
-          getLocalHashInfo: () => Promise.resolve('{}'),
-          setUuid: () => {},
-        },
-      },
-      NativeEventEmitter: class {
-        addListener = () => ({ remove: () => {} });
-        removeAllListeners = () => {};
-      },
-    };
-  });
+  mock.module('react-native', baseReactNative);
 
   mock.module('../i18n', () => {
     return {
       default: {
         t: (key: string, params?: any) =>
           `${key}${params ? JSON.stringify(params) : ''}`,
+        setLocale: () => {},
       },
     };
   });
@@ -92,7 +96,7 @@ installBaseMocks();
 // doesn't have to know to add it. (The modules under test — client, provider,
 // context — are absent on purpose: tests import those through cache-busting
 // specifiers, which mock.module() does not touch.)
-const realProjectModules: Record<string, Record<string, unknown>> = {
+export const realProjectModules: Record<string, Record<string, any>> = {
   '../core': { ...(await import('../core')) },
   '../endpoint': { ...(await import('../endpoint')) },
   '../error': { ...(await import('../error')) },

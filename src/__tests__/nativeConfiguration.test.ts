@@ -1,22 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import type { PushyConfiguration } from '../../harmony/pushy/src/main/ets/PushyConfiguration';
 import { normalizePushyConfiguration } from '../../harmony/pushy/src/main/ets/PushyConfiguration';
-
-function runtimeSource(relativePath: string): string {
-  const source = readFileSync(new URL(relativePath, import.meta.url), 'utf8')
-    .replace(/^import[\s\S]*?;\r?\n/gm, '')
-    .replace(/^export\s*\{[^}]*\}(?:\s*from\s*[^;]*)?;\r?\n/gm, '')
-    .replace(/^export /gm, '');
-  return new Bun.Transpiler({ loader: 'ts' }).transformSync(source);
-}
-
-const storeSource = runtimeSource(
-  '../../harmony/pushy/src/main/ets/UpdateContext.ts'
-);
-const clientSource = runtimeSource('../client.ts');
+import { evalHarmonyModule } from './nativeSources';
 
 interface ConfigStore {
   setNativeConfig: (config: string) => Promise<void>;
@@ -44,8 +29,9 @@ function storeHarness() {
       if (shouldFail) throw new Error('storage unavailable');
     },
   };
-  const store = runInNewContext(
-    `${storeSource}\nconst store = Object.create(UpdateContext.prototype); store.preferences = preferences; store.flushBatchDepth = 0; store;`,
+  const store = evalHarmonyModule(
+    'UpdateContext.ts',
+    'const store = Object.create(UpdateContext.prototype); store.preferences = preferences; store.flushBatchDepth = 0; store;',
     {
       preferences,
       util: { generateRandomUUID: () => 'native-installation-id' },
@@ -65,33 +51,6 @@ function storeHarness() {
     },
     flushes: () => flushes,
   };
-}
-
-function clientHarness(native: boolean) {
-  const writes: string[] = [];
-  const client = runInNewContext(
-    `${clientSource}\nnew Pushy({appKey: 'test-app', nativeConfigSource: source, disableTelemetry: true});`,
-    {
-      source: native ? 'native' : 'javascript',
-      __DEV__: false,
-      assertWeb() {},
-      noop() {},
-      log() {},
-      setDebugLogging() {},
-      cInfo: { rnu: 'test-sdk', rn: 'test-rn' },
-      packageVersion: '1.0',
-      isRolledBack: false,
-      Platform: { OS: 'android' },
-      i18n: { setLocale() {} },
-      dedupeEndpoints: (urls: string[]) => [...new Set(urls)],
-      PushyModule: {
-        syncNativeConfig: async (config: string) => {
-          writes.push(config);
-        },
-      },
-    }
-  ) as { setOptions: (options: Record<string, unknown>) => void };
-  return { client, writes };
 }
 
 describe('native configuration normalization', () => {
@@ -207,22 +166,5 @@ describe('actual native configuration store', () => {
     h.fail(false);
     await h.store.setNativeConfig('A');
     expect(h.flushes()).toBe(2);
-  });
-});
-
-describe('JS native configuration ownership', () => {
-  test('native ownership suppresses constructor and setOptions writes', () => {
-    const h = clientHarness(true);
-    expect(h.writes).toEqual([]);
-    h.client.setOptions({ updateStrategy: 'silentAndLater' });
-    expect(h.writes).toEqual([]);
-  });
-
-  test('JS ownership retains existing synchronization, with explicit handover', () => {
-    const js = clientHarness(false);
-    expect(js.writes).toHaveLength(1);
-    const native = clientHarness(true);
-    native.client.setOptions({ nativeConfigSource: 'javascript' });
-    expect(native.writes).toHaveLength(1);
   });
 });

@@ -1,10 +1,6 @@
 export default {
   // Common messages
-  checking_update: 'Checking for updates...',
   update_failed: 'Update failed',
-
-  // Progress messages with interpolation
-  download_progress: 'Download progress: {{progress}}%',
 
   // Alert messages
   alert_title: 'Notice',

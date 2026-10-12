@@ -7,42 +7,13 @@
  * Android/iOS/Harmony modules — and flow through promise rejections onto the
  * `code` property, which toUpdateError() preserves.
  */
-export type UpdateErrorCode =
+const UPDATE_ERROR_CODES = [
   // JS-layer codes
-  | 'MODULE_NOT_LOADED'
-  | 'APPKEY_REQUIRED'
-  | 'NO_ENDPOINTS'
-  | 'HTTP_STATUS'
-  // A 2xx check response that is not a check verdict (schema gate).
-  | 'INVALID_RESPONSE'
-  | 'CHECK_FAILED'
-  | 'DOWNLOAD_FAILED'
-  | 'SWITCH_VERSION_FAILED'
-  | 'MARK_SUCCESS_FAILED'
-  | 'APK_INSTALL_PENDING'
-  | 'APK_DOWNLOAD_FAILED'
-  // A throw from a user-provided hook (e.g. beforeReload) — not an update
-  // pipeline failure, and excluded from server-side patch-health telemetry.
-  | 'USER_HOOK_ERROR'
-  // A second client/provider in the same process — a hard integration error;
-  // the SDK is a process-level singleton.
-  | 'SINGLETON_VIOLATION'
-  // Native codes (see cpp/patch_core/error_codes.h)
-  | 'INVALID_OPTIONS'
-  | 'PATCH_FAILED'
-  | 'FILE_OPERATION_FAILED'
-  | 'RESTART_FAILED'
-  | 'RESET_FAILED'
-  | 'INVALID_HASH_INFO'
-  | 'UNSUPPORTED_PLATFORM'
-  | 'APK_INSTALL_PERMISSION_REQUIRED'
-  | 'APK_INSTALL_FAILED';
-
-const KNOWN_CODES = new Set<string>([
   'MODULE_NOT_LOADED',
   'APPKEY_REQUIRED',
   'NO_ENDPOINTS',
   'HTTP_STATUS',
+  // A 2xx check response that is not a check verdict (schema gate).
   'INVALID_RESPONSE',
   'CHECK_FAILED',
   'DOWNLOAD_FAILED',
@@ -50,8 +21,13 @@ const KNOWN_CODES = new Set<string>([
   'MARK_SUCCESS_FAILED',
   'APK_INSTALL_PENDING',
   'APK_DOWNLOAD_FAILED',
+  // A throw from a user-provided hook (e.g. beforeReload) — not an update
+  // pipeline failure, and excluded from server-side patch-health telemetry.
   'USER_HOOK_ERROR',
+  // A second client/provider in the same process — a hard integration error;
+  // the SDK is a process-level singleton.
   'SINGLETON_VIOLATION',
+  // Native codes (see cpp/patch_core/error_codes.h)
   'INVALID_OPTIONS',
   'PATCH_FAILED',
   'FILE_OPERATION_FAILED',
@@ -61,7 +37,12 @@ const KNOWN_CODES = new Set<string>([
   'UNSUPPORTED_PLATFORM',
   'APK_INSTALL_PERMISSION_REQUIRED',
   'APK_INSTALL_FAILED',
-]);
+] as const;
+
+/** A stable error code (see UPDATE_ERROR_CODES). */
+export type UpdateErrorCode = (typeof UPDATE_ERROR_CODES)[number];
+
+const KNOWN_CODES = new Set<string>(UPDATE_ERROR_CODES);
 
 /**
  * Narrow an arbitrary `code` property (axios' ERR_NETWORK, Node's

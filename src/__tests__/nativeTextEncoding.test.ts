@@ -1,15 +1,11 @@
 import { describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
-import { URL } from 'node:url';
 import { normalizePushyConfiguration } from '../../harmony/pushy/src/main/ets/PushyConfiguration';
 import { QUERY_PATH, revealText } from '../../harmony/pushy/src/main/ets/Texts';
 import {
   decodeNativeText,
   encodeNativeText,
 } from '../../scripts/encode-native-text';
-
-const root = new URL('../../', import.meta.url);
-const source = (path: string) => readFileSync(new URL(path, root), 'utf8');
+import { shippedNativeSources, source, stripComments } from './nativeSources';
 
 // Service addresses and the request path must only appear encoded in shipped
 // native code (see scripts/encode-native-text.ts).
@@ -21,19 +17,6 @@ const plainTexts = [
   'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json',
 ];
 
-const shippedNativeSources = (dir: string): string[] =>
-  readdirSync(new URL(dir, root), { recursive: true, withFileTypes: true })
-    .filter(
-      (entry) =>
-        entry.isFile() && /\.(?:h|m|mm|java|kt|ts|ets|cpp)$/.test(entry.name)
-    )
-    .map((entry) =>
-      `${entry.parentPath}/${entry.name}`.slice(
-        new URL(dir, root).pathname.length - dir.length
-      )
-    )
-    .filter((path) => !/\/tests?\//.test(path));
-
 const paths = [
   'ios/',
   'android/src/main/',
@@ -41,9 +24,6 @@ const paths = [
   'cpp/patch_core/',
   'cpp/update_flow_core/',
 ].flatMap(shippedNativeSources);
-
-const stripComments = (text: string) =>
-  text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:"'\\])\/\/.*$/gm, '$1');
 
 const encodedIn = (text: string) =>
   [

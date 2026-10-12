@@ -1,20 +1,24 @@
-import { afterAll, beforeEach, describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
 import type React from 'react';
 import { useContext } from 'react';
 import TestRenderer from 'react-test-renderer';
+import type { CheckResult, ProgressData } from '../type';
+import {
+  createClient,
+  flush,
+  mockCore,
+  mockI18n,
+  setDevForFile,
+} from './helpers';
 import { emitAppStateChange, mockAlert } from './setup';
 
 // Render tests exercise the release code paths (assertDebug allows checks).
-const _origDEV = (globalThis as any).__DEV__;
-(globalThis as any).__DEV__ = false;
+setDevForFile(false);
 
 const { UpdateProvider } = await import('../provider');
 const { UpdateContext, useUpdate, useUpdateProgress } = await import(
   '../context'
 );
-const { mock } = await import('bun:test');
-
-import type { CheckResult, ProgressData } from '../type';
 
 const updateResult: CheckResult = {
   update: true,
@@ -25,99 +29,44 @@ const updateResult: CheckResult = {
   paths: ['https://cdn.example.com'],
 };
 
-const createClient = (options: Record<string, any> = {}) => {
+// The real client (a fresh module per call) with the calls the provider makes
+// into the update flow spied and stubbed: checks answer `updateResult`,
+// downloads deliver 'next-hash' and keep the progress callback for
+// emitProgress. Options, onError/wasEmitted, the mount claim and the
+// remaining methods are the client's own.
+const createSpiedClient = async (options: Record<string, any> = {}) => {
+  mockCore({ rolledBackVersion: 'rolled-back-hash' });
+  mockI18n({ withParams: true });
+  const { client } = await createClient({
+    updateStrategy: 'alwaysAlert',
+    checkStrategy: 'onAppStart',
+    autoMarkSuccess: false,
+    ...options,
+  });
   let progressCallback: ((data: ProgressData) => void) | undefined;
-  const errorListeners = new Set<(e: Error, eventType?: string) => void>();
-  const emittedErrors = new WeakSet<Error>();
-  const optionsListeners = new Set<() => void>();
-  let providerMounted = false;
-  const client = {
-    options: {
-      updateStrategy: 'alwaysAlert',
-      checkStrategy: 'onAppStart',
-      autoMarkSuccess: false,
-      ...options,
-    },
-    // The provider's option-change contract (see Pushy.setOptions): options
-    // are mutated in place, a version is bumped and subscribers notified.
-    optionsVersion: 0,
-    onOptionsChange: (listener: () => void) => {
-      optionsListeners.add(listener);
-      return () => {
-        optionsListeners.delete(listener);
-      };
-    },
-    setOptions: (next: Record<string, any>) => {
-      Object.assign(client.options, next);
-      client.optionsVersion++;
-      optionsListeners.forEach((listener) => {
-        listener();
-      });
-    },
-    claimProviderMount: () => {
-      if (providerMounted) {
-        throw new Error('error_provider_singleton');
-      }
-      providerMounted = true;
-      return () => {
-        providerMounted = false;
-      };
-    },
-    getEffectivePackageVersion: () => options.overridePackageVersion || '1.0.0',
-    assertDebug: () => true,
-    checkUpdate: mock(
-      async (): Promise<CheckResult | undefined> => ({ ...updateResult })
-    ),
-    notifyAfterCheckUpdate: mock(() => {}),
-    report: mock(() => {}),
-    reportInvalidUpdateOnce: mock(() => {}),
-    markSuccess: mock(() => {}),
-    switchVersion: mock(async () => {}),
-    switchVersionLater: mock(async () => {}),
-    downloadUpdate: mock(
-      async (_info: CheckResult, onProgress?: (data: ProgressData) => void) => {
-        progressCallback = onProgress;
-        return 'next-hash';
-      }
-    ),
-    downloadAndInstallApk: mock(async () => {}),
-    restartApp: mock(async () => {}),
-    t: (key: string, params?: Record<string, unknown>) =>
-      params ? `${key}${JSON.stringify(params)}` : key,
-    onError: mock((listener: (e: Error, eventType?: string) => void) => {
-      errorListeners.add(listener);
-      return () => {
-        errorListeners.delete(listener);
-      };
-    }),
-    // Simulates the real client contract: errors are emitted to onError
-    // listeners (report + lastError/Alert path) regardless of throwError,
-    // and wasEmitted() answers whether an error object went through the
-    // pipeline (the provider uses it to avoid double-surfacing).
-    emitError: (e: Error, eventType = 'errorChecking') => {
-      emittedErrors.add(e);
-      errorListeners.forEach((listener) => {
-        listener(e, eventType);
-      });
-    },
-    wasEmitted: (e: unknown) => e instanceof Error && emittedErrors.has(e),
+  spyOn(client, 'checkUpdate').mockImplementation(
+    async (): Promise<CheckResult | undefined> => ({ ...updateResult })
+  );
+  spyOn(client, 'downloadUpdate').mockImplementation(
+    async (_info: CheckResult, onProgress?: (data: ProgressData) => void) => {
+      progressCallback = onProgress;
+      return 'next-hash';
+    }
+  );
+  spyOn(client, 'switchVersion').mockImplementation(async () => true);
+  spyOn(client, 'switchVersionLater').mockImplementation(async () => {});
+  spyOn(client, 'markSuccess').mockImplementation(async () => {});
+  spyOn(client, 'reportInvalidUpdateOnce');
+  return Object.assign(client, {
     emitProgress: (data: ProgressData) => progressCallback?.(data),
-  };
-  return client;
+  });
 };
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-const renderProvider = async (
-  client: ReturnType<typeof createClient>,
-  children?: React.ReactElement
-) => {
+const renderProvider = async (client: any, children?: React.ReactElement) => {
   let renderer: TestRenderer.ReactTestRenderer;
   await TestRenderer.act(async () => {
     renderer = TestRenderer.create(
-      <UpdateProvider client={client as any}>
-        {children ?? <></>}
-      </UpdateProvider>
+      <UpdateProvider client={client}>{children ?? <></>}</UpdateProvider>
     );
     await flush();
   });
@@ -129,12 +78,8 @@ describe('UpdateProvider rendering', () => {
     mockAlert.mockClear();
   });
 
-  afterAll(() => {
-    (globalThis as any).__DEV__ = _origDEV;
-  });
-
   test('alwaysAlert strategy alerts when an update is found and downloads on confirm', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     await renderProvider(client);
 
     expect(client.checkUpdate).toHaveBeenCalledTimes(1);
@@ -161,7 +106,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('a hash-less update is reported but never shown as an actionable alert', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     client.checkUpdate.mockImplementation(async () => ({
       update: true,
       name: 'broken rollout entry',
@@ -175,7 +120,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('an expired app package without a bundle hash keeps its download action', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     client.checkUpdate.mockImplementation(async () => ({
       expired: true,
       update: true,
@@ -192,7 +137,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('an update without a downloadable artifact is never shown as actionable', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     client.checkUpdate.mockImplementation(async () => ({
       update: true,
       hash: 'broken-artifact-hash',
@@ -211,7 +156,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('a rolled-back update is never shown as actionable', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     client.checkUpdate.mockImplementation(async () => ({
       update: true,
       hash: 'rolled-back-hash',
@@ -228,7 +173,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('silentAndNow strategy downloads and switches without alerts', async () => {
-    const client = createClient({ updateStrategy: 'silentAndNow' });
+    const client = await createSpiedClient({ updateStrategy: 'silentAndNow' });
     await renderProvider(client);
 
     expect(client.downloadUpdate).toHaveBeenCalledTimes(1);
@@ -237,7 +182,9 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('silentAndLater strategy downloads and defers the switch', async () => {
-    const client = createClient({ updateStrategy: 'silentAndLater' });
+    const client = await createSpiedClient({
+      updateStrategy: 'silentAndLater',
+    });
     await renderProvider(client);
 
     expect(client.downloadUpdate).toHaveBeenCalledTimes(1);
@@ -247,7 +194,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('check failure sets lastError and alerts under alwaysAlert', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     const checkError = new Error('offline');
     // Real client contract under the default throwError:false — the error is
     // emitted to onError listeners and checkUpdate resolves undefined.
@@ -271,7 +218,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('a user-hook error carrying a foreign code is still surfaced (JS2-4)', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     const hookError: any = new Error('axios network error');
     // axios-style code on an error that never entered the client pipeline;
     // the old `!e?.code` heuristic wrongly treated it as already surfaced.
@@ -292,7 +239,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('alertUpdateAndIgnoreError suppresses the error alert but keeps lastError', async () => {
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'alertUpdateAndIgnoreError',
     });
     const checkError = new Error('offline');
@@ -313,7 +260,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('dismissErrorAfter clears lastError automatically (JS-4 regression)', async () => {
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'alertUpdateAndIgnoreError',
       dismissErrorAfter: 20,
     });
@@ -337,7 +284,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('autoMarkSuccessDelayMs delays the automatic markSuccess', async () => {
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       autoMarkSuccess: true,
       autoMarkSuccessDelayMs: 40,
@@ -352,7 +299,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('healthCheck returning false or throwing skips the automatic markSuccess', async () => {
-    const unhealthy = createClient({
+    const unhealthy = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       autoMarkSuccess: true,
       autoMarkSuccessDelayMs: 0,
@@ -364,7 +311,7 @@ describe('UpdateProvider rendering', () => {
     });
     expect(unhealthy.markSuccess).not.toHaveBeenCalled();
 
-    const throwing = createClient({
+    const throwing = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       autoMarkSuccess: true,
       autoMarkSuccessDelayMs: 0,
@@ -378,7 +325,7 @@ describe('UpdateProvider rendering', () => {
     });
     expect(throwing.markSuccess).not.toHaveBeenCalled();
 
-    const healthy = createClient({
+    const healthy = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       autoMarkSuccess: true,
       autoMarkSuccessDelayMs: 0,
@@ -392,7 +339,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('test-channel payloads are refused when testChannel is false', async () => {
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       checkStrategy: null,
       testChannel: false,
@@ -417,7 +364,7 @@ describe('UpdateProvider rendering', () => {
 
   test('a test-channel check passes toHash without swapping the logger', async () => {
     const logger = mock(() => {});
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       checkStrategy: null,
       logger,
@@ -443,7 +390,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('onAppResume strategy checks when the app becomes active', async () => {
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       checkStrategy: 'onAppResume',
     });
@@ -458,7 +405,9 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('progress ticks re-render progress consumers but not static context consumers (JS-7)', async () => {
-    const client = createClient({ updateStrategy: 'silentAndLater' });
+    const client = await createSpiedClient({
+      updateStrategy: 'silentAndLater',
+    });
 
     let staticRenders = 0;
     const StaticProbe = () => {
@@ -500,7 +449,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('setOptions on a mounted provider re-runs neither the start check nor the auto-mark timer (1.2)', async () => {
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       autoMarkSuccess: true,
       autoMarkSuccessDelayMs: 40,
@@ -523,7 +472,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('enabling automatic checks after mount runs the start check once', async () => {
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       checkStrategy: null,
     });
@@ -544,7 +493,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('a strategy change re-subscribes AppState without another start check', async () => {
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'silentAndLater',
       checkStrategy: 'onAppStart',
     });
@@ -571,7 +520,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('an expired response with a stray hash-less update is presented as expired-only', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     client.checkUpdate.mockImplementation(async () => ({
       expired: true,
       update: true,
@@ -594,7 +543,9 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('a silent strategy hands an artifact-less release to the client, which reports it (once)', async () => {
-    const client = createClient({ updateStrategy: 'silentAndLater' });
+    const client = await createSpiedClient({
+      updateStrategy: 'silentAndLater',
+    });
     client.checkUpdate.mockImplementation(async () => ({
       update: true,
       hash: 'broken-artifact-hash',
@@ -622,7 +573,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('a release without a name leaves no {{name}} placeholder in the alert', async () => {
-    const client = createClient({ updateStrategy: 'alwaysAlert' });
+    const client = await createSpiedClient({ updateStrategy: 'alwaysAlert' });
     client.checkUpdate.mockImplementation(async () => ({
       update: true,
       hash: 'next-hash',
@@ -638,7 +589,7 @@ describe('UpdateProvider rendering', () => {
   });
 
   test('an expired download url the system cannot open becomes lastError, not an unhandled rejection (1.8)', async () => {
-    const client = createClient({ updateStrategy: 'silentAndNow' });
+    const client = await createSpiedClient({ updateStrategy: 'silentAndNow' });
     client.checkUpdate.mockImplementation(async () => ({
       expired: true,
       downloadUrl: 'market://details?id=app',
@@ -666,7 +617,7 @@ describe('UpdateProvider rendering', () => {
       Promise.resolve('app://open?type=__rnPushyVersionHash&data=test-hash')
     );
     (Linking as any).getInitialURL = getInitialURL;
-    const client = createClient({
+    const client = await createSpiedClient({
       updateStrategy: 'alwaysAlert',
       checkStrategy: null,
     });

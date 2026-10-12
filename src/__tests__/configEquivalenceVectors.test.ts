@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'node:fs';
-import { URL } from 'node:url';
-import { runInNewContext } from 'node:vm';
 import vectorsFile from '../../cpp/update_flow_core/tests/config-equivalence-vectors.json';
 import { nativeConfigsEquivalent } from '../updateFlowCore';
+import { evalHarmonyModule } from './nativeSources';
 
 // Contract C1 (native config equivalence) is implemented four times: here,
 // Harmony UpdateContext.ts, Android ConfigEquivalence.java and iOS
@@ -21,20 +19,8 @@ const vectors = vectorsFile.cases as Vector[];
 // UpdateContext.ts imports @ohos modules, so it is evaluated with its imports
 // stripped (as in nativeConfiguration.test.ts); the C1 functions only depend
 // on the file's own source.
-function harmonyEquivalence(): (a: string, b: string) => boolean {
-  const source = readFileSync(
-    new URL(
-      '../../harmony/pushy/src/main/ets/UpdateContext.ts',
-      import.meta.url
-    ),
-    'utf8'
-  )
-    .replace(/^import[\s\S]*?;\r?\n/gm, '')
-    .replace(/^export\s*\{[^}]*\}(?:\s*from\s*[^;]*)?;\r?\n/gm, '')
-    .replace(/^export /gm, '');
-  const js = new Bun.Transpiler({ loader: 'ts' }).transformSync(source);
-  return runInNewContext(`${js}\nnativeConfigsEquivalent;`, {});
-}
+const harmonyEquivalence = (): ((a: string, b: string) => boolean) =>
+  evalHarmonyModule('UpdateContext.ts', 'nativeConfigsEquivalent;');
 
 const implementations: Array<[string, (a: string, b: string) => boolean]> = [
   ['js', nativeConfigsEquivalent],

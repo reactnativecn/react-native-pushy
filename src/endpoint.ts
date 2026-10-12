@@ -2,8 +2,6 @@ import { UpdateError } from './error';
 import i18n from './i18n';
 import { dedupeEndpoints, orderEndpointCandidates } from './updateFlowCore';
 
-export { dedupeEndpoints };
-
 export interface EndpointAttemptSuccess<T> {
   endpoint: string;
   value: T;
