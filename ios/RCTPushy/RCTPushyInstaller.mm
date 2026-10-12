@@ -8,6 +8,7 @@
 #include "../../cpp/patch_core/archive_patch_core.h"
 #include "../../cpp/patch_core/digest.h"
 #include "../../cpp/patch_core/error_codes.h"
+#include "../../cpp/patch_core/install_record.h"
 #include "../../cpp/patch_core/patch_core.h"
 
 // file def
@@ -595,77 +596,43 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
         return NO;
     }
 
-    // Same rule as Android: only a version this SDK recorded as completely
-    // installed (bundle + marker) may be activated. Markerless versions
-    // activated before markers existed are grandfathered through current/last
-    // state; any other markerless directory may be a crash-left partial
-    // install or a directory something else put there. A directory that does
-    // carry a record is verified even when it is current/last.
-    NSString *versionDir = PushyVersionDir(hash);
+    // Same gate as Android and Harmony (install_record::CheckActivation):
+    // only a version this SDK recorded as completely installed, whose
+    // record's bundle digest matches the bytes on disk, may be activated.
+    // Versions activated before records existed are grandfathered through
+    // current/last state, but only while their directory has no record file.
+    std::string versionDir = PushyToStdString(PushyVersionDir(hash));
     std::string hashStd = PushyToStdString(hash);
-    BOOL (^isLegacyActivated)(void) = ^BOOL {
-        if (PushyHasInstallRecordFile(versionDir)) {
-            return NO;
-        }
+    std::string bundleName = PushyToStdString(BUNDLE_FILE_NAME);
+    BOOL (^isCurrentOrLast)(void) = ^BOOL {
         pushy::state::State state = PushyStateFromDefaults(PushyDefaults());
         return state.current_version == hashStd || state.last_version == hashStd;
-    };
-    NSError *(^incompleteError)(void) = ^NSError * {
-        BOOL hasBundle = [[NSFileManager defaultManager] fileExistsAtPath:
-            [versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME]];
-        return PushyErrorWithCode(
-            pushy::error_codes::kSwitchVersionFailed,
-            [NSString stringWithFormat:@"Bundle version %@ %@", hash,
-                hasBundle ? @"is incomplete." : @"not found."]);
     };
 
     // The digest check reads the whole bundle, so it runs OUTSIDE the state
     // lock: +bundleURL takes that lock on the main thread at launch.
-    __block BOOL legacyActivated = NO;
+    __block BOOL grandfathered = NO;
     PushyWithStateLock(^{
-        legacyActivated = isLegacyActivated();
+        grandfathered = isCurrentOrLast();
     });
-    NSError *switchError = nil;
-    NSDictionary *verifiedRecord = nil;
-    PushyFileStamp verifiedStamp;
-    BOOL verified = NO;
-    if (!legacyActivated) {
-        if (!PushyHasCompletedVersionAtPath(versionDir, hash)) {
-            switchError = incompleteError();
-        } else {
-            // The record's bundle digest must match the bytes on disk before
-            // the next launch is pointed at them.
-            NSString *reason = PushyVerifyInstallForActivation(
-                versionDir, hash, &verifiedRecord, &verifiedStamp);
-            if (reason != nil) {
-                switchError = PushyErrorWithCode(pushy::error_codes::kSwitchVersionFailed, reason);
-            } else {
-                verified = YES;
-            }
-        }
-    }
+    pushy::install_record::Activation activation;
+    pushy::install_record::Status verified = pushy::install_record::CheckActivation(
+        versionDir, hashStd, bundleName, grandfathered, &activation);
 
-    __block NSError *lockedError = switchError;
+    __block NSError *lockedError = verified.ok
+        ? nil
+        : PushyErrorWithCode(pushy::error_codes::kSwitchVersionFailed,
+                             PushyFromStdString(verified.message));
     if (lockedError == nil) {
-        NSDictionary *record = verifiedRecord;
-        PushyFileStamp stamp = verifiedStamp;
         PushyWithStateLock(^{
-            if (!isLegacyActivated()) {
-                // Re-check cheaply that the directory is still the one that
-                // was verified: same record, same bundle file (size, mtime,
-                // inode).
-                if (!PushyHasCompletedVersionAtPath(versionDir, hash)) {
-                    lockedError = incompleteError();
-                    return;
-                }
-                NSString *bundlePath = [versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME];
-                if (!verified || ![PushyReadInstallRecord(versionDir) isEqual:record]
-                    || PushyStampFile(bundlePath) != stamp) {
-                    lockedError = PushyErrorWithCode(
-                        pushy::error_codes::kSwitchVersionFailed,
-                        [NSString stringWithFormat:@"Bundle version %@ changed while switching.", hash]);
-                    return;
-                }
+            // Re-check cheaply that the directory is still the one that was
+            // verified: same grandfathering, same record, same bundle file.
+            if (!pushy::install_record::Unchanged(versionDir, bundleName, isCurrentOrLast(),
+                                                  activation)) {
+                lockedError = PushyErrorWithCode(
+                    pushy::error_codes::kSwitchVersionFailed,
+                    [NSString stringWithFormat:@"Bundle version %@ changed while switching.", hash]);
+                return;
             }
             PushySwitchVersionLocked(hash);
         });

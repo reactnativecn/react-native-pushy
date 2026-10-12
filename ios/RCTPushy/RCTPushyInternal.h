@@ -6,8 +6,8 @@
 //   RCTPushy+Launch.mm       launch bundle resolution, paths, binary identity
 //   RCTPushyState.mm         persisted keys, state lock, State <-> defaults,
 //                            string/error/JSON helpers, bundle hash
-//   RCTPushyInstallRecord.mm version directories, completion record,
-//                            activation verification
+//   RCTPushyInstallRecord.mm version directories, completion record
+//                            (over cpp/patch_core/install_record.h)
 //   RCTPushyInstaller.mm     download/unzip/patch pipeline, switchVersion,
 //                            cleanup (owns the process-wide file queue)
 //   RCTPushyOrchestrator.mm  the native round
@@ -20,7 +20,6 @@
 
 #include <atomic>
 #include <string>
-#include <sys/stat.h>
 
 #include "../../cpp/patch_core/state_core.h"
 
@@ -82,32 +81,10 @@ PUSHY_HIDDEN NSString *PushyBundleHashSync(BOOL computeIfMissing);
 
 extern PUSHY_HIDDEN NSString *const BUNDLE_FILE_NAME;
 
-// Identity of a file's bytes on disk without reading them: a rewrite or an
-// atomic replacement (new inode) changes it.
-struct PushyFileStamp {
-    bool exists = false;
-    dev_t device = 0;
-    ino_t inode = 0;
-    off_t size = 0;
-    struct timespec modified = {0, 0};
-
-    bool operator==(const PushyFileStamp &other) const {
-        return exists == other.exists && device == other.device && inode == other.inode
-            && size == other.size && modified.tv_sec == other.modified.tv_sec
-            && modified.tv_nsec == other.modified.tv_nsec;
-    }
-    bool operator!=(const PushyFileStamp &other) const { return !(*this == other); }
-};
-
 PUSHY_HIDDEN NSString *PushyVersionDir(NSString *hash);
 PUSHY_HIDDEN NSString *PushyStagingDir(NSString *hash);
-PUSHY_HIDDEN NSDictionary *PushyReadInstallRecord(NSString *versionDir);
-PUSHY_HIDDEN BOOL PushyHasInstallRecordFile(NSString *versionDir);
 PUSHY_HIDDEN BOOL PushyHasCompletedVersionAtPath(NSString *versionDir, NSString *hash);
-PUSHY_HIDDEN PushyFileStamp PushyStampFile(NSString *path);
-PUSHY_HIDDEN NSString *PushyVerifyInstallForActivation(NSString *versionDir, NSString *hash,
-                                                       NSDictionary **recordOut,
-                                                       PushyFileStamp *stampOut);
+PUSHY_HIDDEN NSString *PushyRecordedBundleSha256(NSString *versionDir);
 PUSHY_HIDDEN NSError *PushyPromoteStagingDir(NSString *hash, NSString *artifactSha256);
 
 #pragma mark - RCTPushyInstaller.mm

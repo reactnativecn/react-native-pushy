@@ -99,16 +99,18 @@ HELPERS = [
     # Canonical config equality (contract C1): the binding over
     # flowcore::ConfigsEquivalent, tested directly.
     'PushyConfigsEquivalent',
-    # Install record activation check (cpp/patch_core/install_record.h) and
-    # what switchVersion:error: needs around it.
-    'PushyInstallRecordFileName', 'PushyVersionDir', 'PushyReadInstallRecord', 'PushyInstallRecordMatches', 'PushyHasInstallRecordFile',
-    'PushyHasCompletedVersionAtPath', 'PushyStampFile', 'PushyVerifyInstallForActivation',
-    'PushyStringIsBlank', 'PushyIsSafePathComponent',
+    # What switchVersion:error: needs around the shared record core
+    # (cpp/patch_core/install_record.cpp, compiled from CORE_SOURCE).
+    'PushyVersionDir', 'PushyStringIsBlank', 'PushyIsSafePathComponent',
 ]
 # Emitted ahead of HELPERS, which use them.
-STRUCTS = ['PushyFileStamp']
-MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset', 'trust-digestless',
-             'grandfather-recorded')
+STRUCTS: list[str] = []
+# The completion record core switchVersion:error: calls. Copied (with #line)
+# into the build directory so the record mutants below can alter it; the
+# test script compiles the copy instead of the checkout's file.
+CORE_SOURCE = Path('cpp/patch_core/install_record.cpp')
+CORE_MUTATIONS = ('trust-digestless', 'grandfather-recorded')
+MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset') + CORE_MUTATIONS
 
 
 def mutate(text: str, mutation: str) -> str:
@@ -119,11 +121,13 @@ def mutate(text: str, mutation: str) -> str:
         'ignore-reset': (
             r'if \(pushyResetGeneration\.load\(\) != generation\)\s*\{\s*return;\s*\}',
             '(void)generation;'),
+        # Trust a schema-1 record without bundleSha256.
         'trust-digestless': (
-            r'(expected\.length == 0\) \{\s*)return \[NSString[^;]*record mismatch[^;]*;',
-            r'\1return nil;'),
+            r'(if \(record\.bundle_sha256\.empty\(\)\) \{\s*)return RecordMismatch\(version_hash\);',
+            r'\1return Status::Ok();'),
+        # Grandfather current/last versions even when they carry a record.
         'grandfather-recorded': (
-            r'if \(PushyHasInstallRecordFile\(versionDir\)\)\s*\{\s*return NO;\s*\}', ''),
+            r'if \(grandfathered && state == Record::State::kAbsent\)', 'if (grandfathered)'),
     }
     pattern, replacement = patterns[mutation]
     mutated, count = re.subn(pattern, replacement, text)
@@ -161,15 +165,12 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
     commit = locate(sources, method, 'commitRoundWithGeneration')
     helpers = [locate(sources, function, name) for name in HELPERS]
     switch_version = locate(sources, method, 'switchVersion')
-    if mutation == 'grandfather-recorded':
-        switch_version = (switch_version[0], switch_version[1],
-                          mutate(switch_version[2], mutation))
+    core_path = (source_dir / '..' / '..' / CORE_SOURCE).resolve()
+    core = core_path.read_text(encoding='utf-8')
+    if mutation in CORE_MUTATIONS:
+        core = mutate(core, mutation)
     elif mutation == 'skip-reresolve':
         restore = (restore[0], restore[1], mutate(restore[2], mutation))
-    elif mutation == 'trust-digestless':
-        index = HELPERS.index('PushyVerifyInstallForActivation')
-        path, line, text = helpers[index]
-        helpers[index] = (path, line, mutate(text, mutation))
     elif mutation:
         commit = (commit[0], commit[1], mutate(commit[2], mutation))
     sections = {
@@ -189,6 +190,8 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
             f'#line {line} {json.dumps(str(path.resolve()))}\n{text}\n\n'
             for path, line, text in snippets
         ), encoding='utf-8')
+    output.joinpath(CORE_SOURCE.name).write_text(
+        f'#line 1 {json.dumps(str(core_path))}\n{core}', encoding='utf-8')
 
 
 def main() -> None:

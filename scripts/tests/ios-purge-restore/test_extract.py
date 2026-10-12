@@ -66,9 +66,12 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(mutate('activation = nil;', 'late-activation'), '(void)activation;')
         self.assertEqual(mutate('return YES;', 'skip-reresolve'), 'return !timedOut;')
         self.assertEqual(
-            mutate('expected.length == 0) {\n  return [NSString stringWithFormat:@"%@ record mismatch.", h];',
+            mutate('if (record.bundle_sha256.empty()) {\n    return RecordMismatch(version_hash);',
                    'trust-digestless'),
-            'expected.length == 0) {\n  return nil;')
+            'if (record.bundle_sha256.empty()) {\n    return Status::Ok();')
+        self.assertEqual(
+            mutate('if (grandfathered && state == Record::State::kAbsent) {', 'grandfather-recorded'),
+            'if (grandfathered) {')
         for source in ('', 'activation = nil; activation = nil;'):
             with self.assertRaises(ValueError):
                 mutate(source, 'late-activation')

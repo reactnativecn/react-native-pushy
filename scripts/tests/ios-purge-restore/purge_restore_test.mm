@@ -544,9 +544,10 @@ static void ConfigEquivalence(void) {
     std::printf("[PASS] config_equivalence: %lu shared vectors\n", (unsigned long)cases.count);
 }
 
-// Two-phase install record (cpp/patch_core/install_record.h): the production
-// activation check against real files. Schema 1 makes bundleSha256 mandatory;
-// only the legacy EMPTY marker (SDK < 10.53) activates without a digest.
+// Two-phase install record (cpp/patch_core/install_record.h): the shared
+// activation check switchVersion:error: calls, against real files. Schema 1
+// makes bundleSha256 mandatory; only the legacy EMPTY marker (SDK < 10.53)
+// activates without a digest.
 static NSString *Sha256Hex(NSData *data) {
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];
     CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
@@ -564,14 +565,19 @@ static void InstallRecordActivation(void) {
     NSData *bundle = [@"var a = 1;" dataUsingEncoding:NSUTF8StringEncoding];
     Expect([bundle writeToFile:[dir stringByAppendingPathComponent:BUNDLE_FILE_NAME] atomically:YES],
            "write bundle");
-    NSString *marker = [dir stringByAppendingPathComponent:PushyInstallRecordFileName()];
+    NSString *marker = [dir stringByAppendingPathComponent:@(pushy::install_record::kFileName)];
+    auto check = ^NSString *(void) {
+        pushy::install_record::Activation activation;
+        pushy::install_record::Status status = pushy::install_record::CheckActivation(
+            PushyToStdString(dir), PushyToStdString(hash), PushyToStdString(BUNDLE_FILE_NAME),
+            false, &activation);
+        return status.ok ? nil : PushyFromStdString(status.message);
+    };
     auto verify = ^NSString *(id record) {
         NSData *data = [record isKindOfClass:NSData.class]
             ? record : [NSJSONSerialization dataWithJSONObject:record options:0 error:nil];
         Expect([data writeToFile:marker atomically:YES], "write record");
-        NSDictionary *verified = nil;
-        PushyFileStamp stamp;
-        return PushyVerifyInstallForActivation(dir, hash, &verified, &stamp);
+        return check();
     };
     auto rejected = ^bool(NSString *reason, NSString *what) {
         return reason != nil && [reason containsString:what];
@@ -601,12 +607,11 @@ static void InstallRecordActivation(void) {
     Expect(rejected(verify(@{@"schema": schema, @"versionHash": @"other",
                              @"bundleSha256": Sha256Hex(bundle)}), @"completion record mismatch"),
            "record for another version must not activate");
-    [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
-    NSDictionary *verified = nil;
-    PushyFileStamp stamp;
-    Expect(rejected(PushyVerifyInstallForActivation(dir, hash, &verified, &stamp),
+    Expect(rejected(verify([@"{oops" dataUsingEncoding:NSUTF8StringEncoding]),
                     @"no valid completion record"),
-           "missing record must not activate");
+           "malformed record must not activate");
+    [NSFileManager.defaultManager removeItemAtPath:marker error:nil];
+    Expect(rejected(check(), @"is incomplete"), "missing record must not activate");
     [NSFileManager.defaultManager removeItemAtPath:dir error:nil];
 }
 
@@ -623,7 +628,7 @@ static void SwitchVersionRecords(void) {
     NSData *bundle = [@"C" dataUsingEncoding:NSUTF8StringEncoding];
     Expect([bundle writeToFile:[dir stringByAppendingPathComponent:BUNDLE_FILE_NAME] atomically:YES],
            "write C bundle");
-    NSString *marker = [dir stringByAppendingPathComponent:PushyInstallRecordFileName()];
+    NSString *marker = [dir stringByAppendingPathComponent:@(pushy::install_record::kFileName)];
     NSNumber *schema = @(pushy::install_record::kSchema);
     auto setRecord = ^(NSDictionary *record) {
         [NSFileManager.defaultManager removeItemAtPath:marker error:nil];

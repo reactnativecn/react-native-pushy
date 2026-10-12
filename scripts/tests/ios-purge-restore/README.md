@@ -27,17 +27,17 @@ python3 -m unittest discover -s scripts/tests/ios-purge-restore -p test_extract.
 ## Production code, not a second state machine
 
 `extract.py` reads the checkout's `ios/RCTPushy` sources listed in its
-`SOURCES` (the module's `.mm` files plus `RCTPushyInternal.h`, which holds the
-`PushyFileStamp` struct) on every build (each definition must exist exactly
-once across them; pod-internal `PUSHY_HIDDEN` definitions count like `static`
-ones, the header's `extern` declarations never match). It copies the exact definitions (with `#line` locations) of `bundleURL`,
-`resolveLaunchBundleURL`, `restorePurgedLaunch`, `commitRoundWithGeneration`,
-`resetToPackagedBundle`, their state/defaults helpers, the install record
-activation check (`PushyVerifyInstallForActivation`) with
-`+[RCTPushyInstaller switchVersion:error:]`,
-and the relevant globals
-into build-only `.inc` files. These are compiled unchanged with the actual
-`cpp/patch_core/state_core.cpp`.
+`SOURCES` (the module's `.mm` files plus `RCTPushyInternal.h`) on every build
+(each definition must exist exactly once across them; pod-internal
+`PUSHY_HIDDEN` definitions count like `static` ones, the header's `extern`
+declarations never match). It copies the exact definitions (with `#line`
+locations) of `bundleURL`, `resolveLaunchBundleURL`, `restorePurgedLaunch`,
+`commitRoundWithGeneration`, `resetToPackagedBundle`, their state/defaults
+helpers, `+[RCTPushyInstaller switchVersion:error:]` and the relevant globals
+into build-only `.inc` files, and copies the shared completion record core
+(`cpp/patch_core/install_record.cpp`, whose `CheckActivation`/`Unchanged`
+switchVersion calls) into the build directory. These are compiled unchanged
+with the actual `cpp/patch_core/state_core.cpp` and `digest.cpp`.
 
 Extraction ignores braces in comments and literals, skips forward declarations,
 and rejects missing or duplicate definitions. No generated implementation is
@@ -111,9 +111,9 @@ since process start.
 - Remove the closed-window activation veto: `late_commit` must fail.
 - Return `NO` after timeout instead of re-resolving: `commit_before_signal` must fail.
 - Remove the reset-generation guard: `reset_wins` must fail.
-- Trust a schema-1 install record without `bundleSha256`:
-  `install_record_activation` must fail.
-- Grandfather current/last versions that do carry a record:
+- Trust a schema-1 install record without `bundleSha256` (in the copy of
+  `install_record.cpp`): `install_record_activation` must fail.
+- Grandfather current/last versions that do carry a record (same copy):
   `switch_version_records` must fail.
 
 Each mutant must compile and fail its specific state assertion; unrelated

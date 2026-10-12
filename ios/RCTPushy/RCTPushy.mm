@@ -177,14 +177,8 @@ RCT_EXPORT_MODULE(RCTPushy);
         if (currentVersion != nil) {
             ret[@"currentVersionInfo"] = [defaults objectForKey:PushyHashInfoKey(currentVersion)];
             // bundleSha256 from the install record, for crash-report attribution.
-            NSString *bundleSha256 = @"";
-            if (PushyIsSafePathComponent(currentVersion)) {
-                NSDictionary *record = PushyReadInstallRecord(PushyVersionDir(currentVersion));
-                if ([record[@"bundleSha256"] isKindOfClass:[NSString class]]) {
-                    bundleSha256 = record[@"bundleSha256"];
-                }
-            }
-            ret[@"currentBundleSha256"] = bundleSha256;
+            ret[@"currentBundleSha256"] = PushyIsSafePathComponent(currentVersion)
+                ? PushyRecordedBundleSha256(PushyVersionDir(currentVersion)) : @"";
         }
 
         if (ret[@"isFirstTime"]) {
