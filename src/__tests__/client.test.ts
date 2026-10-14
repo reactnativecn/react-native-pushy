@@ -207,6 +207,53 @@ describe('Pushy server config', () => {
     });
   });
 
+  test('resolves the gray rollout for direct checkUpdate callers', async () => {
+    setupClientMocks();
+    const afterCheckUpdate = mock(() => {});
+    const { client } = await createClient({ afterCheckUpdate });
+    const rootFor = (rollout: number) => ({
+      update: true as const,
+      name: 'root',
+      hash: 'root-hash',
+      full: 'root.ppk',
+      paths: ['https://cdn.example.com'],
+      expVersion: {
+        name: 'gray',
+        hash: 'gray-hash',
+        full: 'gray.ppk',
+        config: {
+          rollout: { [client.getEffectivePackageVersion()]: rollout },
+        },
+      },
+    });
+
+    // Every device is in a 100% rollout: the candidate replaces the root
+    // release (keeping the root's CDN paths), and expVersion is gone.
+    (globalThis as any).fetch = mock(async () =>
+      createJsonResponse(rootFor(100))
+    );
+    const inRollout = await client.checkUpdate({ round: 1 });
+    expect(inRollout).toMatchObject({
+      update: true,
+      name: 'gray',
+      hash: 'gray-hash',
+      paths: ['https://cdn.example.com'],
+    });
+    expect(inRollout).not.toHaveProperty('expVersion');
+    expect(afterCheckUpdate).toHaveBeenLastCalledWith({
+      status: 'completed',
+      result: inRollout,
+    });
+
+    // No device is in a 0% rollout: the root release applies.
+    (globalThis as any).fetch = mock(async () =>
+      createJsonResponse(rootFor(0))
+    );
+    const outOfRollout = await client.checkUpdate({ round: 2 });
+    expect(outOfRollout).toMatchObject({ update: true, hash: 'root-hash' });
+    expect(outOfRollout).not.toHaveProperty('expVersion');
+  });
+
   test('reports the native diff track version as diffV in the check body', async () => {
     setupClientMocks({ supportedDiffVersion: 2 });
     const fetchMock = mock(async () => createJsonResponse({ update: false }));

@@ -25,7 +25,7 @@ export default {
     'A second UpdateProvider was mounted: make sure the app renders exactly one UpdateProvider',
   error_parse_version_info: 'Failed to parse currentVersionInfo: {{info}}',
   warn_unknown_bundle:
-    'The bundle embedded in this binary is not registered on the update platform; incremental updates are degraded to full downloads. Upload the package with pushy uploadIpa / uploadApk / uploadApp.',
+    'The bundle embedded in this binary is not registered on the update platform; incremental updates are degraded to full downloads. Upload the package with {{cli}} uploadIpa / uploadApk / uploadApp.',
   error_update_check_failed: 'Update check failed',
   error_cannot_connect_server:
     'Can not connect to update server. Please check your network.',
