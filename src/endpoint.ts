@@ -155,7 +155,8 @@ export async function executeEndpointFallback<T>({
   // is pure policy; this side only executes it.
   let candidates = orderEndpointCandidates(configuredEndpoints, random());
 
-  if (!candidates.length) {
+  // No budget means no request at all, like no endpoint.
+  if (!candidates.length || maxRequests < 1) {
     throw new UpdateError(i18n.t('error_no_endpoints'), 'NO_ENDPOINTS');
   }
 

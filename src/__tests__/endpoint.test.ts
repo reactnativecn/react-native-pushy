@@ -140,6 +140,18 @@ describe('executeEndpointFallback request budget', () => {
     ]);
   });
 
+  test('a zero budget issues no request', async () => {
+    const tryEndpoint = mock(async () => 'ok');
+    await expect(
+      executeEndpointFallback({
+        configuredEndpoints: ['a'],
+        tryEndpoint,
+        maxRequests: 0,
+      })
+    ).rejects.toMatchObject({ code: 'NO_ENDPOINTS' });
+    expect(tryEndpoint).not.toHaveBeenCalled();
+  });
+
   test('a success within the budget still wins', async () => {
     const tryEndpoint = mock(async (endpoint: string) => {
       if (endpoint === 'r1-2') {
