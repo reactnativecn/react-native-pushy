@@ -96,7 +96,8 @@ if [ "${VERIFY_REGRESSIONS:-0}" = "1" ]; then
   done
 
   for pair in late-activation:late_commit skip-reresolve:commit_before_signal ignore-reset:reset_wins \
-      trust-digestless:install_record_activation grandfather-recorded:switch_version_records; do
+      trust-digestless:install_record_activation grandfather-recorded:switch_version_records \
+      skip-commit-verify:round_commit_verifies; do
     variant="${pair%:*}"
     testcase="${pair#*:}"
     build "$variant"
@@ -111,6 +112,7 @@ if [ "${VERIFY_REGRESSIONS:-0}" = "1" ]; then
       ignore-reset) expected="stale generation must reject ALL commit writes" ;;
       trust-digestless) expected="digest-less record must not activate" ;;
       grandfather-recorded) expected="recorded current version must be verified" ;;
+      skip-commit-verify) expected="a version failing verification must not be activated by the round commit" ;;
     esac
     if ! grep -F "[FAIL] $testcase: $expected" "$logfile"; then
       cat "$logfile" >&2

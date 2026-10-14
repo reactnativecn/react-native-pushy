@@ -15,7 +15,7 @@ jobs:
   check_changes:
     runs-on: ubuntu-latest  # npm --provenance requires a GitHub-hosted runner
     # Room for the native-required wait below.
-    timeout-minutes: 60
+    timeout-minutes: 130
     outputs:
       harmony_changed: ${{ steps.check.outputs.changed }}
       prev_tag: ${{ steps.check.outputs.prev_tag }}
@@ -31,17 +31,24 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
         run: |
-          for attempt in $(seq 1 45); do
+          # The gate turns green only after the slowest native E2E: e2e-ios
+          # is a build job (timeout 45 min) followed by its test legs
+          # (timeout 60 min), plus macOS queueing. A green release commit
+          # took 55 min (10.60.0), so 45 failed releases cut right after the
+          # push; wait out both budgets instead.
+          # Checks at minute 0 through 120: the last poll lands on the
+          # boundary itself, with no trailing sleep before giving up.
+          for attempt in $(seq 0 120); do
             state="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
               --jq '[.statuses[] | select(.context == "native-required")][0].state // "missing"')"
             echo "native-required for $SHA: $state"
             case "$state" in
               success) exit 0 ;;
-              pending|missing) sleep 60 ;;
+              pending|missing) if [ "$attempt" -lt 120 ]; then sleep 60; fi ;;
               *) echo "::error::native-required is $state for $SHA; fix CI before publishing"; exit 1 ;;
             esac
           done
-          echo "::error::native-required for $SHA did not turn green within 45 minutes"
+          echo "::error::native-required for $SHA did not turn green within 120 minutes"
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

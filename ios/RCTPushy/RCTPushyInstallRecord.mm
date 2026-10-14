@@ -1,8 +1,8 @@
 // Version directories and the completion record: where an install lands and
 // how it is recorded as complete. The record itself (format, atomic write,
 // presence and activation checks) is the shared core's
-// (cpp/patch_core/install_record.h); switchVersion:error: calls its
-// activation check directly.
+// (cpp/patch_core/install_record.h); every activation goes through its
+// activation check (PushyVerifyActivation below).
 #import "RCTPushyInternal.h"
 #include "../../cpp/patch_core/error_codes.h"
 #include "../../cpp/patch_core/install_record.h"
@@ -58,4 +58,44 @@ PUSHY_HIDDEN NSError *PushyPromoteStagingDir(NSString *hash, NSString *artifactS
                                   PushyFromStdString(promoted.message));
     }
     return nil;
+}
+
+// Versions activated before records existed are grandfathered through the
+// persisted current/last state, but only while their directory has no record
+// file (install_record::CheckActivation). Call under the state lock.
+static BOOL PushyIsCurrentOrLastLocked(const std::string &hash) {
+    pushy::state::State state = PushyStateFromDefaults(PushyDefaults());
+    return state.current_version == hash || state.last_version == hash;
+}
+
+PUSHY_HIDDEN NSError *PushyVerifyActivation(NSString *hash, PushyVerifiedActivation *out) {
+    if (!PushyIsSafePathComponent(hash)) {
+        return PushyErrorWithCode(pushy::error_codes::kInvalidOptions, ERROR_OPTIONS);
+    }
+    PushyVerifiedActivation verified;
+    verified.versionDir = PushyToStdString(PushyVersionDir(hash));
+    verified.hash = PushyToStdString(hash);
+    __block BOOL grandfathered = NO;
+    const std::string hashStd = verified.hash;
+    PushyWithStateLock(^{
+        grandfathered = PushyIsCurrentOrLastLocked(hashStd);
+    });
+    pushy::install_record::Status status = pushy::install_record::CheckActivation(
+        verified.versionDir, verified.hash, PushyToStdString(BUNDLE_FILE_NAME), grandfathered,
+        &verified.activation);
+    if (!status.ok) {
+        return PushyErrorWithCode(pushy::error_codes::kSwitchVersionFailed,
+                                  PushyFromStdString(status.message));
+    }
+    if (out != NULL) {
+        *out = verified;
+    }
+    return nil;
+}
+
+PUSHY_HIDDEN BOOL PushyVerifiedActivationUnchangedLocked(const PushyVerifiedActivation &verified) {
+    return pushy::install_record::Unchanged(verified.versionDir,
+                                            PushyToStdString(BUNDLE_FILE_NAME),
+                                            PushyIsCurrentOrLastLocked(verified.hash),
+                                            verified.activation);
 }

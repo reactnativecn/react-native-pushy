@@ -286,7 +286,7 @@ export class DownloadTask {
     }
     const originalSize = await this.readOriginalSize(archiveFile);
     checkUncompressedSize(archiveStat.size, originalSize);
-    await ensureFreeSpace(unzipDirectory, originalSize);
+    await ensureFreeSpace(unzipDirectory, originalSize, ERROR_DELTA_FAILED);
     try {
       await zlib.decompressFile(archiveFile, unzipDirectory);
     } catch (e) {
@@ -569,8 +569,9 @@ export class DownloadTask {
       received += data.byteLength;
       if (!writeError && baseOffset + received > MAX_ARCHIVE_BYTES) {
         // 未知长度/分块传输的兜底:超过上限即停写,请求在下面结算时失败。
+        // 下载阶段:与 Android/iOS 一样归为 DOWNLOAD_FAILED。
         writeError = createPushyError(
-          ERROR_DELTA_FAILED,
+          ERROR_DOWNLOAD_FAILED,
           `archive too large: exceeded ${MAX_ARCHIVE_BYTES}`,
         );
       }
@@ -592,7 +593,11 @@ export class DownloadTask {
         }
         try {
           if (probeFreeSpace) {
-            await ensureFreeSpace(params.targetFile, reserve);
+            await ensureFreeSpace(
+              params.targetFile,
+              reserve,
+              ERROR_DOWNLOAD_FAILED,
+            );
           }
           await fileIo.write(writer.fd, data);
         } catch (error) {
@@ -828,7 +833,7 @@ export class DownloadTask {
       }
       if (totalAll > MAX_ARCHIVE_BYTES) {
         writeError = createPushyError(
-          ERROR_DELTA_FAILED,
+          ERROR_DOWNLOAD_FAILED,
           `archive too large: ${totalAll} bytes`,
         );
         throw writeError;
@@ -836,6 +841,7 @@ export class DownloadTask {
       await ensureFreeSpace(
         params.targetFile,
         totalAll > 0 ? totalAll - baseOffset : 0,
+        ERROR_DOWNLOAD_FAILED,
       );
       // 先落 sidecar 再放行写入,流中崩溃才有得续。
       await this.writeResumeMeta(params.targetFile, buildResumeMeta(totalAll));

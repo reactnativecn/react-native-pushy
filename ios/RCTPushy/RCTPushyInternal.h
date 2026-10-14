@@ -21,6 +21,7 @@
 #include <atomic>
 #include <string>
 
+#include "../../cpp/patch_core/install_record.h"
 #include "../../cpp/patch_core/state_core.h"
 
 // RN's log macros pass __FILE__, which would embed this file's absolute build
@@ -86,6 +87,26 @@ PUSHY_HIDDEN NSString *PushyStagingDir(NSString *hash);
 PUSHY_HIDDEN BOOL PushyHasCompletedVersionAtPath(NSString *versionDir, NSString *hash);
 PUSHY_HIDDEN NSString *PushyRecordedBundleSha256(NSString *versionDir);
 PUSHY_HIDDEN NSError *PushyPromoteStagingDir(NSString *hash, NSString *artifactSha256);
+
+// The activation gate every path that points the next launch at a version
+// goes through (switchVersion:error:, the native round's commit and the crash
+// hold's pending activation), as Android and Harmony do: only a version
+// recorded as completely installed, whose record's bundle digest matches the
+// bytes on disk, may be activated (install_record::CheckActivation). Split in
+// two because the digest reads the whole bundle and must not run under the
+// state lock (+bundleURL takes it on the main thread at launch).
+struct PushyVerifiedActivation {
+    std::string versionDir;
+    std::string hash;
+    pushy::install_record::Activation activation;
+};
+// Outside the state lock. nil when `hash` may be activated (and *out holds
+// what was verified), else a SWITCH_VERSION_FAILED error.
+PUSHY_HIDDEN NSError *PushyVerifyActivation(NSString *hash, PushyVerifiedActivation *out);
+// Under the state lock, right before PushySwitchVersionLocked: whether the
+// directory is still the one verified (same grandfathering, same record, same
+// bundle file). No hashing.
+PUSHY_HIDDEN BOOL PushyVerifiedActivationUnchangedLocked(const PushyVerifiedActivation &verified);
 
 #pragma mark - RCTPushyInstaller.mm
 

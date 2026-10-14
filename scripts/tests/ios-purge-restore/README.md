@@ -33,7 +33,8 @@ python3 -m unittest discover -s scripts/tests/ios-purge-restore -p test_extract.
 declarations never match). It copies the exact definitions (with `#line`
 locations) of `bundleURL`, `resolveLaunchBundleURL`, `restorePurgedLaunch`,
 `commitRoundWithGeneration`, `resetToPackagedBundle`, their state/defaults
-helpers, `+[RCTPushyInstaller switchVersion:error:]` and the relevant globals
+helpers, the activation gate both share (`PushyVerifyActivation`),
+`+[RCTPushyInstaller switchVersion:error:]` and the relevant globals
 into build-only `.inc` files, and copies the shared completion record core
 (`cpp/patch_core/install_record.cpp`, whose `CheckActivation`/`Unchanged`
 switchVersion calls) into the build directory. These are compiled unchanged
@@ -106,7 +107,7 @@ since process start.
 
 ## Negative controls
 
-`VERIFY_REGRESSIONS=1` additionally compiles five generated-only mutants:
+`VERIFY_REGRESSIONS=1` additionally compiles six generated-only mutants:
 
 - Remove the closed-window activation veto: `late_commit` must fail.
 - Return `NO` after timeout instead of re-resolving: `commit_before_signal` must fail.
@@ -115,6 +116,9 @@ since process start.
   `install_record.cpp`): `install_record_activation` must fail.
 - Grandfather current/last versions that do carry a record (same copy):
   `switch_version_records` must fail.
+- Activate from the round commit without the activation gate (both the
+  out-of-lock verification and the under-lock re-check):
+  `round_commit_verifies` must fail.
 
 Each mutant must compile and fail its specific state assertion; unrelated
 compiler errors, crashes or deadlock-guard failures do not count as detection.

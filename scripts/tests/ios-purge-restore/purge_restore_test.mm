@@ -189,7 +189,8 @@ Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
                          hashInfo:(NSDictionary *)hashInfo
                          activate:(NSString *)hash
                             cache:(NSString *)cache
-                        activated:(BOOL *)activated;
+                        activated:(BOOL *)activated
+                      verifyError:(NSError **)verifyError;
 @end
 
 #include "helpers.inc"
@@ -298,7 +299,8 @@ static dispatch_time_t TestLaunchDeadline(dispatch_time_t when, int64_t delta) {
         roundCommitted = [self commitRoundWithGeneration:requestGeneration
             configGeneration:pushyNativeConfigGeneration.load()
             hashInfo:@{@"hash": @"B", @"info": @{@"name": @"B", @"forceBootRescue": @YES}}
-            activate:@"B" cache:@"{\"ts\":123,\"body\":\"{}\"}" activated:&roundActivated];
+            activate:@"B" cache:@"{\"ts\":123,\"body\":\"{}\"}" activated:&roundActivated
+            verifyError:NULL];
         pushyHostRoundResult = @{@"status": @"test", @"reason": @"", @"hash": @"B"};
         Signal(commitFinished);
         actor = Actor::None;
@@ -348,6 +350,11 @@ static void SetUp(Order selected) {
          withIntermediateDirectories:YES attributes:nil error:NULL], "create B fixture directory");
     Expect([@"B" writeToFile:[versionDir stringByAppendingPathComponent:BUNDLE_FILE_NAME]
          atomically:YES encoding:NSUTF8StringEncoding error:NULL], "create B fixture bundle");
+    // B was installed like any download: sealed with its completion record,
+    // so the round commit's activation gate (PushyVerifyActivation) passes.
+    Expect(pushy::install_record::Seal(PushyToStdString(versionDir), "B",
+                                       PushyToStdString(BUNDLE_FILE_NAME), "", "").status.ok,
+           "seal B fixture record");
     Expect([@"packaged" writeToURL:[RCTPushy binaryBundleURL]
          atomically:YES encoding:NSUTF8StringEncoding error:NULL], "create packaged fixture bundle");
     PushyWithStateLock(^{
@@ -684,6 +691,43 @@ static void SwitchVersionRecords(void) {
     Expect([NSFileManager.defaultManager removeItemAtPath:root error:NULL], "remove fixture files");
 }
 
+// The round commit (and the crash hold's activation through it) passes the
+// same activation gate as switchVersion:error:. A version whose bundle no
+// longer matches its record commits nothing at all, as on Android: no
+// activation, no version info, no response cache.
+static void RoundCommitVerifies(void) {
+    SetUp(Order::CloseFirst);
+    NSString *bundle = [[[RCTPushy downloadDir] stringByAppendingPathComponent:@"B"]
+        stringByAppendingPathComponent:BUNDLE_FILE_NAME];
+    Expect([@"tampered" writeToFile:bundle atomically:YES encoding:NSUTF8StringEncoding error:NULL],
+           "tamper with B bundle");
+    BOOL activated = YES;
+    NSError *error = nil;
+    BOOL committed = [RCTPushyOrchestrator commitRoundWithGeneration:0
+        configGeneration:0
+        hashInfo:@{@"hash": @"B", @"info": @{@"name": @"B"}}
+        activate:@"B" cache:@"{}" activated:&activated verifyError:&error];
+    Expect(!committed && !activated && error != nil,
+           "a version failing verification must not be activated by the round commit");
+    Expect([error.domain isEqualToString:@(pushy::error_codes::kSwitchVersionFailed)],
+           "verification failures are SWITCH_VERSION_FAILED");
+    Expect(State().current_version == "A", "state must keep the previous version");
+    Expect(Info() == nil, "a rejected commit writes no version info");
+    Expect(Value(keyNativeCheckCache) == nil, "a rejected commit writes no response cache");
+
+    // The intact bundle passes the same gate.
+    Expect([@"B" writeToFile:bundle atomically:YES encoding:NSUTF8StringEncoding error:NULL],
+           "restore B bundle");
+    error = nil;
+    committed = [RCTPushyOrchestrator commitRoundWithGeneration:0
+        configGeneration:0
+        hashInfo:@{@"hash": @"B", @"info": @{@"name": @"B"}}
+        activate:@"B" cache:@"{}" activated:&activated verifyError:&error];
+    Expect(committed && activated && error == nil, "a verified version activates");
+    Expect(State().current_version == "B", "state selects the verified version");
+    Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
+}
+
 int main(int argc, char **argv) {
     @autoreleasepool {
         // These intentional failures run in separate processes. Erasing the
@@ -716,6 +760,7 @@ int main(int argc, char **argv) {
             {"spent_budget_skip", [] { Skipped(NO); }},
             {"install_record_activation", InstallRecordActivation},
             {"switch_version_records", SwitchVersionRecords},
+            {"round_commit_verifies", RoundCommitVerifies},
         };
         int ran = 0;
         for (const auto &test : cases) {

@@ -617,10 +617,9 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     if (hash == nil) {
         return;
     }
-    // Unlike Android's switchVersion, PushySwitchVersionLocked does not
-    // validate the version directory; never point the next launch at bytes
-    // that are gone (e.g. wiped by a reset whose generation bump we would
-    // catch below anyway, or by cleanup).
+    // Cheap early out for bytes that are gone (e.g. wiped by a reset whose
+    // generation bump the commit would catch anyway, or by cleanup); the
+    // commit itself runs the full activation gate (PushyVerifyActivation).
     if (!PushyHasCompletedVersionAtPath(PushyVersionDir(hash), hash)) {
         NSLog(@"RCTPushy -- crash hold: version %@ no longer on disk, dropping activation", hash);
         return;
@@ -633,17 +632,22 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
         merged[PushyInfoCrashHold()] = @YES;
         hashInfoEntry = @{@"hash": hash, @"info": merged};
     }
+    NSError *verifyError = nil;
     BOOL committed = [self commitRoundWithGeneration:generation
                                     configGeneration:configGeneration
                                             hashInfo:hashInfoEntry
                                             activate:hash
                                                cache:nil
-                                           activated:NULL];
+                                           activated:NULL
+                                         verifyError:&verifyError];
     if (committed) {
         @synchronized (self) {
             pushyUnactivatedHash = nil;
         }
         NSLog(@"RCTPushy -- crash hold: activated downloaded version %@", hash);
+    } else if (verifyError != nil) {
+        NSLog(@"RCTPushy -- crash hold: version %@ failed verification, dropping activation: %@",
+              hash, verifyError.localizedDescription);
     } else {
         NSLog(@"RCTPushy -- crash hold: reset or new config since download, dropping activation");
     }
@@ -747,7 +751,8 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
                                                 hashInfo:nil
                                                 activate:nil
                                                    cache:cache
-                                               activated:NULL];
+                                               activated:NULL
+                                             verifyError:NULL];
         return committed ? result : cancelledByReset;
     };
 
@@ -794,13 +799,23 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     BOOL activate = decision.Get("activate").Truthy() || pushyCrashHoldActive.load()
         || pushyPurgeRestoreActive.load();
     BOOL activated = NO;
+    NSError *verifyError = nil;
     BOOL committed = [self commitRoundWithGeneration:resetGeneration
                                     configGeneration:configGeneration
                                             hashInfo:@{@"hash": hash, @"info": versionInfo}
                                             activate:activate ? hash : nil
                                                cache:cache
-                                           activated:&activated];
+                                           activated:&activated
+                                         verifyError:&verifyError];
     activate = activated;
+    if (verifyError != nil) {
+        // Android parity (UpdateContext.commitSyncResult): a version that
+        // fails the activation gate commits nothing, not even the cache.
+        RCTLogWarn(@"RCTPushy -- native sync: %@ failed verification: %@", hash,
+                   verifyError.localizedDescription);
+        pushyHostRoundResult = PushyHostResult(@"failed", @"commit_failed");
+        return;
+    }
     if (!committed) {
         RCTLogInfo(@"RCTPushy -- native sync: reset during round, dropping result");
     } else if (activate) {
@@ -828,16 +843,35 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
 // reset and config generations. resetToPackagedBundle bumps that generation under the same
 // lock, so there is no compare-and-act window: either the whole round commits,
 // or the reset wins and none of it does.
+//
+// A version to activate first passes the same gate as switchVersion:error:
+// (PushyVerifyActivation, outside the lock) and is re-checked unchanged under
+// it. A version that fails it commits nothing: NO with *verifyError set.
 + (BOOL)commitRoundWithGeneration:(uint64_t)generation
                  configGeneration:(uint64_t)configGeneration
                          hashInfo:(NSDictionary *)hashInfoEntry
                          activate:(NSString *)hashToActivate
                             cache:(NSString *)cache
-                        activated:(BOOL *)activatedOut {
+                        activated:(BOOL *)activatedOut
+                      verifyError:(NSError **)verifyErrorOut {
     // cache is nil for the crash handler's activation-only commit
     // (activatePendingVersion): no round ran, so there is no cache to write.
+    PushyVerifiedActivation verified;
+    __block NSError *verifyError = nil;
+    if (hashToActivate != nil) {
+        verifyError = PushyVerifyActivation(hashToActivate, &verified);
+    }
     __block BOOL committed = NO;
     __block BOOL activated = NO;
+    if (verifyError != nil) {
+        if (verifyErrorOut != NULL) {
+            *verifyErrorOut = verifyError;
+        }
+        if (activatedOut != NULL) {
+            *activatedOut = NO;
+        }
+        return NO;
+    }
     PushyWithStateLock(^{
         if (pushyResetGeneration.load() != generation) {
             return;
@@ -864,6 +898,12 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
                 activation = nil;
             }
         }
+        if (activation != nil && !PushyVerifiedActivationUnchangedLocked(verified)) {
+            verifyError = PushyErrorWithCode(
+                pushy::error_codes::kSwitchVersionFailed,
+                [NSString stringWithFormat:@"Bundle version %@ changed while switching.", activation]);
+            return;
+        }
         NSUserDefaults *defaults = PushyDefaults();
         NSString *infoJson = hashInfoEntry == nil ? nil : PushyJsonString(info);
         if (infoJson != nil) {
@@ -880,6 +920,9 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     });
     if (activatedOut != NULL) {
         *activatedOut = activated;
+    }
+    if (verifyErrorOut != NULL) {
+        *verifyErrorOut = verifyError;
     }
     return committed;
 }

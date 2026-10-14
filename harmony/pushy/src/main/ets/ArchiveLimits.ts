@@ -1,7 +1,6 @@
 import fileIo from '@ohos.file.fs';
 import statvfs from '@ohos.file.statvfs';
 import {
-  ERROR_FILE_OPERATION_FAILED,
   ERROR_DELTA_FAILED,
   createPushyError,
   getErrorMessage,
@@ -66,11 +65,14 @@ export function checkOriginalSize(
 
 /**
  * 目标所在文件系统必须还能再写 bytesToWrite + 安全余量。取不到可用空间
- * (返回 0/异常)视为未知,放行。
+ * (返回 0/异常)视为未知,放行。空间不足以 `code` 失败:错误码按阶段归类,
+ * 与 Android/iOS 一致——下载阶段 DOWNLOAD_FAILED,解压阶段 PATCH_FAILED。
+ * 换镜像的判定(IsMirrorRetryableCode)与补丁健康度遥测都按这个码聚合。
  */
 export async function ensureFreeSpace(
   target: string,
   bytesToWrite: number,
+  code: string,
 ): Promise<void> {
   let probe = target;
   while (probe.length > 1 && !fileIo.accessSync(probe)) {
@@ -92,7 +94,7 @@ export async function ensureFreeSpace(
   const needed = Math.max(0, bytesToWrite) + FREE_DISK_MARGIN_BYTES;
   if (free < needed) {
     throw createPushyError(
-      ERROR_FILE_OPERATION_FAILED,
+      code,
       `insufficient disk space: need ${needed} bytes, have ${free}`,
     );
   }
