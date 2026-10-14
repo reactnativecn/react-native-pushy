@@ -36,13 +36,15 @@ jobs:
           # (timeout 60 min), plus macOS queueing. A green release commit
           # took 55 min (10.60.0), so 45 failed releases cut right after the
           # push; wait out both budgets instead.
-          for attempt in $(seq 1 120); do
+          # Checks at minute 0 through 120: the last poll lands on the
+          # boundary itself, with no trailing sleep before giving up.
+          for attempt in $(seq 0 120); do
             state="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
               --jq '[.statuses[] | select(.context == "native-required")][0].state // "missing"')"
             echo "native-required for $SHA: $state"
             case "$state" in
               success) exit 0 ;;
-              pending|missing) sleep 60 ;;
+              pending|missing) if [ "$attempt" -lt 120 ]; then sleep 60; fi ;;
               *) echo "::error::native-required is $state for $SHA; fix CI before publishing"; exit 1 ;;
             esac
           done
