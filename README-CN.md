@@ -43,6 +43,7 @@
 | `disableTelemetry` | `false` | 不向服务端上报生命周期事件（下载/补丁失败、回滚、标记成功） |
 | `disableErrorReporting` | `false` | 关闭 JS 错误上报（见下节） |
 | `disableNativeCheck` | `false` | 关闭原生冷启动检测（救砖通道） |
+| `nativeConfigSource` | `'javascript'` | 原生检测配置的归属；宿主自己调用 `configure()` 时设为 `'native'`，JS 不再覆盖（见[迁移说明](docs/NATIVE_HOST_API_MIGRATION.md)） |
 | `testChannel` | `true` | 是否响应 `__rnPushyVersionHash` 深链/二维码；生产构建建议设为 `false` |
 | `logger` | – | 接收 SDK 全部事件（`type`、`data`）用于自定义日志 |
 

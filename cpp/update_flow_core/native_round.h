@@ -31,7 +31,9 @@
 namespace flowcore {
 
 // Total HTTP requests one query may issue: endpoint queries and remote list
-// fetches alike.
+// fetches alike. The JS check's endpoint fallback keeps the same budget for
+// its endpoint queries (src/endpoint.ts MAX_ENDPOINT_REQUESTS,
+// scripts/check-constant-parity.js).
 constexpr int kMaxQueryRequests = 8;
 
 // {"body": "<checkUpdate request text>", "query": <first NextQueryStep

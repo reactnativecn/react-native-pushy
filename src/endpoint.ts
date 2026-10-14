@@ -20,6 +20,7 @@ export interface ExecuteEndpointFallbackOptions<T> {
   random?: () => number;
   now?: () => number;
   hedgeDelayMs?: number;
+  maxRequests?: number;
   onFirstFailure?: (failure: EndpointAttemptFailure) => void | Promise<void>;
 }
 
@@ -31,6 +32,15 @@ const normalizeError = (error: unknown) => {
 };
 
 export const DEFAULT_HEDGE_DELAY_MS = 250;
+
+/**
+ * Endpoint requests one check may issue in total, as the native round's
+ * flowcore::kMaxQueryRequests (cpp/update_flow_core/native_round.h). The
+ * remote list comes from a public mirror: without a bound, a long (or
+ * hostile) list would make every device fan out to all of its entries on
+ * each failed check.
+ */
+export const MAX_ENDPOINT_REQUESTS = 8;
 
 /**
  * Hedged race over the candidate endpoints: the first candidate starts
@@ -137,6 +147,7 @@ export async function executeEndpointFallback<T>({
   random = Math.random,
   now = Date.now,
   hedgeDelayMs = DEFAULT_HEDGE_DELAY_MS,
+  maxRequests = MAX_ENDPOINT_REQUESTS,
   onFirstFailure,
 }: ExecuteEndpointFallbackOptions<T>): Promise<EndpointAttemptSuccess<T>> {
   const excludedEndpoints = new Set<string>();
@@ -164,14 +175,15 @@ export async function executeEndpointFallback<T>({
     excludedEndpoints.add(firstEndpoint);
     await onFirstFailure?.(firstFailure);
     let lastError = firstFailure.error;
-
-    while (true) {
+    // Every endpoint is asked at most once, so the excluded set counts the
+    // requests issued so far.
+    while (excludedEndpoints.size < maxRequests) {
       const remoteEndpoints = getRemoteEndpoints
         ? await getRemoteEndpoints().catch(() => [])
         : [];
-      candidates = dedupeEndpoints([...candidates, ...remoteEndpoints]).filter(
-        (endpoint) => !excludedEndpoints.has(endpoint)
-      );
+      candidates = dedupeEndpoints([...candidates, ...remoteEndpoints])
+        .filter((endpoint) => !excludedEndpoints.has(endpoint))
+        .slice(0, maxRequests - excludedEndpoints.size);
 
       if (!candidates.length) {
         throw lastError;
@@ -193,5 +205,6 @@ export async function executeEndpointFallback<T>({
         lastError = failure.error;
       }
     }
+    throw lastError;
   }
 }

@@ -16,6 +16,8 @@
 //                                        android/.../ErrorCodes.java
 //                                        src/error.ts (every native code must
 //                                        be a known UpdateErrorCode)
+//   cpp/update_flow_core/native_round.h <-> src/endpoint.ts
+//                                        (the request budget of one check)
 'use strict';
 
 const fs = require('fs');
@@ -185,6 +187,14 @@ const pairs = [
     required: errorCodesRequired,
     // Every constant in the class must exist in the header too.
     mirrorPrefix: '',
+  },
+  {
+    // The JS check's endpoint fallback keeps the native round's budget.
+    header: 'cpp/update_flow_core/native_round.h',
+    mirror: 'src/endpoint.ts',
+    parse: parseArkTsConstants,
+    mirrorName: () => 'MAX_ENDPOINT_REQUESTS',
+    only: ['MaxQueryRequests'],
   },
   {
     header: 'cpp/patch_core/error_codes.h',

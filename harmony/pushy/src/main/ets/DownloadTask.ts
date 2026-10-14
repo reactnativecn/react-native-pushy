@@ -43,6 +43,8 @@ import {
 } from './ErrorCodes';
 import { BUNDLE_DELTA_ENTRY } from './Texts';
 
+// 连接超时,与 Android DownloadTask 的 connectTimeout(15s)一致。
+const CONNECT_TIMEOUT_MS = 15000;
 const TAG = 'DownloadTask';
 
 // staging 目录里的条目名 + __diff.json 原文:由原生内核统一校验与解析
@@ -752,14 +754,15 @@ export class DownloadTask {
         }, remainingMs);
       });
       // netstack 把 readTimeout 交给 libcurl 的 CURLOPT_TIMEOUT_MS(整次传输
-      // 总时长)而非空闲超时:固定 60s 会让慢网上的大全量包次次失败。两个
-      // 超时都取剩余 deadline;卡死由下面的 60s 不活动看门狗负责——两种
-      // 语义下都正确。
+      // 总时长)而非空闲超时:固定 60s 会让慢网上的大全量包次次失败。所以
+      // readTimeout 取剩余 deadline,卡死由下面的 60s 不活动看门狗负责——
+      // 两种语义下都正确。connectTimeout 没有这个问题,与 Android 一样
+      // 15s:连不上的镜像不该吃掉整个阶段预算,下一个镜像还要用。
       const responseCode = await Promise.race([
         httpRequest.requestInStream(params.url, {
           method: http.RequestMethod.GET,
           readTimeout: remainingMs,
-          connectTimeout: remainingMs,
+          connectTimeout: Math.min(CONNECT_TIMEOUT_MS, remainingMs),
           header: requestHeader,
         }),
         deadlinePromise,

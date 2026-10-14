@@ -43,6 +43,7 @@ through `client.setOptions(...)`.
 | `disableTelemetry` | `false` | Stop lifecycle events (download/patch failure, rollback, mark success) reaching the server |
 | `disableErrorReporting` | `false` | Stop JS exception reporting (see below) |
 | `disableNativeCheck` | `false` | Turn off the native cold-start check that rescues bricked devices |
+| `nativeConfigSource` | `'javascript'` | Who owns the persisted native check configuration; `'native'` when the host calls `configure()` itself, so JS never overwrites it ([migration notes](docs/NATIVE_HOST_API_MIGRATION.md)) |
 | `testChannel` | `true` | Honour `__rnPushyVersionHash` deep links / QR codes; set `false` in production builds |
 | `logger` | – | Receives every SDK event (`type`, `data`) for your own logging |
 
