@@ -102,15 +102,19 @@ HELPERS = [
     # What switchVersion:error: needs around the shared record core
     # (cpp/patch_core/install_record.cpp, compiled from CORE_SOURCE).
     'PushyVersionDir', 'PushyStringIsBlank', 'PushyIsSafePathComponent',
+    # The activation gate switchVersion:error: and the round commit share.
+    'PushyIsCurrentOrLastLocked', 'PushyVerifyActivation',
+    'PushyVerifiedActivationUnchangedLocked',
 ]
 # Emitted ahead of HELPERS, which use them.
-STRUCTS: list[str] = []
+STRUCTS: list[str] = ['PushyVerifiedActivation']
 # The completion record core switchVersion:error: calls. Copied (with #line)
 # into the build directory so the record mutants below can alter it; the
 # test script compiles the copy instead of the checkout's file.
 CORE_SOURCE = Path('cpp/patch_core/install_record.cpp')
 CORE_MUTATIONS = ('trust-digestless', 'grandfather-recorded')
-MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset') + CORE_MUTATIONS
+MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset',
+             'skip-commit-verify') + CORE_MUTATIONS
 
 
 def mutate(text: str, mutation: str) -> str:
@@ -128,11 +132,22 @@ def mutate(text: str, mutation: str) -> str:
         # Grandfather current/last versions even when they carry a record.
         'grandfather-recorded': (
             r'if \(grandfathered && state == Record::State::kAbsent\)', 'if (grandfathered)'),
+        # Activate from the round commit without the activation gate (both
+        # the out-of-lock verification and the under-lock re-check).
+        'skip-commit-verify': [
+            (r'if \(hashToActivate != nil\) \{', 'if (false) {'),
+            (r'if \(activation != nil && !PushyVerifiedActivationUnchangedLocked\(verified\)\)',
+             'if (false)'),
+        ],
     }
-    pattern, replacement = patterns[mutation]
-    mutated, count = re.subn(pattern, replacement, text)
-    if count != 1:
-        raise ValueError(f'{mutation}: expected one mutation site, found {count}')
+    steps = patterns[mutation]
+    if isinstance(steps, tuple):
+        steps = [steps]
+    mutated = text
+    for pattern, replacement in steps:
+        mutated, count = re.subn(pattern, replacement, mutated)
+        if count != 1:
+            raise ValueError(f'{mutation}: expected one mutation site, found {count}')
     return mutated
 
 

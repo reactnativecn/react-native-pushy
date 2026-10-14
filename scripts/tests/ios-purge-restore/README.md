@@ -33,7 +33,8 @@ python3 -m unittest discover -s scripts/tests/ios-purge-restore -p test_extract.
 declarations never match). It copies the exact definitions (with `#line`
 locations) of `bundleURL`, `resolveLaunchBundleURL`, `restorePurgedLaunch`,
 `commitRoundWithGeneration`, `resetToPackagedBundle`, their state/defaults
-helpers, `+[RCTPushyInstaller switchVersion:error:]` and the relevant globals
+helpers, the activation gate both share (`PushyVerifyActivation`),
+`+[RCTPushyInstaller switchVersion:error:]` and the relevant globals
 into build-only `.inc` files, and copies the shared completion record core
 (`cpp/patch_core/install_record.cpp`, whose `CheckActivation`/`Unchanged`
 switchVersion calls) into the build directory. These are compiled unchanged
