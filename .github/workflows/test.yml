@@ -110,6 +110,11 @@ jobs:
       - name: Run patch_core unit tests (sanitized)
         run: SANITIZE=1 ./scripts/test-patch-core.sh
 
+      # The tests above build the cores one way; the shipped binaries build
+      # them with three other flag sets (no RTTI on Android, C++20 on iOS).
+      - name: Shared cores compile with every platform's release flags
+        run: ./scripts/test-core-platform-flags.sh
+
       # Short bounded fuzz pass over the two untrusted-input parsers
       # (flow_json, hbc_transform_wire). Skips with a notice when clang or
       # libFuzzer is unavailable on the runner.
