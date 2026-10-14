@@ -63,7 +63,7 @@ public class UpdateContext {
     // 4 (clear first time) exists in the state core but has no Android caller.
     private static final int STATE_OP_CLEAR_ROLLBACK_MARK = 5;
     private static final int STATE_OP_RESOLVE_LAUNCH = 6;
-    private static final String KEY_FIRST_LOAD_MARKED = "firstLoadMarked";
+    static final String KEY_FIRST_LOAD_MARKED = "firstLoadMarked";
     // Bumped by resetToPackagedBundle. The cold-start check runs for minutes
     // and may already hold a decision when the app resets to the packaged
     // bundle; the orchestrator samples this counter and abandons activation
@@ -134,7 +134,7 @@ public class UpdateContext {
             // Execute cleanUp before clearing SharedPreferences to avoid race condition
             cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
             SharedPreferences.Editor editor = this.sp.edit();
-            editor.clear();
+            removeVersionScopedKeys(editor);
             applyState(editor, nextState);
             persistEditor(editor, "sync state with binary version");
             clearNativeCheckCache();
@@ -436,6 +436,15 @@ public class UpdateContext {
         }
     }
 
+    // Not editor.clear(): that also wiped the uuid (re-bucketing every gray
+    // release on each app upgrade) and the native config (no crash hold and
+    // no cold-start round until JS ran again). See VersionScopedKeys.
+    private void removeVersionScopedKeys(SharedPreferences.Editor editor) {
+        for (String key : VersionScopedKeys.select(sp.getAll().keySet())) {
+            editor.remove(key);
+        }
+    }
+
     private void applyState(SharedPreferences.Editor editor, StateCoreResult state) {
         putNullableString(editor, "packageVersion", state.packageVersion);
         putNullableString(editor, "buildTime", state.buildTime);
@@ -618,8 +627,10 @@ public class UpdateContext {
      * (so the next launch resolves to the built-in bundle) and delete the
      * downloaded versions, keeping only the directory of the version this
      * process is running from (a silent reset must not break its on-demand
-     * asset loads). Only the client uuid survives — it identifies the install
-     * for gray release bucketing and must not change on reset.
+     * asset loads). The install's own keys survive (VersionScopedKeys): the
+     * client uuid identifies the install for gray release bucketing and must
+     * not change on reset, and the native config stays with the host, as on
+     * iOS and Harmony.
      */
     public void resetToPackagedBundle() {
         synchronized (commitLock) {
@@ -637,18 +648,14 @@ public class UpdateContext {
         resetState.buildTime = getBuildTime();
         resetState.firstTime = false;
         resetState.firstTimeOk = true;
-        String uuid = sp.getString("uuid", null);
         // The cached check response still advertises the version this reset
         // removes; drop it first so a failure aborts before the state wipe.
         if (!clearNativeCheckCache()) {
             throw new IllegalStateException("Failed to persist state for reset check cache");
         }
         SharedPreferences.Editor editor = sp.edit();
-        editor.clear();
+        removeVersionScopedKeys(editor);
         applyState(editor, resetState);
-        if (uuid != null) {
-            editor.putString("uuid", uuid);
-        }
         persistEditorOrThrow(editor, "reset to packaged bundle");
         ignoreRollback = false;
         Log.i(TAG, "Reset to packaged bundle");

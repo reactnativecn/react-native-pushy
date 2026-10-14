@@ -29,6 +29,7 @@ import NativePatchCore, {
 import { assertSafePathComponent } from './PathUtils';
 import { withRawFd } from './SaveFile';
 import {
+  createPushyError,
   ERROR_SWITCH_VERSION_FAILED,
   getErrorMessage,
   toPushyError,
@@ -411,6 +412,60 @@ export class UpdateContext {
   // switchVersion 激活。
   private taskChain: Promise<void> = Promise.resolve();
 
+  // 在途的破坏性清理(常规清理与 reset 清理)及其开始次数。激活与破坏性清理
+  // 互斥(Android 的 versionFilesLock):激活校验前先等在途清理结束,校验后
+  // 若期间又有清理开始则重来。清理的保留名单在任务开始时(主线程)取,而
+  // 校验通过到 applySwitch 之间没有 await,所以此后开始的清理一定看得到
+  // 刚激活的版本。
+  private cleanupInFlight: Promise<void> | null = null;
+  private cleanupStarts: number = 0;
+
+  private enqueueCleanupTask(job: () => Promise<void>): Promise<void> {
+    return this.enqueueSerialTask(() => {
+      this.cleanupStarts += 1;
+      const running = job();
+      const tracked = running.then(
+        () => undefined,
+        () => undefined,
+      );
+      this.cleanupInFlight = tracked;
+      tracked.then(() => {
+        if (this.cleanupInFlight === tracked) {
+          this.cleanupInFlight = null;
+        }
+      });
+      return running;
+    });
+  }
+
+  private static readonly MAX_ACTIVATION_VERIFY_ATTEMPTS = 3;
+
+  /**
+   * verifyActivation,并保证返回时没有破坏性清理在途、校验期间也没有清理
+   * 开始过(见 cleanupInFlight)。调用方须在返回后、下一个 await 之前完成
+   * applySwitch。
+   */
+  private async verifyActivationExclusive(hash: string): Promise<void> {
+    for (
+      let attempt = 0;
+      attempt < UpdateContext.MAX_ACTIVATION_VERIFY_ATTEMPTS;
+      attempt++
+    ) {
+      while (this.cleanupInFlight !== null) {
+        await this.cleanupInFlight;
+      }
+      const starts = this.cleanupStarts;
+      await this.verifyActivation(hash);
+      if (this.cleanupInFlight === null && this.cleanupStarts === starts) {
+        return;
+      }
+    }
+    throw createPushyError(
+      ERROR_SWITCH_VERSION_FAILED,
+      `Version ${hash} kept racing cleanup while switching.`,
+    );
+  }
+
   private enqueueSerialTask<T>(job: () => Promise<T>): Promise<T> {
     const run = this.taskChain.then(job);
     this.taskChain = run.then(
@@ -589,7 +644,7 @@ export class UpdateContext {
 
     // maxAgeDays=0：删除下载目录内容，仅保留当前运行版本的目录（残留目录由
     // 下次常规清理回收）。挂到串行任务链尾，避免与在飞的解压/打补丁并发。
-    this.enqueueSerialTask(() =>
+    this.enqueueCleanupTask(() =>
       NativePatchCore.cleanupOldEntries(
         this.rootDir,
         [UpdateContext.launchVersion].filter(name => name.length > 0),
@@ -626,7 +681,7 @@ export class UpdateContext {
     }
     const shouldSwitch = activate && !!hash;
     if (shouldSwitch) {
-      await this.verifyActivation(hash);
+      await this.verifyActivationExclusive(hash);
       if (UpdateContext.resetGeneration !== expectedGeneration) {
         return false;
       }
@@ -757,7 +812,16 @@ export class UpdateContext {
   public async switchVersion(hash: string): Promise<void> {
     try {
       const safeHash = assertSafePathComponent(hash);
-      await this.verifyActivation(safeHash);
+      const generation = UpdateContext.resetGeneration;
+      await this.verifyActivationExclusive(safeHash);
+      // 与 commitSyncResult 一致:校验期间发生过 reset(它会删掉刚校验过的
+      // 目录),不能再把下次启动指向它。
+      if (UpdateContext.resetGeneration !== generation) {
+        throw createPushyError(
+          ERROR_SWITCH_VERSION_FAILED,
+          `Reset to the packaged bundle while switching to ${safeHash}.`,
+        );
+      }
       this.applySwitch(safeHash);
       await this.flushPreferences(`switch version ${safeHash}`);
     } catch (e) {
@@ -872,19 +936,21 @@ export class UpdateContext {
    * executor)。
    */
   public cleanUp(): void {
-    const state = this.getStateSnapshot();
-    const keepNames = [
-      state.currentVersion || '',
-      state.lastVersion || '',
-      UpdateContext.launchVersion,
-    ].filter(name => name.length > 0);
-    this.enqueueSerialTask(() =>
-      NativePatchCore.cleanupOldEntries(
+    // 保留名单在任务真正开始时取,不在入队时取(与 Android 一致):清理可能
+    // 排在一个长下载后面,期间激活的版本必须在名单里。
+    this.enqueueCleanupTask(() => {
+      const state = this.getStateSnapshot();
+      const keepNames = [
+        state.currentVersion || '',
+        state.lastVersion || '',
+        UpdateContext.launchVersion,
+      ].filter(name => name.length > 0);
+      return NativePatchCore.cleanupOldEntries(
         this.rootDir,
         keepNames,
         CLEANUP_MAX_AGE_DAYS,
-      ),
-    ).catch((error: Object) => {
+      );
+    }).catch((error: Object) => {
       logger.error(TAG, `cleanupOldEntries failed: ${getErrorMessage(error)}`);
     });
   }
