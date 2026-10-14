@@ -12,6 +12,7 @@
     "android/lib",
     "android/jni/*.mk",
     "android/jni/HDiffPatch/LICENSE",
+    "android/jni/HDiffPatch/README.md",
     "android/jni/HDiffPatch/decompress_plugin_demo.h",
     "android/jni/HDiffPatch/dirDiffPatch/dir_patch/dir_patch_types.h",
     "android/jni/HDiffPatch/file_for_patch.c",
