@@ -141,8 +141,13 @@ function configurationError(context: UpdateContext): BundlePreparationResult | u
   return readNativeConfig(context).rejection;
 }
 
+// timeoutMs bounds how long the host waits, as iOS/Android's
+// prepareBundle(timeout): on expiry the result is failed/timeout and the round
+// keeps running (its result still applies to the next launch). Without one the
+// host waits for the round; nothing blocks meanwhile (single-threaded ArkTS).
 export async function prepareBundleNative(
   context: UpdateContext,
+  timeoutMs?: number,
 ): Promise<BundlePreparationResult> {
   if (scheduledContext !== context) {
     return bundlePreparationResult('skipped', 'not_initialized');
@@ -152,7 +157,22 @@ export async function prepareBundleNative(
     return read.rejection;
   }
   const configJson = read.json;
-  const result = await startNativeRound(context, scheduledRollback);
+  const round = startNativeRound(context, scheduledRollback);
+  let result: BundlePreparationResult;
+  if (timeoutMs === undefined) {
+    result = await round;
+  } else {
+    let timer: number | undefined;
+    const expired = new Promise<undefined>((resolve) => {
+      timer = setTimeout(() => resolve(undefined), Math.max(0, timeoutMs));
+    });
+    const settled = await Promise.race([round, expired]);
+    clearTimeout(timer);
+    if (settled === undefined) {
+      return bundlePreparationResult('failed', 'timeout');
+    }
+    result = settled;
+  }
   if (roundConfigGeneration !== context.getNativeConfigGeneration()
       || configJson !== roundConfigJson || configJson !== context.getKv(KEY_CONFIG)) {
     return bundlePreparationResult('cancelled', 'config_changed');

@@ -180,3 +180,8 @@ Hermes 字节码对通用二进制 diff 极不友好，我们在两个环节同�
 Apple 平台使用 `RCTPushy`，Harmony 使用已有的 `PushyFileJSBundleProvider`。
 请在正常启动 bundle 解析后调用。改名不改变 JS 桥接契约，但原生接入代码需要迁移并重新构建。
 详见[原生接口迁移说明](docs/NATIVE_HOST_API_MIGRATION.md)。
+
+三端都可以传入等待上限：`PushyRuntime.prepareBundle(context, timeoutMillis, callback)`、
+`RCTPushy.prepareBundle(timeout:completion:)`、`prepareBundle(timeoutMs)`。超时返回
+`failed` / `timeout`，检测轮次继续在后台运行，结果仍对下次启动生效。不传时
+Android 与 iOS 最多等 30 分钟，HarmonyOS 等到轮次结束。
