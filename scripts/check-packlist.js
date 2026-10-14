@@ -7,6 +7,9 @@ const { execFileSync } = require('child_process');
 const { files: filesField } = require('../package.json');
 
 const release = process.argv.includes('--release');
+// Also compile the packed native sources (needs the submodules and a C
+// compiler; test.yml's C++ job runs it).
+const compile = process.argv.includes('--compile');
 
 // A `files` entry (glob, file or directory) as a regex over packed paths:
 // the entry itself or anything below it.
@@ -79,6 +82,10 @@ const required = [
         'android/jni/HDiffPatch/file_for_patch.c',
         'android/jni/lzma/C/LzmaDec.c',
         'android/jni/lzma/C/Lzma2Dec.c',
+        // The submodules ship only these sources and headers, so their
+        // licenses must ship with them.
+        'android/jni/HDiffPatch/LICENSE',
+        'android/jni/lzma/DOC/lzma-sdk.txt',
       ]
     : []),
 ];
@@ -120,6 +127,68 @@ for (const abi of requiredAbis) {
   }
 }
 
+// The package must compile on its own (--compile): `files` lists the submodule
+// sources and headers one by one (the rest of HDiffPatch / lzma does not
+// ship), and the e2e builds copy the source tree, so they would not notice a
+// header missing from the list. Unpack the real tarball and syntax-check the
+// C sources the podspec (and Harmony's CMakeLists.txt) compile, plus the
+// cores that include them, using only the unpacked files.
+function compilePackedSources() {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rnu-packlist-'));
+  try {
+    const out = execFileSync(
+      'npm',
+      ['pack', '--json', '--ignore-scripts', '--pack-destination', dir],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }
+    );
+    const result = JSON.parse(out);
+    const tarball = (Array.isArray(result) ? result[0] : Object.values(result)[0])
+      .filename;
+    execFileSync('tar', ['-xzf', path.join(dir, path.basename(tarball)), '-C', dir]);
+    const root = path.join(dir, 'package');
+    const sources = [
+      'android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c',
+      'android/jni/HDiffPatch/file_for_patch.c',
+      'android/jni/lzma/C/LzmaDec.c',
+      'android/jni/lzma/C/Lzma2Dec.c',
+      ...fs
+        .readdirSync(path.join(root, 'cpp/hpatch'))
+        .filter((name) => name.endsWith('.c'))
+        .map((name) => `cpp/hpatch/${name}`),
+    ];
+    const cxxSources = fs
+      .readdirSync(path.join(root, 'cpp/patch_core'))
+      .filter((name) => name.endsWith('.cpp'))
+      .map((name) => `cpp/patch_core/${name}`);
+    for (const source of sources) {
+      try {
+        execFileSync('cc', ['-fsyntax-only', source], { cwd: root, stdio: 'pipe' });
+      } catch (e) {
+        problems.push(`packed ${source} does not compile: ${String(e.stderr).trim()}`);
+      }
+    }
+    for (const source of cxxSources) {
+      try {
+        execFileSync('c++', ['-std=c++17', '-fsyntax-only', source], {
+          cwd: root,
+          stdio: 'pipe',
+        });
+      } catch (e) {
+        problems.push(`packed ${source} does not compile: ${String(e.stderr).trim()}`);
+      }
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+if (compile && problems.length === 0) {
+  compilePackedSources();
+}
+
 if (problems.length > 0) {
   console.error(
     `check-packlist: ${problems.length} problem(s) in ${files.length} files`
@@ -130,5 +199,6 @@ if (problems.length > 0) {
   process.exit(1);
 }
 console.log(
-  `check-packlist: ${files.length} files OK${release ? ' (release)' : ''}`
+  `check-packlist: ${files.length} files OK${release ? ' (release)' : ''}` +
+    `${compile ? ', packed native sources compile' : ''}`
 );
