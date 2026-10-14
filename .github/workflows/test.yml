@@ -39,6 +39,9 @@ jobs:
               - '.gitmodules'
               - 'cpp/**'
               - 'android/jni/**'
+              # The release flag sets test-core-platform-flags.sh mirrors.
+              - 'react-native-update.podspec'
+              - 'harmony/pushy/src/main/cpp/CMakeLists.txt'
               - 'scripts/test-*'
               - 'scripts/lib/**'
               # TS reference the C++ golden vectors are generated from.
