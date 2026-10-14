@@ -1,0 +1,154 @@
+name: expo-build
+
+# Builds the Expo example (Example/expoUsePushy, `use_expo_modules!`) against
+# the local package on both platforms. Nothing else compiles the Expo side:
+# the podspec's Expo detection (Podfile scan, expo/expo-modules-core lookup,
+# the ExpoModulesCore version gate that selects EXPO_SUPPORTS_BUNDLEURL), the
+# Swift ReactDelegateHandler and the Kotlin module. SDK 57 removed the
+# createBridge fallback and broke exactly this path once; the e2e app is a
+# bare React Native project and never reaches it.
+#
+# Build only (no simulator/emulator run): the update flow itself is covered
+# by e2e-ios / e2e-android. Paths are limited to the Expo integration's
+# inputs; changes to the native .mm/.java sources are already compiled by
+# the e2e workflows.
+on:
+  pull_request:
+    branches:
+      - '**'
+    paths: &expo-paths
+      - '.github/workflows/expo_build.yml'
+      - '.github/actions/e2e-common/**'
+      - '.gitmodules'
+      - 'package.json'
+      - 'react-native-update.podspec'
+      - 'react-native.config.js'
+      - 'expo-module.config.json'
+      - 'src/Native*.ts'
+      - 'ios/Expo/**'
+      - 'ios/RCTPushy/*.h'
+      - 'ios/PrivacyInfo.xcprivacy'
+      - 'android/build.gradle'
+      - 'android/src/main/java/expo/**'
+      - 'Example/expoUsePushy/**'
+  push:
+    branches:
+      - master
+    paths: *expo-paths
+
+# Builds pull request code: the token only needs to read the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Same toolchain as e2e-ios.
+  XCODE_VERSION: '26.4'
+  EXPO_DIR: Example/expoUsePushy
+
+jobs:
+  expo-ios:
+    name: expo-build (ios)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout react-native-update
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
+        with:
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Set up Expo example
+        # Node/Bun, the example's dependencies and the local
+        # react-native-update link (the same copy an npm install ships).
+        uses: ./.github/actions/e2e-common
+        with:
+          project-dir: ${{ env.EXPO_DIR }}
+          checkout-cli: 'false'
+          bun-cache-scope: -expo
+          bun-cache-key-suffix: -${{ hashFiles('Example/expoUsePushy/bun.lock') }}
+
+      - name: Cache CocoaPods downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/CocoaPods
+          key: ${{ runner.os }}-cocoapods-expo-${{ hashFiles('Example/expoUsePushy/ios/Podfile.lock', 'Example/expoUsePushy/ios/Podfile', 'Example/expoUsePushy/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cocoapods-expo-
+
+      - name: Install CocoaPods dependencies
+        env:
+          LANG: en_US.UTF-8
+        run: cd "$EXPO_DIR/ios" && pod install
+
+      - name: Assert the Expo integration was selected
+        # A silent fallback to the bare-RN pod (detection failed) would still
+        # build; fail instead, as users on that path would get no Expo hook.
+        run: |
+          set -euo pipefail
+          grep -F 'react-native-update/Expo' "$EXPO_DIR/ios/Podfile.lock"
+          grep -F 'EXPO_SUPPORTS_BUNDLEURL' \
+            "$EXPO_DIR/ios/Pods/Target Support Files/react-native-update/react-native-update.release.xcconfig"
+          # Expo autolinking found expo-module.config.json and registered the
+          # bundle URL handler.
+          grep -F 'ExpoPushyReactDelegateHandler' \
+            "$EXPO_DIR/ios/Pods/Target Support Files/Pods-expoUsePushy/ExpoModulesProvider.swift"
+
+      - name: Build (Release, simulator)
+        # arm64 only (the runner's own architecture): a generic simulator
+        # destination otherwise compiles every pod twice, for x86_64 too.
+        run: |
+          set -o pipefail
+          cd "$EXPO_DIR/ios"
+          xcodebuild -workspace expoUsePushy.xcworkspace -scheme expoUsePushy \
+            -configuration Release -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath build CODE_SIGNING_ALLOWED=NO ARCHS=arm64 build \
+            | tee xcodebuild.log | grep -E '(error|warning: .*RCTPushy|BUILD (SUCCEEDED|FAILED))' || true
+          grep -q 'BUILD SUCCEEDED' xcodebuild.log
+
+  expo-android:
+    name: expo-build (android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout react-native-update
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: |
+            Example/expoUsePushy/bun.lock
+            Example/expoUsePushy/app.json
+
+      - name: Set up Expo example
+        uses: ./.github/actions/e2e-common
+        with:
+          project-dir: ${{ env.EXPO_DIR }}
+          checkout-cli: 'false'
+          bun-cache-scope: -expo
+          bun-cache-key-suffix: -${{ hashFiles('Example/expoUsePushy/bun.lock') }}
+
+      - name: Generate the Android project
+        # The example keeps no android/ directory; prebuild generates it the
+        # way an Expo user's CNG build does.
+        run: cd "$EXPO_DIR" && CI=1 bunx expo prebuild --platform android --no-install
+
+      - name: Build (Release)
+        # One ABI is enough to compile and link every module.
+        run: cd "$EXPO_DIR/android" && ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a
