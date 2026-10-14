@@ -210,6 +210,18 @@ export class UpdateContext {
         `Failed to read build time from raw file: ${getErrorMessage(error)}`,
       );
     }
+    // 绝不返回空串(与 iOS 用 Info.plist mtime 兜底一致):buildTime 为空时
+    // syncStateWithBinaryVersion 整体跳过,保留 versionName 的重装二进制会
+    // 让旧热更活过应用升级。每次(覆盖)安装 updateTime 都会变,用它顶替。
+    const updateTime = this.getBundleModifiedTime();
+    if (updateTime > 0) {
+      logger.warn(
+        TAG,
+        'meta.json has no build stamp; using the app install time as buildTime',
+      );
+      UpdateContext.cachedBuildTime = String(updateTime);
+      return UpdateContext.cachedBuildTime;
+    }
     return '';
   }
 

@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 import {
   executeEndpointFallback,
+  MAX_ENDPOINT_REQUESTS,
   selectFastestSuccessfulEndpoint,
 } from '../endpoint';
 import { dedupeEndpoints } from '../updateFlowCore';
@@ -101,6 +102,71 @@ describe('executeEndpointFallback', () => {
       'b',
       'c',
     ]);
+  });
+});
+
+describe('executeEndpointFallback request budget', () => {
+  test('asks at most MAX_ENDPOINT_REQUESTS endpoints across all rounds', async () => {
+    const tryEndpoint = mock(async (endpoint: string) => {
+      throw new Error(`${endpoint} failed`);
+    });
+    // A long remote list, refreshed with new entries on every round.
+    let round = 0;
+    const getRemoteEndpoints = mock(async () => {
+      round++;
+      return Array.from({ length: 20 }, (_, i) => `r${round}-${i}`);
+    });
+
+    await expect(
+      executeEndpointFallback({
+        configuredEndpoints: ['a', 'b'],
+        getRemoteEndpoints,
+        tryEndpoint,
+        random: () => 0,
+        hedgeDelayMs: 0,
+      })
+    ).rejects.toThrow('failed');
+
+    expect(tryEndpoint).toHaveBeenCalledTimes(MAX_ENDPOINT_REQUESTS);
+    expect(tryEndpoint.mock.calls.map((call) => call[0])).toEqual([
+      'a',
+      'b',
+      'r1-0',
+      'r1-1',
+      'r1-2',
+      'r1-3',
+      'r1-4',
+      'r1-5',
+    ]);
+  });
+
+  test('a zero budget issues no request', async () => {
+    const tryEndpoint = mock(async () => 'ok');
+    await expect(
+      executeEndpointFallback({
+        configuredEndpoints: ['a'],
+        tryEndpoint,
+        maxRequests: 0,
+      })
+    ).rejects.toMatchObject({ code: 'NO_ENDPOINTS' });
+    expect(tryEndpoint).not.toHaveBeenCalled();
+  });
+
+  test('a success within the budget still wins', async () => {
+    const tryEndpoint = mock(async (endpoint: string) => {
+      if (endpoint === 'r1-2') {
+        return 'ok';
+      }
+      throw new Error(`${endpoint} failed`);
+    });
+    const result = await executeEndpointFallback({
+      configuredEndpoints: ['a'],
+      getRemoteEndpoints: async () => ['r1-0', 'r1-1', 'r1-2'],
+      tryEndpoint,
+      random: () => 0,
+      hedgeDelayMs: 0,
+    });
+    expect(result.endpoint).toBe('r1-2');
   });
 });
 
