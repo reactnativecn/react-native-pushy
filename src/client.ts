@@ -55,6 +55,7 @@ import {
   isValidCheckResult,
   jsonDeepEqual,
   nativeConfigsEquivalent,
+  resolveCheckResult,
 } from './updateFlowCore';
 import {
   assertWeb,
@@ -1067,6 +1068,9 @@ export class Pushy {
    * was requested, false when the call was ignored (not the downloaded hash,
    * a switch already in progress, beforeReload declined, dev without debug).
    */
+  /** The downloaded version switchVersion(Later) accepts; undefined before a download. */
+  getDownloadedHash = (): string | undefined => sharedState.downloadedHash;
+
   switchVersion = async (hash: string): Promise<boolean> => {
     if (!this.assertDebug('switchVersion()')) {
       return false;
@@ -1139,6 +1143,27 @@ export class Pushy {
       }
     }
   };
+  /**
+   * The server answers with the root release plus, during a gray rollout, the
+   * candidate `expVersion`. Which of the two applies is decided per device
+   * (rollout bucket of this uuid, the running version): every caller of
+   * checkUpdate gets that decision, not only the provider — a direct
+   * `client.checkUpdate()` → `downloadUpdate()` would otherwise ignore the
+   * rollout and install the root release. Idempotent.
+   */
+  private resolveForThisDevice = (result: CheckResult): CheckResult =>
+    result
+      ? resolveCheckResult(
+          result,
+          {
+            packageVersion: this.getEffectivePackageVersion(),
+            currentVersion,
+            uuid: cInfo.uuid,
+          },
+          log
+        )
+      : result;
+
   checkUpdate = async (extra?: Record<string, any>) => {
     if (!this.assertDebug('checkUpdate()')) {
       this.notifyAfterCheckUpdate({ status: 'skipped' });
@@ -1190,7 +1215,7 @@ export class Pushy {
       now - this.lastChecking < 1000 * 5
     ) {
       try {
-        const result = await this.lastRespJson;
+        const result = this.resolveForThisDevice(await this.lastRespJson);
         this.notifyAfterCheckUpdate({ status: 'completed', result });
         return result;
       } catch (e: any) {
@@ -1238,20 +1263,26 @@ export class Pushy {
         return cached ?? (await this.fetchCheckResult(fetchPayload));
       })();
       this.lastRespJson = respJsonPromise;
-      const result: CheckResult = await respJsonPromise;
+      const rootResult: CheckResult = await respJsonPromise;
 
-      log('checking result:', result);
+      log('checking result:', rootResult);
 
-      if (result?.bundleStatus === 'unknownBundle') {
+      if (rootResult?.bundleStatus === 'unknownBundle') {
         // 服务端判定当前二进制内嵌 bundle 未注册,增量已被降级为全量。只面向
         // 开发者(日志 + 遥测,控制台聚合是主渠道);终端用户无感知。
-        warn(this.t('warn_unknown_bundle'));
+        warn(
+          this.t('warn_unknown_bundle', {
+            // Each brand ships its own CLI binary (react-native-update-cli).
+            cli: this.clientType === 'Cresc' ? 'cresc' : 'pushy',
+          })
+        );
         this.report({
           type: 'bundleMismatch',
           data: bundleHash ? { bundleHash } : {},
         });
       }
 
+      const result = this.resolveForThisDevice(rootResult);
       this.notifyAfterCheckUpdate({ status: 'completed', result });
       this.markJsCheckCompleted();
       return result;

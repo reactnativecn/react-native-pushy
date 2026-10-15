@@ -32,13 +32,17 @@ let importSeq = 0;
 // dedup window.
 const setupRealClient = async (
   options: Record<string, any> = {},
-  native: { markSuccess?: ReturnType<typeof mock>; isFirstTime?: boolean } = {}
+  native: {
+    markSuccess?: ReturnType<typeof mock>;
+    setNeedUpdate?: ReturnType<typeof mock>;
+    isFirstTime?: boolean;
+  } = {}
 ) => {
   mockCore({
     PushyModule: {
       markSuccess: native.markSuccess ?? mock(() => Promise.resolve()),
       reloadUpdate: mock(() => Promise.resolve()),
-      setNeedUpdate: mock(() => Promise.resolve()),
+      setNeedUpdate: native.setNeedUpdate ?? mock(() => Promise.resolve()),
       downloadPatchFromPpk: mock(() => Promise.resolve()),
       downloadPatchFromPackage: mock(() => Promise.resolve()),
       downloadFullUpdate: mock(() => Promise.resolve()),
@@ -181,6 +185,54 @@ describe('UpdateProvider <-> Pushy contract', () => {
       await flush();
     });
     expect(checkUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  test('switching without an explicit version targets the downloaded one', async () => {
+    const setNeedUpdate = mock(() => Promise.resolve());
+    const { client, UpdateProvider } = await setupRealClient(
+      { checkStrategy: null, updateStrategy: null },
+      { setNeedUpdate }
+    );
+    const captured: { current?: any } = {};
+    const Probe = () => {
+      captured.current = useUpdate();
+      return null;
+    };
+    await renderProvider(UpdateProvider, client, <Probe />);
+    const release = (hash: string) => ({
+      update: true,
+      name: hash,
+      hash,
+      full: `${hash}.ppk`,
+      paths: ['https://cdn.example.com'],
+    });
+
+    (globalThis as any).fetch = mock(async () =>
+      createJsonResponse(release('hash-a'))
+    );
+    await TestRenderer.act(async () => {
+      await captured.current.checkUpdate();
+      await captured.current.downloadUpdate();
+      await flush();
+    });
+    expect(client.getDownloadedHash()).toBe('hash-a');
+
+    // A later check finds a newer release before the user switches; the
+    // context's update info moves on to it, but only hash-a is on disk.
+    client.lastChecking = 0;
+    (globalThis as any).fetch = mock(async () =>
+      createJsonResponse(release('hash-b'))
+    );
+    await TestRenderer.act(async () => {
+      await captured.current.checkUpdate();
+      await flush();
+    });
+    expect(captured.current.updateInfo.hash).toBe('hash-b');
+
+    await TestRenderer.act(async () => {
+      await captured.current.switchVersionLater();
+    });
+    expect(setNeedUpdate).toHaveBeenCalledWith({ hash: 'hash-a' });
   });
 
   test('changing dismissErrorAfter reschedules a running dismiss timer', async () => {
