@@ -16,7 +16,6 @@
 > | 2.13 / 单测建议 | 部分：两份 `UpdateModule.java`、`buildToolsVersion`；若干纯函数未覆盖 |
 > | 3.10 | 部分：构建脚本仍写 pod 源码目录 |
 > | 3.13 / 3.14 | 部分 / 未做：`RCTPushy.mm` 拆分、纯决策下沉 C++ + XCTest |
-> | 4.4 | 部分：三端入口均已兜住；`Application.mk` 的 `-fno-unwind-tables` 与 `-fexceptions` 并用待确认 |
 > | 4.12 | 部分：`buildCheckFingerprint` 无 C++ 移植 |
 > | §4 P4 | 开放：鸿蒙 NAPI 结果对象省略空串字段（Android 设 null） |
 > | 5.7 | 部分：RCP 重定向控制（HMS-only）未做 |
@@ -131,10 +130,10 @@
 
 ### 仍开放
 
-**4.4（P2）STL 分配抛出的 C++ 异常穿越 JNI/NAPI/ObjC 边界**（部分修复）
+**4.4（P2）STL 分配抛出的 C++ 异常穿越 JNI/NAPI/ObjC 边界**（已修复）
 Android 已兜住：`Application.mk` 改 `-fexceptions`，每个 JNI 入口经 `jni_util::GuardJni` / catch-all 转成 Java 异常或 null。
 鸿蒙已兜住（2026-10）：`pushy.cpp` 每个导出回调经 `Guarded<>` 把 C++ 异常转成 JS Error，async work 的 execute（工作线程）与 settle 各自 catch，promise 以异常信息 reject。iOS 已兜住（2026-10）：所有入口（RN 导出方法、`+bundleURL`、host configure/prepareBundle、下载/解压/清理/摘要的 GCD 块、解压守卫委托、crash hold、轮次调度）改为 `@catch (...)`（ObjC++ 下能接住 C++ 异常），原因经 `PushyCaughtReason` 取 `what()`；`+bundleURL` 解析抛错时回退内置包并照常调度原生轮次；`scripts/test-ios-purge-restore.sh` 的 `cpp_exception_boundary` 用例锁定（含状态锁释放）。
-剩余：`Application.mk` 仍带 `-fno-unwind-tables -fno-asynchronous-unwind-tables`，宜确认与 `-fexceptions` 同时使用时 unwind 正常。
+已核实（2026-10-15，关闭）：`Application.mk` 的 `-fno-unwind-tables -fno-asynchronous-unwind-tables` 与 `-fexceptions` 并用时，clang 仍为可能抛出/需清理的 C++ 栈帧生成 unwind 信息，只省掉 nounwind 函数的表。用 NDK 28.2 按同一组发版参数（`-Oz -fexceptions -fno-rtti -fno-unwind-tables -fno-asynchronous-unwind-tables`、`--gc-sections`、`--icf=all`、`c++_static`）编译"跨编译单元抛 `bad_alloc`/`length_error`、中间帧带析构、入口 catch-all"的测试程序：arm64 在 api34 模拟器上实跑，两种异常均被接住、析构均执行；armeabi-v7a 的两个中间帧有正常 EHABI 条目（非 CANTUNWIND），x86/x86_64/arm64 均有 FDE。异常不会穿过 C 帧：`patch_core` 只调用文件式的 `hpatch_by_file`，不向 C 代码传 C++ 回调。
 
 **4.12（P3）对等性：`buildCheckFingerprint` 无 C++ 移植**（部分修复）
 `IsMirrorRetryableCode` 已移植并进向量，`paths:null` 已有向量。`buildCheckFingerprint`（`src/updateFlowCore.ts`）仍只有 TS 实现，各原生编排器各自重实现了等价的去重逻辑——对等性框架抓不到这类漂移。
