@@ -38,8 +38,10 @@ constexpr const char* kSwitchVersionFailed = "SWITCH_VERSION_FAILED";
 constexpr const char* kMarkSuccessFailed = "MARK_SUCCESS_FAILED";
 // reloadUpdate / restartApp failed.
 constexpr const char* kRestartFailed = "RESTART_FAILED";
-// resetToPackagedBundle failed (state wipe or cleanup could not run), or the
-// installed native module predates the method (JS-layer detection).
+// resetToPackagedBundle could not persist the reset state, or the installed
+// native module predates the method (JS-layer detection). Deleting the
+// downloaded versions afterwards is best-effort on every platform and never
+// reports this code: the reset is complete once the state is.
 constexpr const char* kResetFailed = "RESET_FAILED";
 // Stored or provided hash info is not a valid JSON object.
 constexpr const char* kInvalidHashInfo = "INVALID_HASH_INFO";

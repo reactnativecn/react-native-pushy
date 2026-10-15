@@ -1710,10 +1710,11 @@ export class Pushy {
     }
   };
   /**
-   * Reset to the bundle packaged in the binary: wipes every downloaded update
-   * and the whole update state on the native side, so the app loads the
-   * built-in bundle on the next launch (or immediately with
-   * `{ restart: true }`). The client uuid is preserved.
+   * Reset to the bundle packaged in the binary: wipes the whole update state
+   * on the native side, so the app loads the built-in bundle on the next
+   * launch (or immediately with `{ restart: true }`), and deletes the
+   * downloaded updates in the background (best-effort; the promise does not
+   * wait for it). The client uuid is preserved.
    *
    * Returns whether the reset actually happened. Like the other update-flow
    * APIs it never throws by default — failures land in lastError/onError with

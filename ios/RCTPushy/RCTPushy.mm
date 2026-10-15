@@ -462,13 +462,18 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
         return;
     }
 
+    // The reset is done once the state is: the next launch resolves to the
+    // packaged bundle. Settle now, as Android and Harmony do; deleting the
+    // downloaded versions is best-effort below and never delays the caller
+    // (it queues behind any unzip/patch on the file queue). A directory a
+    // failed delete leaves behind is no longer referenced by any state, so
+    // the regular cleanup removes it later.
+    resolve(@true);
+
     dispatch_async(PushyFileQueue(), ^{
         // maxAgeDays=0: remove every downloaded entry except the running
         // version's directory (cleaned up by the next regular cleanup). The
-        // state was just wiped, so that is the only name left to keep. The
-        // promise settles here, after the cleanup, so a failed wipe reaches
-        // JS as RESET_FAILED (Android parity) instead of a warning nobody
-        // aggregates.
+        // state was just wiped, so that is the only name left to keep.
         pushy::delta::Status status = pushy::delta::Status::Ok();
         try {
             status = pushy::delta::CleanupOldEntries(
@@ -481,12 +486,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
         }
         if (!status.ok) {
             RCTLogWarn(@"Pushy reset cleanup error: %s", status.message.c_str());
-            PushyRejectError(reject, PushyErrorWithCode(
-                pushy::error_codes::kResetFailed,
-                [NSString stringWithUTF8String:status.message.c_str()] ?: @"reset cleanup failed"));
-            return;
         }
-        resolve(@true);
     });
 }
 

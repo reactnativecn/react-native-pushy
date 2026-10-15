@@ -464,7 +464,7 @@ static void CommitBeforeSignal(void) {
 static void ResetOrdering(Order selected) {
     SetUp(selected);
     NSURL *url = [RCTPushy bundleURL];
-    Expect(resetResolved, "reset promise must resolve after its file queue work");
+    Expect(resetResolved, "reset promise must resolve once the state is reset");
     Expect(pushyResetGeneration.load() == 1 && requestGeneration == 0, "reset must invalidate the captured generation");
     if (selected == Order::ResetFirst) {
         Expect(!roundCommitted && !roundActivated, "stale generation must reject ALL commit writes");
