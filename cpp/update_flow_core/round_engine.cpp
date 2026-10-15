@@ -40,11 +40,13 @@ double Number(const Value& value) {
   return value.IsNumber() && std::isfinite(number) ? number : 0;
 }
 
-// A non-negative integral cursor; anything else reads as 0.
+// A non-negative integral cursor; anything else reads as 0. Capped well
+// inside a 32-bit size_t (armeabi-v7a, x86): converting a double beyond the
+// target's range is undefined.
 size_t Index(const Value& value) {
   const double number = Number(value);
-  return number < 0 ? 0 : number >= 1e15 ? static_cast<size_t>(1e15)
-                                         : static_cast<size_t>(number);
+  return number < 0 ? 0 : number >= 1e9 ? static_cast<size_t>(1e9)
+                                        : static_cast<size_t>(number);
 }
 
 Value Command(const char* type) {
@@ -93,8 +95,10 @@ class Step {
       OnInstalled();
     } else if (type == kAwaitDownload) {
       OnDownload();
-    } else {
+    } else if (type == kAwaitCommit) {
       OnCommitted();
+    } else {
+      Finish("failed", "internal_error");
     }
     return Result();
   }
@@ -315,7 +319,8 @@ class Step {
         !IsMirrorRetryableCode(event_.Get("code").AsString());
     if (event_.Get("timedOut").Truthy() && !IsIncremental(strategy)) {
       // The full phase timed out: no budget is left for anything.
-      cursor.Set("attempt", Value::Number(1e15));
+      cursor.Set("attempt", Value::Number(static_cast<double>(
+                                state_.Get("decision").Get("attempts").Size())));
     } else if (nextStrategy) {
       cursor.Set("attempt", Value::Number(static_cast<double>(attempt + 1)));
       cursor.Set("url", Value::Number(0));
@@ -375,7 +380,10 @@ class Step {
     if (event_.Get("error").Truthy()) {
       Finish("failed", "commit_failed");
     } else if (!event_.Get("ok").Truthy()) {
-      Finish("cancelled", "reset");
+      // The generation that moved: a config change, or (by default) a reset.
+      Finish("cancelled", event_.Get("reason").AsString() == "config_changed"
+                              ? "config_changed"
+                              : "reset");
     } else if (result.Get("hash").IsString()) {
       const Value& activated = event_.Get("activated");
       Finish(result.Get("status").AsString(), result.Get("reason").AsString(),

@@ -1956,6 +1956,111 @@
       ]
     },
     {
+      "name": "a config change during the download wins the commit",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": false,
+            "now": 0,
+            "reason": "config_changed"
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "cancelled",
+              "reason": "config_changed"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "name": "the commit itself fails: commit_failed",
       "steps": [
         {
@@ -2791,6 +2896,57 @@
             "env": "@env",
             "now": 0
           },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "internal_error"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an event without a type: internal_error",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "internal_error"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an empty event without a round: internal_error",
+      "steps": [
+        {
+          "event": {},
           "commands": [
             {
               "type": "finish",

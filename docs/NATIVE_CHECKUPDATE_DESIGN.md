@@ -591,7 +591,7 @@ StepRound(state, event) -> { state, commands }
 | http | text?, at | text 缺省 = 请求失败 |
 | installed | installed | 回应 checkInstalled |
 | download | ok, code?, timedOut? | timedOut：尝试超出了自己的 deadline |
-| committed | ok, activated?, error? | ok=false：reset 或配置变更赢了；error：提交本身失败（摘要门拒绝、写入抛错） |
+| committed | ok, reason?, activated?, error? | ok=false：reset 或配置变更赢了，reason 指明是哪个代数（默认 reset，或 config_changed）；error：提交本身失败（摘要门拒绝、写入抛错） |
 
 命令：
 

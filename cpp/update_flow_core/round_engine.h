@@ -50,8 +50,9 @@ constexpr double kQueryCallTimeoutMs = 15 * 1000;
 //   installed  installed: a complete install of the hash is already on disk
 //   download   ok; code: the failure's error code; timedOut: the attempt
 //              outlived its deadline
-//   committed  ok: the commit landed (false: a reset or a config change
-//              since the round started won); activated: what it really
+//   committed  ok: the commit landed; when false, reason names the
+//              generation that moved since the round started ("reset", the
+//              default, or "config_changed"); activated: what it really
 //              activated (absent = as asked); error: the commit itself failed
 //              (the activation gate rejected the version, a write threw)
 //
@@ -73,8 +74,8 @@ constexpr double kQueryCallTimeoutMs = 15 * 1000;
 //                   downloaded but not activated version is the one a later
 //                   crash hold may activate.
 //
-// An event the current phase does not expect finishes the round as
-// failed/internal_error.
+// An event the current phase does not expect (or of no known type) finishes
+// the round as failed/internal_error.
 flowjson::Value StepRound(const flowjson::Value& state,
                           const flowjson::Value& event);
 
