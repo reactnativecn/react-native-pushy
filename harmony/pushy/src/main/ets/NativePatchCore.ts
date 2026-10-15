@@ -163,6 +163,11 @@ interface NativePatchCoreBindings {
     stateJson: string,
     responseText: string | undefined,
   ): string | undefined;
+  /**
+   * 轮次驱动的一步(cpp/update_flow_core/round_engine.h):返回
+   * {"state", "commands"};stateJson 为 undefined 表示开始新一轮。
+   */
+  stepRound(stateJson: string | undefined, eventJson: string): string;
   /** 决策(已按本机规划的 attempts)、要持久化的 hashInfo 与响应缓存文本 */
   handleResponse(
     responseText: string,

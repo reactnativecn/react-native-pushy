@@ -9,14 +9,130 @@ import { STATUS_NONE } from '../../harmony/pushy/src/main/ets/Texts';
 import { evalHarmonyModule, harmonyConfigBindings } from './nativeSources';
 
 // Evaluate the actual Harmony orchestrator in an isolated VM per test. Only
-// platform imports, HTTP and download IO are substituted; entry points,
-// scheduling, configuration gates, result mapping and reset checks are real.
+// platform imports, HTTP, download IO and the round engine are substituted
+// (the engine by a scripted stand-in: the real one is pinned by
+// round-engine-vectors.json, and harmonySyncRound.test.ts replays it against
+// this adapter); entry points, scheduling, configuration gates, the host
+// wait and reset checks are real.
 
 interface Decision {
   action: string;
   reason?: string;
   hash?: string;
   activate?: boolean;
+}
+
+// The round the engine would run for the harness's scenario: the config
+// gate, one check, then the decision, the download and the commit.
+function scriptedEngine(decision: () => Decision) {
+  return (stateJson: string | undefined, eventJson: string): string => {
+    const event = JSON.parse(eventJson);
+    const state = stateJson ? JSON.parse(stateJson) : {};
+    const step = (next: object, ...commands: object[]) =>
+      JSON.stringify({ state: { ...state, ...next }, commands });
+    const finish = (
+      status: string,
+      reason = '',
+      hash?: string,
+      activated?: boolean
+    ) =>
+      step(
+        { phase: 'done' },
+        { type: 'finish', status, reason, hash, activated }
+      );
+    const commit = (hash: string, activate: boolean, result: object) =>
+      step(
+        { phase: 'committed', result },
+        {
+          type: 'commit',
+          hash,
+          hashInfo: hash ? '{}' : '',
+          activate,
+          cache: '{}',
+          resetGeneration: state.resetGeneration,
+        }
+      );
+    switch (event.type) {
+      case 'start': {
+        const gate = JSON.parse(
+          harmonyConfigBindings.runnableConfig(event.config)
+        );
+        if (gate.status) {
+          return finish(gate.status, gate.reason);
+        }
+        return JSON.stringify({
+          state: { phase: 'env', resetGeneration: event.resetGeneration },
+          commands: [{ type: 'markIncomplete' }, { type: 'collectEnv' }],
+        });
+      }
+      case 'env':
+        return step(
+          { phase: 'http' },
+          {
+            type: 'http',
+            url: 'https://check',
+            post: true,
+            body: '{}',
+            timeoutMs: 10000,
+            callTimeoutMs: 15000,
+          }
+        );
+      case 'http': {
+        if (event.text === undefined) {
+          return finish('failed', 'check_failed');
+        }
+        const d = decision();
+        if (d.action !== 'download') {
+          return commit('', false, {
+            status: STATUS_NONE,
+            reason: d.reason ?? '',
+          });
+        }
+        return step(
+          { phase: 'installed', decision: d },
+          { type: 'checkInstalled', hash: d.hash }
+        );
+      }
+      case 'installed':
+      case 'download': {
+        const d = state.decision as Decision;
+        const ready = event.type === 'installed' ? event.installed : event.ok;
+        if (ready) {
+          return commit(d.hash ?? '', d.activate === true, {
+            status: 'downloaded',
+            hash: d.hash,
+            activated: d.activate === true,
+          });
+        }
+        if (event.type === 'installed') {
+          return step(
+            { phase: 'download' },
+            {
+              type: 'download',
+              strategy: 'full',
+              url: 'https://cdn/full',
+              hash: d.hash,
+              deadline: 600000,
+            }
+          );
+        }
+        return commit('', false, {
+          status: 'failed',
+          reason: 'download_failed',
+        });
+      }
+      default: {
+        if (event.error) {
+          return finish('failed', 'commit_failed');
+        }
+        if (!event.ok) {
+          return finish('cancelled', event.reason ?? 'reset');
+        }
+        const r = state.result;
+        return finish(r.status, r.reason ?? '', r.hash, r.activated);
+      }
+    }
+  };
 }
 
 function harness() {
@@ -50,6 +166,17 @@ function harness() {
     getBuildTime: () => '123',
     getBundleHash: async () => 'binary-hash',
     hasDownloadedVersion: () => state.installed,
+    isStoredNativeConfig: (config: string) =>
+      harmonyConfigBindings.configsEquivalent(
+        config,
+        values.get('nativeConfig')
+      ),
+    downloadFullUpdate: async () => {
+      state.downloads += 1;
+      if (!state.downloadOK) {
+        throw new Error('download failed');
+      }
+    },
     getBundleUrl: () => {
       throw new Error('host checks must not resolve the launch bundle again');
     },
@@ -60,7 +187,7 @@ function harness() {
   };
   const runtime = evalHarmonyModule(
     'SyncCoordinator.ts',
-    'runQueryRequest = mockCheck;\nperformAttempts = mockDownload;\n({ check: prepareBundleNative, schedule: scheduleNativeSync });',
+    'httpRequest = mockCheck;\n({ check: prepareBundleNative, schedule: scheduleNativeSync });',
     {
       BundlePreparationRound,
       bundlePreparationResult,
@@ -68,22 +195,17 @@ function harness() {
       deviceInfo: { osFullName: 'test-os' },
       setTimeout: (callback: () => void) => timers.push(callback),
       clearTimeout: () => {},
-      isSafePathComponent: (hash: string) => /^[a-zA-Z0-9_-]+$/.test(hash),
       getErrorMessage: (error: unknown) => String(error),
-      STATUS_NONE,
+      monotonicNowMs: () => 0,
+      PushyError: class {},
       NativePatchCore: {
         ...harmonyConfigBindings,
-        prepareRound: () => JSON.stringify({ body: '{}', query: {} }),
-        handleResponse: (response: string) => response,
+        stepRound: scriptedEngine(() => state.decision),
       },
       mockCheck: async () => {
         state.checks += 1;
         await state.beforeResponse();
-        return state.reachable ? JSON.stringify(state.decision) : undefined;
-      },
-      mockDownload: async () => {
-        state.downloads += 1;
-        return state.downloadOK;
+        return state.reachable ? '{}' : undefined;
       },
     }
   ) as {

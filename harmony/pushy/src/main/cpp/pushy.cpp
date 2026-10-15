@@ -3,6 +3,7 @@
 #include "flow_json.h"
 #include "native_config.h"
 #include "native_round.h"
+#include "round_engine.h"
 #include <js_native_api.h>
 #include <js_native_api_types.h>
 
@@ -1333,6 +1334,18 @@ static napi_value FlowPrepareRound(napi_env env, napi_callback_info info) {
       env, flowcore::PrepareRound(text[0], ParseFlowObject(text[1]), sample));
 }
 
+// stepRound(stateJson?, eventJson) — one step of the round driver
+// (round_engine.h); stateJson undefined/null starts fresh. Synchronous and
+// cheap: the round's IO stays in ArkTS.
+static napi_value FlowStepRound(napi_env env, napi_callback_info info) {
+  napi_value args[2] = {nullptr, nullptr};
+  std::string text[2];
+  if (!GetFlowArgs(env, info, "stepRound", 2, 0b11, args, text)) {
+    return nullptr;
+  }
+  return NewString(env, flowcore::StepRoundJson(text[0], text[1]));
+}
+
 // nextQueryStep(stateJson, responseText?) — responseText undefined/null for
 // a failed (or no) request.
 static napi_value FlowNextQueryStep(napi_env env, napi_callback_info info) {
@@ -1448,6 +1461,7 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "getSupportedDiffVersion", Guarded<GetSupportedDiffVersion>) ||
       !ExportFunction(env, exports, "prepareRound", Guarded<FlowPrepareRound>) ||
       !ExportFunction(env, exports, "nextQueryStep", Guarded<FlowNextQueryStep>) ||
+      !ExportFunction(env, exports, "stepRound", Guarded<FlowStepRound>) ||
       !ExportFunction(env, exports, "handleResponse", Guarded<FlowHandleResponse>) ||
       !ExportFunction(env, exports, "configsEquivalent", Guarded<FlowConfigsEquivalent>) ||
       !ExportFunction(env, exports, "runnableConfig", Guarded<FlowRunnableConfig>) ||
