@@ -60,6 +60,15 @@ PUSHY_HIDDEN NSDictionary *PushyHostResult(NSString *status, NSString *reason,
 PUSHY_HIDDEN NSTimeInterval PushyMonotonicNow(void);
 PUSHY_HIDDEN NSUserDefaults *PushyDefaults(void);
 PUSHY_HIDDEN void PushyWithStateLock(void (NS_NOESCAPE ^block)(void));
+// Inside `@catch (...)`: the reason of what was caught — an NSException's
+// reason or a C++ exception's what() — or `fallback` when it has none. The
+// shared cores can throw std::bad_alloc / std::length_error, which
+// `@catch (NSException *)` lets through; an entry point (RN method, host
+// API, GCD block, launch path) therefore catches `...` (CODE_AUDIT 4.4).
+PUSHY_HIDDEN NSString *PushyCaughtReason(NSString *fallback);
+// Runs `block` for an entry point that has nobody to report to: whatever it
+// throws is logged under `where` and swallowed. NO when it threw.
+PUSHY_HIDDEN BOOL PushyGuard(NSString *where, void (NS_NOESCAPE ^block)(void));
 PUSHY_HIDDEN std::string PushyToStdString(NSString *value);
 PUSHY_HIDDEN NSString *PushyFromStdString(const std::string &value);
 PUSHY_HIDDEN NSString *PushyOptionString(NSDictionary *options, NSString *key);

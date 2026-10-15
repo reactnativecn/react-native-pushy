@@ -27,7 +27,14 @@ NSString *RCTPushyNormalizeConfiguration(NSDictionary *options, NSError **error)
     }
     std::string config;
     std::string message;
-    if (flowcore::NormalizeConfiguration(optionsJson, &config, &message)) {
+    bool normalized = false;
+    try {
+        normalized = flowcore::NormalizeConfiguration(optionsJson, &config, &message);
+    } catch (const std::exception &failure) {
+        // Called on the host's thread (CODE_AUDIT 4.4).
+        message = std::string("Invalid native configuration: ") + failure.what();
+    }
+    if (normalized) {
         NSString *result = [[NSString alloc] initWithBytes:config.data()
                                                     length:config.size()
                                                   encoding:NSUTF8StringEncoding];

@@ -92,8 +92,10 @@ GLOBALS = [
     'pushyHostRoundResult', 'kPushyPurgeRestoreBudget', 'kPushyPurgeRestoreMinimumBudget',
 ]
 HELPERS = [
+    # The exception boundary every entry point uses (CODE_AUDIT 4.4).
+    'PushyCaughtReason', 'PushyGuard',
     'KeyPackageUpdatedMarked', 'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString',
-    'PushyJsonDictionary', 'PushyJsonString', 'PushyRejectException', 'PushyFileQueue',
+    'PushyJsonDictionary', 'PushyJsonString', 'PushyRejectCaught', 'PushyFileQueue',
     'PushySetNullableString', 'PushyHashInfoKey', 'PushyBinaryIdentityValue',
     'PushyStateFromDefaults', 'PushyApplyStateToDefaults', 'PushySwitchVersionLocked',
     # Canonical config equality (contract C1): the binding over
