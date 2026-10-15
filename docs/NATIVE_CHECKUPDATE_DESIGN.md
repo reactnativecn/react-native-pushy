@@ -645,6 +645,4 @@ full 超时整体失败）、激活判定（`activate || crashHold || forceActiv
 
 进度：1、2 已合入（#673、#674）。iOS 已接入：`RCTPushyOrchestrator.mm` 的 `runOnce` 驱动引擎，
 命令由 `perform:` / `download:` / `commit:` 执行，宿主取消判定改用 `HostCancellation`；提交败于配置
-变更时由适配器按配置代数回报 `reason: "config_changed"`。鸿蒙已接入：`SyncCoordinator.ts` 的 `runOnce` 经 `NativePatchCore.stepRound`（NAPI，同步）驱动
-引擎，HTTP 与下载仍是 ArkTS 异步；宿主取消判定改为 C1 等价。`harmonySyncRound.test.ts` 以轨迹向量为脚本
-回放适配器，逐步核对它回给引擎的事件。
+变更时由适配器按配置代数回报 `reason: "config_changed"`。
