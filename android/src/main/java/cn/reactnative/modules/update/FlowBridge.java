@@ -23,6 +23,13 @@ final class FlowBridge {
      */
     static native String nextQueryStep(String stateJson, String responseText);
 
+    /**
+     * One step of the round driver (cpp/update_flow_core/round_engine.h):
+     * {"state", "commands"} for the previous state (null to start) and the
+     * event. Null only when the core threw.
+     */
+    static native String stepRound(String stateJson, String eventJson);
+
     /** The decision with planned attempts, hashInfo and the response-cache text. */
     static native String handleResponse(
         String responseText, String configJson, String envJson, String requestBody,

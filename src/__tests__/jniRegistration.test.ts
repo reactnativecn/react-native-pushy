@@ -75,7 +75,7 @@ const registered = () => {
 describe('JNI registration table', () => {
   test('matches every Java native declaration', () => {
     const natives = javaNatives();
-    expect(natives.length).toBe(18);
+    expect(natives.length).toBe(19);
     expect(registered()).toEqual(natives);
   });
 

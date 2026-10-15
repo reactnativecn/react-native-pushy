@@ -22,6 +22,7 @@ jobjectArray ApplyArchiveDelta(JNIEnv* env, jclass, jint patch_type, jobjectArra
 void CleanupOldEntries(JNIEnv* env, jclass, jstring root_dir, jobjectArray keep_names, jint max_age_days, jstring trash_dir);
 jstring FlowPrepareRound(JNIEnv* env, jclass, jstring configJson, jstring envJson, jdouble randomSample);
 jstring FlowNextQueryStep(JNIEnv* env, jclass, jstring stateJson, jstring responseText);
+jstring FlowStepRound(JNIEnv* env, jclass, jstring stateJson, jstring eventJson);
 jstring FlowHandleResponse(JNIEnv* env, jclass, jstring responseText, jstring configJson, jstring envJson, jstring requestBody, jlong responseAtSeconds);
 jboolean FlowConfigsEquivalent(JNIEnv* env, jclass, jstring a, jstring b);
 jstring FlowRunnableConfig(JNIEnv* env, jclass, jstring configJson);

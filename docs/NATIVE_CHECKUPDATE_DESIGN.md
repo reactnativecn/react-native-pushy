@@ -628,7 +628,7 @@ full 超时整体失败）、激活判定（`activate || crashHold || forceActiv
 由 `tests/round-engine-vectors.json` 锁定，接入各端时随之生效：
 
 - 宿主取消判定：鸿蒙原用字符串全等比较配置，改为 C1 等价（与 Android/iOS 一致）。
-- 提交带配置代数：iOS 早已在锁内复核；Android/鸿蒙接入时补上（原先只在宿主等待后检查）。
+- 提交带配置代数：iOS 在锁内复核两个代数；Android 换配置时同时递增 reset 代数，提交天然被拒，适配器再按配置代数回报 `config_changed`；鸿蒙接入时对齐。
 - HTTP 超时：三端统一为空闲 10s + 整次 15s，并按预算钳制（iOS 原先的信号量兜底会比预算多等 5s）。
 - 下载超时：显式 `timedOut`，不再依赖鸿蒙把超时包装成 DOWNLOAD_FAILED 后由下一次循环看 deadline。
 - 只提交缓存的提交失败统一为 `failed/commit_failed`（Android 原为 internal_error）。
@@ -645,4 +645,5 @@ full 超时整体失败）、激活判定（`activate || crashHold || forceActiv
 
 进度：1、2 已合入（#673、#674）。iOS 已接入：`RCTPushyOrchestrator.mm` 的 `runOnce` 驱动引擎，
 命令由 `perform:` / `download:` / `commit:` 执行，宿主取消判定改用 `HostCancellation`；提交败于配置
-变更时由适配器按配置代数回报 `reason: "config_changed"`。
+变更时由适配器按配置代数回报 `reason: "config_changed"`。Android 已接入：`SyncCoordinator.java` 的 `runOnce` 经 `FlowBridge.stepRound`（JNI）驱动引擎，
+`download` 执行单次下载并回报 ok/code/timedOut（JVM 单测覆盖），`android/lib` 的 `.so` 随之重编。
