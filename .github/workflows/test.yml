@@ -44,6 +44,9 @@ jobs:
               - 'harmony/pushy/src/main/cpp/CMakeLists.txt'
               - 'scripts/test-*'
               - 'scripts/lib/**'
+              # package.json `files` lists the submodule sources that ship.
+              - 'package.json'
+              - 'scripts/check-packlist.js'
               # TS reference the C++ golden vectors are generated from.
               - 'src/updateFlowCore.ts'
               - 'scripts/generate-flow-vectors.ts'
@@ -82,6 +85,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: recursive
+
+      # Before anything builds inside the submodules: the published package
+      # lists the HDiffPatch / lzma sources and headers one by one, so a
+      # header missing from package.json `files` would only surface in a
+      # consumer's pod install. Packs the real tarball and compiles from it.
+      - name: Packed native sources compile on their own
+        run: node scripts/check-packlist.js --compile
 
       - name: Install build dependencies
         # clang (+ libFuzzer runtime) is for the bounded fuzz step below.

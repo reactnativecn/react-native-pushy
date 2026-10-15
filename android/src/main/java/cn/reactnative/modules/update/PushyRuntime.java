@@ -15,9 +15,12 @@ public final class PushyRuntime {
         void onComplete(BundlePreparationResult result);
     }
 
-    // A single waiting worker, not one thread per caller. The actual round is
-    // shared with cold start and crash rescue by SyncCoordinator.
-    private static final Executor WORKER = Threads.single("pushy-host-sync", true);
+    // Waiting threads, reused while idle. Not a single worker: each caller's
+    // wait is bounded by its own timeout, which a queue behind another
+    // caller's longer wait would break (iOS waits on a concurrent queue too).
+    // The actual round is shared with cold start and crash rescue by
+    // SyncCoordinator, on its own thread.
+    private static final Executor WORKER = Threads.cached("pushy-host-sync");
 
     public interface ConfigurationCallback {
         /** Main thread; null means configuration was persisted successfully. */
@@ -70,8 +73,24 @@ public final class PushyRuntime {
      * UpdateContext.getBundleUrl. Do not resolve the bundle again just to call
      * this method: bundle resolution consumes first-load/rollback markers.
      * Missing persisted configuration and debug builds are reported as skipped.
+     *
+     * Waits at most 30 minutes for the round (longer than any round takes).
      */
     public static void prepareBundle(Context context, final Callback callback) {
+        prepareBundle(context, SyncCoordinator.DEFAULT_PREPARE_TIMEOUT_MS, callback);
+    }
+
+    /**
+     * Same as prepareBundle(Context, Callback), but the callback runs after at
+     * most timeoutMillis. On expiry the result is status failed, reason
+     * timeout; the round keeps running in the background and its result still
+     * applies to the next launch.
+     */
+    public static void prepareBundle(
+        Context context,
+        final long timeoutMillis,
+        final Callback callback
+    ) {
         if (context == null || callback == null) {
             throw new IllegalArgumentException("context and callback are required");
         }
@@ -83,7 +102,7 @@ public final class PushyRuntime {
                     outcome = BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "debug");
                 } else {
                     outcome = SyncCoordinator.prepareBundle(
-                        UpdateContext.getInstance(applicationContext));
+                        UpdateContext.getInstance(applicationContext), timeoutMillis);
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

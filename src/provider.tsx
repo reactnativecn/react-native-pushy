@@ -11,7 +11,6 @@ import { Alert, AppState, Linking, Platform } from 'react-native';
 import { type Cresc, type Pushy, sharedState } from './client';
 import { ProgressContext, UpdateContext } from './context';
 import {
-  cInfo,
   currentVersion,
   currentVersionInfo,
   getCurrentVersionInfo,
@@ -19,18 +18,28 @@ import {
   rolledBackVersion,
 } from './core';
 import type { CheckResult, ProgressData, UpdateTestPayload } from './type';
-import { decideDownload, resolveCheckResult } from './updateFlowCore';
+import { decideDownload } from './updateFlowCore';
 import { assertWeb, isWeb, log, noop, parseQueryParams } from './utils';
 
-// A context action applied to the hash of the given (default: the last
-// checked) update info; a no-op without one.
+// A switch action applied to the hash of the given update info; a no-op
+// without one. Called without info it targets the downloaded version — the
+// only one client.switchVersion(Later) accepts — and only falls back to the
+// last checked info before anything was downloaded. Defaulting to the last
+// checked info alone made a check that found a newer release after the
+// download (updateInfo moved on) turn "switch now" into a silent no-op.
 const forUpdateHash =
   <T,>(
     updateInfoRef: { current?: CheckResult },
+    getDownloadedHash: () => string | undefined,
     apply: (hash: string) => Promise<T>
   ) =>
-  async (info: CheckResult | undefined = updateInfoRef.current) =>
-    info?.hash ? apply(info.hash) : undefined;
+  async (info?: CheckResult) => {
+    const hash =
+      info !== undefined
+        ? info.hash
+        : getDownloadedHash() || updateInfoRef.current?.hash;
+    return hash ? apply(hash) : undefined;
+  };
 
 export const UpdateProvider = ({
   client,
@@ -111,12 +120,22 @@ export const UpdateProvider = ({
   );
 
   const switchVersion = useMemo(
-    () => forUpdateHash(updateInfoRef, client.switchVersion),
+    () =>
+      forUpdateHash(
+        updateInfoRef,
+        client.getDownloadedHash,
+        client.switchVersion
+      ),
     [client]
   );
 
   const switchVersionLater = useMemo(
-    () => forUpdateHash(updateInfoRef, client.switchVersionLater),
+    () =>
+      forUpdateHash(
+        updateInfoRef,
+        client.getDownloadedHash,
+        client.switchVersionLater
+      ),
     [client]
   );
 
@@ -225,27 +244,20 @@ export const UpdateProvider = ({
       // No throttle here: the client already dedupes checks via its 5s
       // response cache, and a second throttle layer silently returned
       // undefined, indistinguishable from a failed check.
-      let rootInfo: CheckResult | undefined;
+      // Already resolved for this device (gray rollout, running version) by
+      // the client.
+      let info: CheckResult | undefined;
       try {
-        rootInfo = await client.checkUpdate(extra);
+        info = await client.checkUpdate(extra);
       } catch (e: any) {
         surfaceCaughtError(e, client.t('error_update_check_failed'));
         return;
       }
-      if (!rootInfo) {
+      if (!info) {
         // Check was skipped or failed with no cached result; keep the last
         // known updateInfo instead of overwriting it with an empty object.
         return;
       }
-      let info = resolveCheckResult(
-        rootInfo,
-        {
-          packageVersion: client.getEffectivePackageVersion(),
-          currentVersion,
-          uuid: cInfo.uuid,
-        },
-        log
-      );
       if (
         info.update &&
         (typeof info.hash !== 'string' || info.hash.length === 0)

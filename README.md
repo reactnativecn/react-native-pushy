@@ -163,3 +163,10 @@ Bridge-free hosts use `PushyRuntime.prepareBundle` (Android),
 (HarmonyOS), after normal launch bundle resolution. See the
 [native host API migration guide](docs/NATIVE_HOST_API_MIGRATION.md) for the
 source-breaking rename, unchanged JS bridge contract, and native rebuild steps.
+
+Each platform also takes a timeout: `PushyRuntime.prepareBundle(context,
+timeoutMillis, callback)`, `RCTPushy.prepareBundle(timeout:completion:)` and
+`prepareBundle(timeoutMs)`. On expiry the result is `failed` / `timeout`; the
+round keeps running in the background and still applies to the next launch.
+Without one, Android and iOS wait at most 30 minutes and HarmonyOS waits for
+the round.

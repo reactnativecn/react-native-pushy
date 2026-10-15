@@ -67,14 +67,16 @@ Value StringOr(const Value& value, const char* fallback) {
   return value.IsString() ? value : Value::String(fallback);
 }
 
-// A non-negative integral state counter; anything else reads as 0.
+// A non-negative integral state counter; anything else reads as 0. Capped
+// well inside a 32-bit size_t (armeabi-v7a, x86): converting a double beyond
+// the target's range is undefined.
 size_t Counter(const Value& value) {
   const double number = value.AsNumber();
   if (!value.IsNumber() || !std::isfinite(number) || number < 0) {
     return 0;
   }
-  return number >= 1e15 ? static_cast<size_t>(1e15)
-                        : static_cast<size_t>(number);
+  return number >= 1e9 ? static_cast<size_t>(1e9)
+                       : static_cast<size_t>(number);
 }
 
 // { packageVersion, currentVersion, uuid, rolledBackVersion } — what

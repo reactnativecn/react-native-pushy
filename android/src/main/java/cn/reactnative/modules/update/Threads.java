@@ -17,6 +17,15 @@ final class Threads {
         });
     }
 
+    /** Daemon threads on demand, reused while idle: concurrent tasks never queue. */
+    static ExecutorService cached(final String name) {
+        return Executors.newCachedThreadPool(runnable -> {
+            Thread thread = new Thread(runnable, name);
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
     /** Starts a one-off daemon thread: it never keeps a dying process alive. */
     static Thread startDaemon(String name, Runnable task) {
         return startDaemon(name, -1, task);

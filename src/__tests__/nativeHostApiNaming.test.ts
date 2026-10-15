@@ -59,10 +59,10 @@ describe('native host API naming', () => {
     const provider = source(`${harmony}PushyFileJSBundleProvider.ets`);
     const exports = source('harmony/pushy/index.ets');
     expect(provider).toContain(
-      'prepareBundle(): Promise<BundlePreparationResult>'
+      'prepareBundle(timeoutMs?: number): Promise<BundlePreparationResult>'
     );
     expect(provider).toContain(
-      'return prepareBundleNative(this.updateContext)'
+      'return prepareBundleNative(this.updateContext, timeoutMs)'
     );
     expect(provider).toContain('configure(options: PushyConfiguration)');
     expect(exports).toContain('export type { BundlePreparationResult }');

@@ -5,6 +5,7 @@
 #import <Foundation/Foundation.h>
 #import <dispatch/dispatch.h>
 #import <os/lock.h>
+#include <stdexcept>
 #include <CommonCrypto/CommonDigest.h>
 #include <sys/stat.h>
 #include <atomic>
@@ -74,6 +75,14 @@ static NSTimeInterval processElapsed;
 static BOOL networkPath;
 static NSTimeInterval ExpectedBudget(void) { return 12 - processElapsed; }
 static NSString *root;
+// Makes every defaults read throw a C++ exception, as the shared cores can
+// (std::bad_alloc / std::length_error) while the state lock is held.
+static bool throwOnRead = false;
+static void MaybeThrow(void) {
+    if (throwOnRead) {
+        throw std::length_error("state too large");
+    }
+}
 
 // In-memory collaborator, deliberately NOT an NSUserDefaults subclass: inherited
 // accessors could otherwise reach real preferences without ObserveWrite(). Only
@@ -106,12 +115,14 @@ static void ObserveWrite(void) {
 }
 - (void)setObject:(id)value forKey:(NSString *)key { ObserveWrite(); _values[key] = value; }
 - (void)removeObjectForKey:(NSString *)key { ObserveWrite(); [_values removeObjectForKey:key]; }
-- (id)objectForKey:(NSString *)key { return _values[key]; }
+- (id)objectForKey:(NSString *)key { MaybeThrow(); return _values[key]; }
 - (NSString *)stringForKey:(NSString *)key {
+    MaybeThrow();
     id value = _values[key];
     return [value isKindOfClass:NSString.class] ? value : nil;
 }
 - (NSDictionary *)dictionaryForKey:(NSString *)key {
+    MaybeThrow();
     id value = _values[key];
     return [value isKindOfClass:NSDictionary.class] ? value : nil;
 }
@@ -728,6 +739,45 @@ static void RoundCommitVerifies(void) {
     Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
 }
 
+// CODE_AUDIT 4.4: a C++ exception from the shared cores is caught at the
+// entry point, with its reason, and never leaves the state lock held. The
+// launch falls back to the packaged bundle and still schedules the round.
+static void CppExceptionBoundary(void) {
+    SetUp(Order::ResetFirst);
+    @try {
+        throw std::length_error("too long");
+    } @catch (...) {
+        Expect([PushyCaughtReason(@"fallback") isEqualToString:@"too long"],
+               "a C++ exception's what() is the reason");
+    }
+    @try {
+        [NSException raise:@"X" format:@"objc reason"];
+    } @catch (...) {
+        Expect([PushyCaughtReason(@"fallback") isEqualToString:@"objc reason"],
+               "an NSException's reason is the reason");
+    }
+    @try {
+        throw 7;
+    } @catch (...) {
+        Expect([PushyCaughtReason(@"fallback") isEqualToString:@"fallback"],
+               "anything else falls back");
+    }
+    Expect(PushyGuard(@"test", ^{}), "a block that returns passes the guard");
+    Expect(!PushyGuard(@"test", ^{ throw std::bad_alloc(); }), "a C++ exception is caught");
+
+    throwOnRead = true;
+    NSURL *url = [RCTPushy bundleURL];
+    throwOnRead = false;
+    Expect([url isEqual:[RCTPushy binaryBundleURL]],
+           "a launch whose state cannot be read uses the packaged bundle");
+    Expect(scheduleCount == 1, "the round is still scheduled");
+    // Re-acquiring would abort if the throw had left the lock held.
+    __block bool reacquired = false;
+    PushyWithStateLock(^{ reacquired = true; });
+    Expect(reacquired, "the state lock is released");
+    Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
+}
+
 int main(int argc, char **argv) {
     @autoreleasepool {
         // These intentional failures run in separate processes. Erasing the
@@ -761,6 +811,7 @@ int main(int argc, char **argv) {
             {"install_record_activation", InstallRecordActivation},
             {"switch_version_records", SwitchVersionRecords},
             {"round_commit_verifies", RoundCommitVerifies},
+            {"cpp_exception_boundary", CppExceptionBoundary},
         };
         int ran = 0;
         for (const auto &test : cases) {

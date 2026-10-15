@@ -7,8 +7,8 @@
 // The pure steps of the native cold-start round (NATIVE_CHECKUPDATE_DESIGN
 // §10), one implementation for the Android, iOS and Harmony orchestrators:
 // what to send, which endpoint to ask next, and everything a commit needs
-// from the answer. HTTP, timeouts, locks, downloads and persistence stay
-// native. JS has no counterpart (its client builds its own request through
+// from the answer. round_engine.h drives these steps; HTTP, locks,
+// downloads and persistence stay native. JS has no counterpart (its client builds its own request through
 // src/updateFlowCore.ts buildCheckRequestBody, which BuildRequestBody
 // mirrors); tests/native-round-vectors.json pins this layer.
 //
