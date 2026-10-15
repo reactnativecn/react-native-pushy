@@ -67,6 +67,7 @@ function harness() {
       logger: { info() {}, warn() {}, error() {} },
       deviceInfo: { osFullName: 'test-os' },
       setTimeout: (callback: () => void) => timers.push(callback),
+      clearTimeout: () => {},
       isSafePathComponent: (hash: string) => /^[a-zA-Z0-9_-]+$/.test(hash),
       getErrorMessage: (error: unknown) => String(error),
       STATUS_NONE,
@@ -86,14 +87,17 @@ function harness() {
       },
     }
   ) as {
-    check: (ctx: typeof context) => Promise<BundlePreparationResult>;
+    check: (
+      ctx: typeof context,
+      timeoutMs?: number
+    ) => Promise<BundlePreparationResult>;
     schedule: (ctx: typeof context, rollback: string) => void;
   };
   return {
     values,
     state,
     timers,
-    check: () => runtime.check(context),
+    check: (timeoutMs?: number) => runtime.check(context, timeoutMs),
     initialize: () => runtime.schedule(context, 'rolled-back-version'),
   };
 }
@@ -198,6 +202,29 @@ describe('native host API orchestration', () => {
     expect(await h.check()).toEqual(
       bundlePreparationResult('cancelled', 'reset')
     );
+  });
+
+  test('a host timeout returns failed/timeout while the round carries on', async () => {
+    const h = harness();
+    h.initialize();
+    let release = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    h.state.beforeResponse = () => held;
+    const armedBefore = h.timers.length;
+    const waiting = h.check(5000);
+    // The host's timer is the first one this call arms (the round arms its
+    // own after it); fire it while the response is still held.
+    await Promise.resolve();
+    h.timers[armedBefore]();
+    expect(await waiting).toEqual(bundlePreparationResult('failed', 'timeout'));
+
+    // The round was not cut short: once the response arrives it completes,
+    // and a later call gets its result.
+    release();
+    expect((await h.check()).status).toBe('noUpdate');
+    expect(h.state.checks).toBe(1);
   });
 
   test('reset and configuration changes invalidate completed snapshots', async () => {

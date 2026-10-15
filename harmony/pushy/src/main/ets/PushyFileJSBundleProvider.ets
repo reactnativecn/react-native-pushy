@@ -53,9 +53,14 @@ export class PushyFileJSBundleProvider extends JSBundleProvider {
     await this.updateContext.setNativeConfig(config);
   }
 
-  /** Call after the host's real bundle resolution; never resolves it again. */
-  prepareBundle(): Promise<BundlePreparationResult> {
-    return prepareBundleNative(this.updateContext);
+  /**
+   * Call after the host's real bundle resolution; never resolves it again.
+   * With timeoutMs, resolves after at most that long: on expiry the result is
+   * failed/timeout and the round keeps running in the background (its result
+   * still applies to the next launch).
+   */
+  prepareBundle(timeoutMs?: number): Promise<BundlePreparationResult> {
+    return prepareBundleNative(this.updateContext, timeoutMs);
   }
 
   getAppKeys(): string[] {

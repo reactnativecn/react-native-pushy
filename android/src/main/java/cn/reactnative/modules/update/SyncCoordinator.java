@@ -82,8 +82,19 @@ final class SyncCoordinator {
     private static volatile long roundConfigGeneration = -1;
     private static volatile String roundConfigJson;
 
-    /** Blocking only on the host API's worker; never call on the UI thread. */
-    static BundlePreparationResult prepareBundle(UpdateContext context) throws InterruptedException {
+    // prepareBundle without an explicit timeout waits this long at most: past
+    // the longest round (8 query requests, then two 600s download phases).
+    // Same default as iOS (kPushyHostPrepareDefaultTimeout).
+    static final long DEFAULT_PREPARE_TIMEOUT_MS = 30 * 60 * 1000L;
+
+    /**
+     * Blocking only on the host API's worker; never call on the UI thread.
+     * Waits at most timeoutMs for this process's round: on expiry the result
+     * is failed/timeout, and the round keeps running in the background (its
+     * result still applies to the next launch), as on iOS.
+     */
+    static BundlePreparationResult prepareBundle(UpdateContext context, long timeoutMs)
+        throws InterruptedException {
         if (BuildConfig.DEBUG) {
             return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "debug");
         }
@@ -95,11 +106,17 @@ final class SyncCoordinator {
         if (rejection != null) {
             return rejection;
         }
-        startRound(0);
+        // Run the round on its own thread rather than this caller's, so the
+        // wait below can be bounded.
+        if (claimRound()) {
+            Threads.startDaemon("pushy-native-sync", () -> runClaimedRound(0));
+        }
         if (!roundStarted.get()) {
             return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "config_changed");
         }
-        roundDone.await();
+        if (!roundDone.await(Math.max(0, timeoutMs), TimeUnit.MILLISECONDS)) {
+            return BundlePreparationResult.of(BundlePreparationResult.FAILED, "timeout");
+        }
         if (roundConfigGeneration != UpdateContext.getNativeConfigGeneration()
             || !FlowBridge.configsEquivalent(configJson, roundConfigJson)
             || !FlowBridge.configsEquivalent(configJson, context.getKv(KEY_CONFIG))) {
@@ -216,14 +233,19 @@ final class SyncCoordinator {
      * and download phase to the remaining budget.
      */
     private static void startRound(long deadlineNanos) {
-        // An automatic check before first-run provisioning must not consume
-        // the process's only round. Hosts may configure later in this launch.
-        if (!hasRunnableConfig(sContext)) {
-            return;
+        if (claimRound()) {
+            runClaimedRound(deadlineNanos);
         }
-        if (!roundStarted.compareAndSet(false, true)) {
-            return;
-        }
+    }
+
+    // Claims the process's only round. An automatic check before first-run
+    // provisioning must not consume it: hosts may configure later in this
+    // launch.
+    private static boolean claimRound() {
+        return hasRunnableConfig(sContext) && roundStarted.compareAndSet(false, true);
+    }
+
+    private static void runClaimedRound(long deadlineNanos) {
         try {
             runOnce(sContext, sLaunchRolledBackVersion, deadlineNanos);
         } catch (Throwable e) {
