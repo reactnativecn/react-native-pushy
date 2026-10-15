@@ -184,8 +184,8 @@ static void PushyMaybeHoldProcess(void) {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @try {
             [RCTPushyOrchestrator runHoldRoundWithDeadline:deadline];
-        } @catch (NSException *exception) {
-            NSLog(@"RCTPushy -- crash hold failed: %@", exception.reason);
+        } @catch (...) {
+            NSLog(@"RCTPushy -- crash hold failed: %@", PushyCaughtReason(@"unknown exception"));
         }
         dispatch_semaphore_signal(done);
     });
@@ -202,7 +202,7 @@ static void PushyMaybeHoldProcess(void) {
 static void PushyCrashHoldExceptionHandler(NSException *exception) {
     @try {
         PushyMaybeHoldProcess();
-    } @catch (NSException *inner) {
+    } @catch (...) {
         // The dying process owes the previous handler its turn no matter
         // what the rescue did.
     }
@@ -405,7 +405,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
         int64_t delaySeconds =
             [defaults objectForKey:keyNativeCheckIncomplete] != nil ? 0 : 5;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delaySeconds * NSEC_PER_SEC),
-                       dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                       dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ PushyGuard(@"native sync", ^{
             if ([RCTPushyOrchestrator hasJsRound]) {
                 // Not consuming the round: a later crash rescue may still
                 // need it.
@@ -413,7 +413,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
                 return;
             }
             [RCTPushyOrchestrator startRoundWithDeadline:0];
-        });
+        }); });
         return true;
     }();
     (void)scheduled;
@@ -459,7 +459,9 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     NSTimeInterval deadline = PushyMonotonicNow() + budget;
     dispatch_semaphore_t done = dispatch_semaphore_create(0);
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        [self startRoundWithDeadline:deadline];
+        PushyGuard(@"purge restore", ^{
+            [self startRoundWithDeadline:deadline];
+        });
         dispatch_semaphore_signal(done);
     });
     BOOL timedOut = !PushyWaitSeconds(done, budget);
@@ -503,7 +505,9 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     // wait below can be bounded.
     if ([self claimRound]) {
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-            [self runClaimedRoundWithDeadline:0];
+            PushyGuard(@"native sync", ^{
+                [self runClaimedRoundWithDeadline:0];
+            });
         });
     }
     // A group is broadcast-style. Sharing the rescue semaphore would let one
@@ -574,9 +578,9 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
 + (void)runClaimedRoundWithDeadline:(NSTimeInterval)deadlineUptime {
     @try {
         [self runOnce:pushyLaunchRolledBackForHold deadline:deadlineUptime];
-    } @catch (NSException *exception) {
+    } @catch (...) {
         // The rescue path must never take the app down with it.
-        RCTLogWarn(@"RCTPushy -- native sync crashed: %@", exception.reason);
+        RCTLogWarn(@"RCTPushy -- native sync crashed: %@", PushyCaughtReason(@"unknown exception"));
         pushyHostRoundResult = PushyHostResult(@"failed", @"internal_error");
     } @finally {
         pushyRoundCompleted.store(true);

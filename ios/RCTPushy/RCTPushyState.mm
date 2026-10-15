@@ -2,6 +2,8 @@
 // defaults mapping, the string/error/JSON helpers every other file uses, and
 // the embedded bundle's hash.
 #import "RCTPushyInternal.h"
+
+#include <exception>
 #include "../../cpp/patch_core/digest.h"
 
 #import <React/RCTConvert.h>
@@ -82,6 +84,34 @@ PUSHY_HIDDEN void PushyWithStateLock(void (NS_NOESCAPE ^block)(void)) {
         block();
     } @finally {
         os_unfair_lock_unlock(&pushyStateLock);
+    }
+}
+
+PUSHY_HIDDEN NSString *PushyCaughtReason(NSString *fallback) {
+    std::exception_ptr caught = std::current_exception();
+    if (caught == nullptr) {
+        return fallback;
+    }
+    try {
+        @try {
+            std::rethrow_exception(caught);
+        } @catch (NSException *exception) {
+            return exception.reason ?: fallback;
+        }
+    } catch (const std::exception &error) {
+        return [NSString stringWithUTF8String:error.what()] ?: fallback;
+    } catch (...) {
+    }
+    return fallback;
+}
+
+PUSHY_HIDDEN BOOL PushyGuard(NSString *where, void (NS_NOESCAPE ^block)(void)) {
+    @try {
+        block();
+        return YES;
+    } @catch (...) {
+        NSLog(@"RCTPushy -- %@ failed: %@", where, PushyCaughtReason(@"unknown exception"));
+        return NO;
     }
 }
 

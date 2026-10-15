@@ -41,10 +41,11 @@ static void PushyTriggerReload(NSString *reason) {
     });
 }
 
-// A promise rejection for an exception caught around a state transition.
-static void PushyRejectException(RCTPromiseRejectBlock reject, const char *code,
-                                 NSException *exception, NSString *fallback) {
-    PushyRejectError(reject, PushyErrorWithCode(code, exception.reason ?: fallback));
+// A promise rejection for an exception caught (`@catch (...)`) around a
+// state transition.
+static void PushyRejectCaught(RCTPromiseRejectBlock reject, const char *code,
+                              NSString *fallback) {
+    PushyRejectError(reject, PushyErrorWithCode(code, PushyCaughtReason(fallback)));
 }
 
 // Host preparation runs off the caller's thread; the completion is delivered
@@ -61,8 +62,9 @@ static void PushyRunHostPreparation(NSDictionary *(^work)(void),
         NSDictionary *result;
         @try {
             result = work();
-        } @catch (NSException *exception) {
-            RCTLogWarn(@"RCTPushy -- native host sync failed: %@", exception.reason);
+        } @catch (...) {
+            RCTLogWarn(@"RCTPushy -- native host sync failed: %@",
+                       PushyCaughtReason(@"unknown exception"));
             result = PushyHostResult(@"failed", @"internal_error");
         }
         if (completion != nil) {
@@ -101,11 +103,20 @@ RCT_EXPORT_MODULE(RCTPushy);
         }
 #endif
         return resolvedURL ?: [RCTPushy binaryBundleURL];
+    } @catch (...) {
+        // An exception here would end every launch the same way; the
+        // packaged bundle always loads, and the round scheduled below can
+        // still repair the state.
+        RCTLogError(@"RCTPushy -- cannot resolve the launch bundle: %@",
+                    PushyCaughtReason(@"unknown exception"));
+        return [RCTPushy binaryBundleURL];
     } @finally {
         // State corruption is exactly when the rescue path matters most. If
         // resolution throws before a snapshot exists, nil safely omits only
         // this launch's rollback guard instead of disabling the check.
-        [RCTPushyOrchestrator scheduleFromColdStart:launchRolledBackVersion];
+        PushyGuard(@"native sync schedule", ^{
+            [RCTPushyOrchestrator scheduleFromColdStart:launchRolledBackVersion];
+        });
     }
 }
 
@@ -122,9 +133,9 @@ RCT_EXPORT_MODULE(RCTPushy);
         if (config != nil) {
             @try {
                 [RCTPushyOrchestrator persistConfiguration:config];
-            } @catch (NSException *exception) {
+            } @catch (...) {
                 failure = PushyErrorWithCode(pushy::error_codes::kFileOperationFailed,
-                    exception.reason ?: @"Native configuration failed");
+                    PushyCaughtReason(@"Native configuration failed"));
             }
         }
         if (completion != nil) {
@@ -158,7 +169,9 @@ RCT_EXPORT_MODULE(RCTPushy);
 - (NSDictionary *)constantsToExport
 {
     NSMutableDictionary *ret = [NSMutableDictionary new];
-    PushyWithStateLock(^{
+    // Whatever was gathered before a failure is still returned: throwing out
+    // of getConstants takes the app down.
+    PushyGuard(@"constants", ^{ PushyWithStateLock(^{
         NSUserDefaults *defaults = PushyDefaults();
 
         ret[@"downloadRootDir"] = [RCTPushy downloadDir];
@@ -194,7 +207,7 @@ RCT_EXPORT_MODULE(RCTPushy);
             [defaults removeObjectForKey:KeyPackageUpdatedMarked()];
             [RCTPushyInstaller clearInvalidFiles];
         }
-    });
+    }); });
 
     return ret;
 }
@@ -233,9 +246,9 @@ RCT_EXPORT_METHOD(syncNativeConfig:(NSString *)config
     @try {
         [RCTPushyOrchestrator persistConfiguration:config];
         resolve(@true);
-    } @catch (NSException *exception) {
-        PushyRejectException(reject, pushy::error_codes::kFileOperationFailed, exception,
-                             @"Native configuration failed");
+    } @catch (...) {
+        PushyRejectCaught(reject, pushy::error_codes::kFileOperationFailed,
+                          @"Native configuration failed");
     }
 }
 
@@ -366,7 +379,11 @@ RCT_EXPORT_METHOD(getBundleHash:(RCTPromiseResolveBlock)resolve
     resolve(@"");
 #else
     dispatch_async(PushyFileQueue(), ^{
-        resolve(PushyBundleHashSync(YES));
+        __block NSString *hash = @"";
+        PushyGuard(@"bundle hash", ^{
+            hash = PushyBundleHashSync(YES);
+        });
+        resolve(hash);
     });
 #endif
 }
@@ -390,9 +407,8 @@ RCT_EXPORT_METHOD(markSuccess:(RCTPromiseResolveBlock)resolve
             }
             PushyApplyStateToDefaults(defaults, result.state);
         });
-    } @catch (NSException *exception) {
-        PushyRejectException(reject, pushy::error_codes::kMarkSuccessFailed, exception,
-                             @"markSuccess failed");
+    } @catch (...) {
+        PushyRejectCaught(reject, pushy::error_codes::kMarkSuccessFailed, @"markSuccess failed");
         return;
     }
 
@@ -441,8 +457,8 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
             [defaults removeObjectForKey:keyNativeCheckCache];
             ignoreRollback = false;
         });
-    } @catch (NSException *exception) {
-        PushyRejectException(reject, pushy::error_codes::kResetFailed, exception, @"reset failed");
+    } @catch (...) {
+        PushyRejectCaught(reject, pushy::error_codes::kResetFailed, @"reset failed");
         return;
     }
 
@@ -453,11 +469,16 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
         // promise settles here, after the cleanup, so a failed wipe reaches
         // JS as RESET_FAILED (Android parity) instead of a warning nobody
         // aggregates.
-        pushy::delta::Status status = pushy::delta::CleanupOldEntries(
-            PushyToStdString([RCTPushy downloadDir]),
-            std::vector<std::string>{PushyToStdString(keepVersion)},
-            0
-        );
+        pushy::delta::Status status = pushy::delta::Status::Ok();
+        try {
+            status = pushy::delta::CleanupOldEntries(
+                PushyToStdString([RCTPushy downloadDir]),
+                std::vector<std::string>{PushyToStdString(keepVersion)},
+                0
+            );
+        } catch (const std::exception &error) {
+            status = pushy::delta::Status::Error(error.what());
+        }
         if (!status.ok) {
             RCTLogWarn(@"Pushy reset cleanup error: %s", status.message.c_str());
             PushyRejectError(reject, PushyErrorWithCode(

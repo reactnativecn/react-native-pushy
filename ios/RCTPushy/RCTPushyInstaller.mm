@@ -109,8 +109,23 @@ static NSError *PushyEnsureFreeSpace(NSString *path, long long bytesToWrite) {
     }
 }
 
+// The delegate runs inside SSZipArchive's C extraction loop, which an
+// exception must not unwind through (CODE_AUDIT 4.4): a check that throws is
+// a violation like any other.
+- (void)check:(void (NS_NOESCAPE ^)(void))block {
+    @try {
+        block();
+    } @catch (...) {
+        if (self.violation == nil) {
+            self.violation = PushyCaughtReason(@"archive check failed");
+        }
+    }
+}
+
 - (void)zipArchiveWillUnzipArchiveAtPath:(NSString *)path zipInfo:(unz_global_info)zipInfo {
-    [self recordStatus:pushy::archive_limits::CheckEntryCount((long long)zipInfo.number_entry)];
+    [self check:^{
+        [self recordStatus:pushy::archive_limits::CheckEntryCount((long long)zipInfo.number_entry)];
+    }];
 }
 
 - (BOOL)zipArchiveShouldUnzipFileAtIndex:(NSInteger)fileIndex
@@ -123,9 +138,11 @@ static NSError *PushyEnsureFreeSpace(NSString *path, long long bytesToWrite) {
     // Unix mode bits travel in the high 16 bits of the external attributes
     // (the same field SSZipArchive keys its own symlink branch on).
     BOOL symlink = ((fileInfo.external_fa >> 16) & S_IFMT) == S_IFLNK;
-    [self recordStatus:_accumulator->Accept((long long)fileInfo.uncompressed_size,
-                                            (long long)fileInfo.compressed_size,
-                                            symlink, std::string())];
+    [self check:^{
+        [self recordStatus:self->_accumulator->Accept((long long)fileInfo.uncompressed_size,
+                                                      (long long)fileInfo.compressed_size,
+                                                      symlink, std::string())];
+    }];
     return self.violation == nil;
 }
 
@@ -152,9 +169,11 @@ static NSError *PushyEnsureFreeSpace(NSString *path, long long bytesToWrite) {
     }
     NSString *name = [[components subarrayWithRange:NSMakeRange(base, components.count - base)]
                       componentsJoinedByString:@"/"];
-    if (pushy::archive_limits::IsReservedEntryName(PushyToStdString(name))) {
-        self.violation = [NSString stringWithFormat:@"archive contains reserved entry %@", name];
-    }
+    [self check:^{
+        if (pushy::archive_limits::IsReservedEntryName(PushyToStdString(name))) {
+            self.violation = [NSString stringWithFormat:@"archive contains reserved entry %@", name];
+        }
+    }];
 }
 
 @end
@@ -327,6 +346,23 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
      progress:(void (^)(long long, long long))progress
      callback:(void (^)(NSError *error))callback
 {
+    // The caller is an RN method or the native round; neither survives an
+    // exception (CODE_AUDIT 4.4). This catch only covers the checks before
+    // the download registers; after that, failures settle every waiter
+    // through its completion instead.
+    @try {
+        [self fetchUnguarded:type options:options progress:progress callback:callback];
+    } @catch (...) {
+        callback(PushyErrorWithCode(pushy::error_codes::kFileOperationFailed,
+                                    PushyCaughtReason(ERROR_FILE_OPERATION)));
+    }
+}
+
++ (void)fetchUnguarded:(PushyType)type
+               options:(NSDictionary *)options
+              progress:(void (^)(long long, long long))progress
+              callback:(void (^)(NSError *error))callback
+{
     NSString *updateUrl = PushyOptionString(options, PushyOptionUrlKey());
     NSString *hash = PushyOptionString(options, @"hash");
 
@@ -368,15 +404,6 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
     void (^deferredStart)(void) = ^{
         [self fetch:type options:options progress:progress callback:callback];
     };
-    PushyDownloadRegistration registration = PushyRegisterDownload(
-        hash, type, deadlineUptime, callback, progress, deferredStart);
-    if (registration != PushyDownloadRegistrationOwner) {
-        RCTLogInfo(
-            @"RCTPushy -- %@ in-flight download for %@",
-            registration == PushyDownloadRegistrationJoined ? @"join" : @"defer",
-            hash);
-        return;
-    }
 
     NSString *zipFilePath = [dir stringByAppendingPathComponent:
         [hash stringByAppendingString:PushyArchiveExtension(type)]];
@@ -394,7 +421,13 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
     // to the download root itself.
     void (^completion)(NSError *) = ^(NSError *error) {
         dispatch_async(PushyFileQueue(), ^{
-            NSError *finalError = error ?: PushyPromoteStagingDir(hash, artifactSha256);
+            __block NSError *finalError = error;
+            if (finalError == nil && !PushyGuard(@"promote", ^{
+                    finalError = PushyPromoteStagingDir(hash, artifactSha256);
+                })) {
+                finalError = PushyErrorWithCode(pushy::error_codes::kFileOperationFailed,
+                                                ERROR_FILE_OPERATION);
+            }
             if (finalError != nil) {
                 [[NSFileManager defaultManager] removeItemAtPath:PushyStagingDir(hash) error:nil];
             }
@@ -402,32 +435,52 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
         });
     };
 
-    RCTLogInfo(@"RCTPushy -- download file %@", updateUrl);
-    NSTimeInterval timeoutSeconds = deadlineUptime - PushyMonotonicNow();
-    if (timeoutSeconds <= 0) {
-        completion(deadlineExpired());
+    PushyDownloadRegistration registration = PushyRegisterDownload(
+        hash, type, deadlineUptime, callback, progress, deferredStart);
+    if (registration != PushyDownloadRegistrationOwner) {
+        RCTLogInfo(
+            @"RCTPushy -- %@ in-flight download for %@",
+            registration == PushyDownloadRegistrationJoined ? @"join" : @"defer",
+            hash);
         return;
     }
-    [RCTPushyDownloader download:updateUrl
-                        savePath:zipFilePath
-                 timeoutInterval:timeoutSeconds
-                 progressHandler:^(long long receivedBytes, long long totalBytes) {
-        PushyReportDownloadProgress(hash, receivedBytes, totalBytes);
-    } completionHandler:^(NSString *path, NSError *error) {
-        if (error != nil) {
-            completion(error);
+
+    // Registered: every waiter now settles through `completion`.
+    @try {
+        RCTLogInfo(@"RCTPushy -- download file %@", updateUrl);
+        NSTimeInterval timeoutSeconds = deadlineUptime - PushyMonotonicNow();
+        if (timeoutSeconds <= 0) {
+            completion(deadlineExpired());
             return;
         }
-        dispatch_async(PushyFileQueue(), ^{
-            artifactSha256 = PushyFromStdString(
-                pushy::digest::Sha256File(PushyToStdString(zipFilePath)));
-        });
-        [self unzipDownloadedPackage:zipFilePath
-                                hash:hash
-                                type:type
-                          originHash:originHash
-                            callback:completion];
-    }];
+        [RCTPushyDownloader download:updateUrl
+                            savePath:zipFilePath
+                     timeoutInterval:timeoutSeconds
+                     progressHandler:^(long long receivedBytes, long long totalBytes) {
+            PushyReportDownloadProgress(hash, receivedBytes, totalBytes);
+        } completionHandler:^(NSString *path, NSError *error) {
+            if (error != nil) {
+                completion(error);
+                return;
+            }
+            dispatch_async(PushyFileQueue(), ^{
+                // A digest that throws is recorded as none, like an unreadable
+                // archive.
+                PushyGuard(@"archive digest", ^{
+                    artifactSha256 = PushyFromStdString(
+                        pushy::digest::Sha256File(PushyToStdString(zipFilePath)));
+                });
+            });
+            [self unzipDownloadedPackage:zipFilePath
+                                    hash:hash
+                                    type:type
+                              originHash:originHash
+                                callback:completion];
+        }];
+    } @catch (...) {
+        completion(PushyErrorWithCode(pushy::error_codes::kFileOperationFailed,
+                                      PushyCaughtReason(ERROR_FILE_OPERATION)));
+    }
 }
 
 + (void)unzipDownloadedPackage:(NSString *)zipFilePath
@@ -448,11 +501,11 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
             }
             @try {
                 [self finishDownloadedPackage:hash type:type originHash:originHash callback:callback];
-            } @catch (NSException *exception) {
+            } @catch (...) {
                 // An uncaught exception in a GCD block is fatal (and would
                 // trip the crash rescue); a bad package is a PATCH_FAILED.
                 callback(PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
-                                            exception.reason ?: @"delta failed"));
+                                            PushyCaughtReason(@"delta failed")));
             }
         });
     }];
@@ -536,65 +589,81 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
       completionHandler:(void (^)(NSError *error))completionHandler
 {
     dispatch_async(PushyFileQueue(), ^{
-        NSFileManager *fileManager = [NSFileManager defaultManager];
-        if ([fileManager fileExistsAtPath:destination]) {
-            [fileManager removeItemAtPath:destination error:nil];
-        }
-
-        // Resource caps before the first byte is extracted
-        // (cpp/patch_core/archive_limits.h). SSZipArchive only exposes the
-        // entry count up front (zipArchiveWillUnzipArchiveAtPath:zipInfo:),
-        // not the uncompressed total, so the disk check uses a 2x-archive
-        // heuristic; the guard enforces the exact caps entry by entry.
-        long long archiveBytes = RCTPushyFileSize(path);
-        NSError *preflight = nil;
-        if (archiveBytes > pushy::archive_limits::kMaxArchiveBytes) {
-            preflight = PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
-                [NSString stringWithFormat:@"archive too large: %lld bytes", archiveBytes]);
-        } else {
-            preflight = PushyEnsureFreeSpace(destination, MAX(0LL, archiveBytes) * 2);
-        }
-        if (preflight != nil) {
+        @try {
+            [self unzipFileUnguardedAtPath:path
+                             toDestination:destination
+                         completionHandler:completionHandler];
+        } @catch (...) {
+            // The archive limits run inside the extraction (CODE_AUDIT 4.4).
             RCTPushyDiscardArchive(path);
-            completionHandler(preflight);
-            return;
+            completionHandler(PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
+                                                 PushyCaughtReason(@"unzip failed")));
         }
-
-        PushyUnzipGuard *guard = [[PushyUnzipGuard alloc] initWithArchiveBytes:archiveBytes
-                                                                    destination:destination];
-        // preserveAttributes:NO — the archive's mode/mtime bits have no use
-        // here and are one less thing a hostile package controls.
-        [SSZipArchive unzipFileAtPath:path
-                        toDestination:destination
-                   preserveAttributes:NO
-                            overwrite:YES
-                       nestedZipLevel:0
-                             password:nil
-                                error:nil
-                             delegate:guard
-                      progressHandler:nil
-                    completionHandler:^(NSString *archivePath, BOOL succeeded, NSError *error) {
-            // The resume sidecar dies with its archive (§11.4): whether the
-            // unzip consumed it or classified it as poisoned, nothing must
-            // survive to vouch for bytes that are gone.
-            RCTPushyDiscardArchive(archivePath);
-
-            NSError *unzipError = error;
-            if (guard.violation != nil) {
-                unzipError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed, guard.violation);
-            } else if (!succeeded && unzipError == nil) {
-                unzipError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed, @"unzip failed");
-            } else if (unzipError != nil && unzipError.userInfo[RCTPushyErrorCodeKey] == nil) {
-                // SSZipArchive's own NSError (corrupt zip, bad magic, ...) has
-                // no stable code; without one, fetchPackage's fallback would
-                // classify it as DOWNLOAD_FAILED even though the download
-                // succeeded — keep the classification deterministic.
-                unzipError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
-                                                unzipError.localizedDescription ?: @"unzip failed");
-            }
-            completionHandler(unzipError);
-        }];
     });
+}
+
++ (void)unzipFileUnguardedAtPath:(NSString *)path
+                   toDestination:(NSString *)destination
+               completionHandler:(void (^)(NSError *error))completionHandler
+{
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    if ([fileManager fileExistsAtPath:destination]) {
+        [fileManager removeItemAtPath:destination error:nil];
+    }
+
+    // Resource caps before the first byte is extracted
+    // (cpp/patch_core/archive_limits.h). SSZipArchive only exposes the
+    // entry count up front (zipArchiveWillUnzipArchiveAtPath:zipInfo:),
+    // not the uncompressed total, so the disk check uses a 2x-archive
+    // heuristic; the guard enforces the exact caps entry by entry.
+    long long archiveBytes = RCTPushyFileSize(path);
+    NSError *preflight = nil;
+    if (archiveBytes > pushy::archive_limits::kMaxArchiveBytes) {
+        preflight = PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
+            [NSString stringWithFormat:@"archive too large: %lld bytes", archiveBytes]);
+    } else {
+        preflight = PushyEnsureFreeSpace(destination, MAX(0LL, archiveBytes) * 2);
+    }
+    if (preflight != nil) {
+        RCTPushyDiscardArchive(path);
+        completionHandler(preflight);
+        return;
+    }
+
+    PushyUnzipGuard *guard = [[PushyUnzipGuard alloc] initWithArchiveBytes:archiveBytes
+                                                                destination:destination];
+    // preserveAttributes:NO — the archive's mode/mtime bits have no use
+    // here and are one less thing a hostile package controls.
+    [SSZipArchive unzipFileAtPath:path
+                    toDestination:destination
+               preserveAttributes:NO
+                        overwrite:YES
+                   nestedZipLevel:0
+                         password:nil
+                            error:nil
+                         delegate:guard
+                  progressHandler:nil
+                completionHandler:^(NSString *archivePath, BOOL succeeded, NSError *error) {
+        // The resume sidecar dies with its archive (§11.4): whether the
+        // unzip consumed it or classified it as poisoned, nothing must
+        // survive to vouch for bytes that are gone.
+        RCTPushyDiscardArchive(archivePath);
+
+        NSError *unzipError = error;
+        if (guard.violation != nil) {
+            unzipError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed, guard.violation);
+        } else if (!succeeded && unzipError == nil) {
+            unzipError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed, @"unzip failed");
+        } else if (unzipError != nil && unzipError.userInfo[RCTPushyErrorCodeKey] == nil) {
+            // SSZipArchive's own NSError (corrupt zip, bad magic, ...) has
+            // no stable code; without one, fetchPackage's fallback would
+            // classify it as DOWNLOAD_FAILED even though the download
+            // succeeded — keep the classification deterministic.
+            unzipError = PushyErrorWithCode(pushy::error_codes::kDeltaFailed,
+                                            unzipError.localizedDescription ?: @"unzip failed");
+        }
+        completionHandler(unzipError);
+    }];
 }
 
 + (BOOL)switchVersion:(NSString *)hash error:(NSError **)error
@@ -602,17 +671,23 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
     // Same gate as Android and Harmony (install_record::CheckActivation); see
     // PushyVerifyActivation.
     PushyVerifiedActivation verified;
-    __block NSError *switchError = PushyVerifyActivation(hash, &verified);
-    if (switchError == nil) {
-        PushyWithStateLock(^{
-            if (!PushyVerifiedActivationUnchangedLocked(verified)) {
-                switchError = PushyErrorWithCode(
-                    pushy::error_codes::kSwitchVersionFailed,
-                    [NSString stringWithFormat:@"Bundle version %@ changed while switching.", hash]);
-                return;
-            }
-            PushySwitchVersionLocked(hash);
-        });
+    __block NSError *switchError = nil;
+    @try {
+        switchError = PushyVerifyActivation(hash, &verified);
+        if (switchError == nil) {
+            PushyWithStateLock(^{
+                if (!PushyVerifiedActivationUnchangedLocked(verified)) {
+                    switchError = PushyErrorWithCode(
+                        pushy::error_codes::kSwitchVersionFailed,
+                        [NSString stringWithFormat:@"Bundle version %@ changed while switching.", hash]);
+                    return;
+                }
+                PushySwitchVersionLocked(hash);
+            });
+        }
+    } @catch (...) {
+        switchError = PushyErrorWithCode(pushy::error_codes::kSwitchVersionFailed,
+                                         PushyCaughtReason(@"switch failed"));
     }
     if (switchError != nil) {
         if (error != NULL) {
@@ -625,7 +700,7 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
 
 + (void)clearInvalidFiles
 {
-    dispatch_async(PushyFileQueue(), ^{
+    dispatch_async(PushyFileQueue(), ^{ PushyGuard(@"cleanup", ^{
         // Snapshot the state under the lock, but run the (slow) filesystem
         // cleanup outside of it so state operations are not blocked.
         __block pushy::state::State state;
@@ -650,7 +725,7 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
         if (!status.ok) {
             RCTLogWarn(@"Pushy cleanup error: %s", status.message.c_str());
         }
-    });
+    }); });
 }
 
 @end

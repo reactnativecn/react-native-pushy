@@ -7,6 +7,7 @@
 #include <js_native_api_types.h>
 
 #include <cerrno>
+#include <exception>
 #include <cstdint>
 #include <string>
 #include <unistd.h>
@@ -558,7 +559,24 @@ struct AsyncCall {
   W data;
   void (*execute)(W&) = nullptr;
   void (*settle)(napi_env, napi_deferred, const W&) = nullptr;
+  // Set when execute threw: the promise rejects with it instead of settling
+  // from half-written results.
+  bool threw = false;
+  std::string failure;
 };
+
+// The message of the exception being handled, without throwing again.
+void RecordFailure(std::string* failure) noexcept {
+  try {
+    throw;
+  } catch (const std::exception& error) {
+    try {
+      *failure = error.what();
+    } catch (...) {
+    }
+  } catch (...) {
+  }
+}
 
 // Runs execute(data) on a libuv worker thread and returns a Promise that
 // settle(env, deferred, data) settles back on the JS thread. Every path
@@ -591,15 +609,30 @@ napi_value QueueWork(
           nullptr,
           resource_name,
           [](napi_env, void* raw) {
+            // A worker thread: an exception escaping here terminates the
+            // process (CODE_AUDIT 4.4).
             auto* c = static_cast<AsyncCall<W>*>(raw);
-            c->execute(c->data);
+            try {
+              c->execute(c->data);
+            } catch (...) {
+              c->threw = true;
+              RecordFailure(&c->failure);
+            }
           },
           [](napi_env cb_env, napi_status status, void* raw) {
             auto* c = static_cast<AsyncCall<W>*>(raw);
             if (status != napi_ok) {
               RejectDeferredWithMessage(cb_env, c->deferred, "async work aborted");
+            } else if (c->threw) {
+              RejectDeferredWithMessage(
+                  cb_env, c->deferred,
+                  c->failure.empty() ? "native error" : c->failure.c_str());
             } else {
-              c->settle(cb_env, c->deferred, c->data);
+              try {
+                c->settle(cb_env, c->deferred, c->data);
+              } catch (...) {
+                RejectDeferredWithMessage(cb_env, c->deferred, "native error");
+              }
             }
             napi_delete_async_work(cb_env, c->work);
             delete c;
@@ -1144,6 +1177,22 @@ napi_value CheckExtractedDirectory(napi_env env, napi_callback_info info) {
       });
 }
 
+// Every exported callback runs through Guarded: a C++ exception from the
+// shared cores (std::bad_alloc, std::length_error) must not unwind into NAPI,
+// so it becomes a JS Error instead (CODE_AUDIT 4.4).
+template <napi_value (*Callback)(napi_env, napi_callback_info)>
+napi_value Guarded(napi_env env, napi_callback_info info) {
+  try {
+    return Callback(env, info);
+  } catch (...) {
+    std::string failure;
+    RecordFailure(&failure);
+    napi_throw_error(env, nullptr,
+                     failure.empty() ? "native error" : failure.c_str());
+  }
+  return nullptr;
+}
+
 bool ExportFunction(
     napi_env env,
     napi_value exports,
@@ -1381,28 +1430,28 @@ static napi_value FlowNormalizeConfiguration(napi_env env,
 }
 
 napi_value Init(napi_env env, napi_value exports) {
-  if (!ExportFunction(env, exports, "syncStateWithBinaryVersion", SyncStateWithBinaryVersion) ||
-      !ExportFunction(env, exports, "runStateCore", RunStateCore) ||
-      !ExportFunction(env, exports, "applyArchiveDelta", ApplyArchiveDelta) ||
-      !ExportFunction(env, exports, "cleanupOldEntries", CleanupOldEntries) ||
-      !ExportFunction(env, exports, "sha256HexFileAsync", Sha256HexFileAsync) ||
-      !ExportFunction(env, exports, "sha256HexRawFdAsync", Sha256HexRawFdAsync) ||
-      !ExportFunction(env, exports, "isInstallComplete", InstallRecordIsComplete) ||
-      !ExportFunction(env, exports, "recordedBundleSha256", InstallRecordBundleSha256) ||
-      !ExportFunction(env, exports, "sealInstallRecord", SealInstallRecord) ||
-      !ExportFunction(env, exports, "promoteStaging", PromoteStaging) ||
-      !ExportFunction(env, exports, "checkActivation", CheckActivation) ||
-      !ExportFunction(env, exports, "checkUncompressedSize", CheckUncompressedSize) ||
-      !ExportFunction(env, exports, "planFreeSpaceProbe", PlanFreeSpaceProbe) ||
-      !ExportFunction(env, exports, "checkExtractedDirectory", CheckExtractedDirectory) ||
-      !ExportFunction(env, exports, "crc32", Crc32) ||
-      !ExportFunction(env, exports, "getSupportedDiffVersion", GetSupportedDiffVersion) ||
-      !ExportFunction(env, exports, "prepareRound", FlowPrepareRound) ||
-      !ExportFunction(env, exports, "nextQueryStep", FlowNextQueryStep) ||
-      !ExportFunction(env, exports, "handleResponse", FlowHandleResponse) ||
-      !ExportFunction(env, exports, "configsEquivalent", FlowConfigsEquivalent) ||
-      !ExportFunction(env, exports, "runnableConfig", FlowRunnableConfig) ||
-      !ExportFunction(env, exports, "normalizeConfiguration", FlowNormalizeConfiguration)) {
+  if (!ExportFunction(env, exports, "syncStateWithBinaryVersion", Guarded<SyncStateWithBinaryVersion>) ||
+      !ExportFunction(env, exports, "runStateCore", Guarded<RunStateCore>) ||
+      !ExportFunction(env, exports, "applyArchiveDelta", Guarded<ApplyArchiveDelta>) ||
+      !ExportFunction(env, exports, "cleanupOldEntries", Guarded<CleanupOldEntries>) ||
+      !ExportFunction(env, exports, "sha256HexFileAsync", Guarded<Sha256HexFileAsync>) ||
+      !ExportFunction(env, exports, "sha256HexRawFdAsync", Guarded<Sha256HexRawFdAsync>) ||
+      !ExportFunction(env, exports, "isInstallComplete", Guarded<InstallRecordIsComplete>) ||
+      !ExportFunction(env, exports, "recordedBundleSha256", Guarded<InstallRecordBundleSha256>) ||
+      !ExportFunction(env, exports, "sealInstallRecord", Guarded<SealInstallRecord>) ||
+      !ExportFunction(env, exports, "promoteStaging", Guarded<PromoteStaging>) ||
+      !ExportFunction(env, exports, "checkActivation", Guarded<CheckActivation>) ||
+      !ExportFunction(env, exports, "checkUncompressedSize", Guarded<CheckUncompressedSize>) ||
+      !ExportFunction(env, exports, "planFreeSpaceProbe", Guarded<PlanFreeSpaceProbe>) ||
+      !ExportFunction(env, exports, "checkExtractedDirectory", Guarded<CheckExtractedDirectory>) ||
+      !ExportFunction(env, exports, "crc32", Guarded<Crc32>) ||
+      !ExportFunction(env, exports, "getSupportedDiffVersion", Guarded<GetSupportedDiffVersion>) ||
+      !ExportFunction(env, exports, "prepareRound", Guarded<FlowPrepareRound>) ||
+      !ExportFunction(env, exports, "nextQueryStep", Guarded<FlowNextQueryStep>) ||
+      !ExportFunction(env, exports, "handleResponse", Guarded<FlowHandleResponse>) ||
+      !ExportFunction(env, exports, "configsEquivalent", Guarded<FlowConfigsEquivalent>) ||
+      !ExportFunction(env, exports, "runnableConfig", Guarded<FlowRunnableConfig>) ||
+      !ExportFunction(env, exports, "normalizeConfiguration", Guarded<FlowNormalizeConfiguration>)) {
     return nullptr;
   }
   return exports;
