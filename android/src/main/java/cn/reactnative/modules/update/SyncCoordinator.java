@@ -319,7 +319,9 @@ final class SyncCoordinator {
     }
 
     // The engine's clock: milliseconds on System.nanoTime, offset from this
-    // class's load so every value is positive (0 means "no deadline").
+    // class's load so every value is positive (0 means "no deadline"). The
+    // nanoTime origin is arbitrary, so a hold deadline in nanos may be
+    // negative: only 0 means none on this side too.
     private static final long CLOCK_ORIGIN_NANOS = System.nanoTime() - TimeUnit.SECONDS.toNanos(1);
 
     static double engineMillis(long nanos) {
@@ -355,7 +357,7 @@ final class SyncCoordinator {
             .put("resetGeneration", resetGeneration)
             .put("configGeneration", configGeneration)
             .put("sample", Math.random())
-            .put("deadline", deadlineNanos > 0 ? engineMillis(deadlineNanos) : 0);
+            .put("deadline", deadlineNanos != 0 ? engineMillis(deadlineNanos) : 0);
         String state = null;
         boolean marked = false;
         try {
