@@ -642,3 +642,7 @@ full 超时整体失败）、激活判定（`activate || crashHold || forceActiv
    C++ 异常穿越 NAPI/ObjC 的面，必须先兜住。
 3. 逐端接入（Android → iOS → 鸿蒙），每端的编排器改为"驱动引擎 + 执行命令"的薄适配器，
    删除被取代的手写循环；Android/鸿蒙在 #669（prepareBundle 超时）合入之后基于最新 master 改。
+
+进度：1、2 已合入（#673、#674）。iOS 已接入：`RCTPushyOrchestrator.mm` 的 `runOnce` 驱动引擎，
+命令由 `perform:` / `download:` / `commit:` 执行，宿主取消判定改用 `HostCancellation`；提交败于配置
+变更时由适配器按配置代数回报 `reason: "config_changed"`。
