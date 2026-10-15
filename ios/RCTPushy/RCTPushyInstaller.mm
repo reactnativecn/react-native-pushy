@@ -347,8 +347,9 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
      callback:(void (^)(NSError *error))callback
 {
     // The caller is an RN method or the native round; neither survives an
-    // exception (CODE_AUDIT 4.4). Once the download is registered, failures
-    // settle every waiter through its completion instead.
+    // exception (CODE_AUDIT 4.4). This catch only covers the checks before
+    // the download registers; after that, failures settle every waiter
+    // through its completion instead.
     @try {
         [self fetchUnguarded:type options:options progress:progress callback:callback];
     } @catch (...) {
@@ -403,15 +404,6 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
     void (^deferredStart)(void) = ^{
         [self fetch:type options:options progress:progress callback:callback];
     };
-    PushyDownloadRegistration registration = PushyRegisterDownload(
-        hash, type, deadlineUptime, callback, progress, deferredStart);
-    if (registration != PushyDownloadRegistrationOwner) {
-        RCTLogInfo(
-            @"RCTPushy -- %@ in-flight download for %@",
-            registration == PushyDownloadRegistrationJoined ? @"join" : @"defer",
-            hash);
-        return;
-    }
 
     NSString *zipFilePath = [dir stringByAppendingPathComponent:
         [hash stringByAppendingString:PushyArchiveExtension(type)]];
@@ -443,14 +435,24 @@ static BOOL PushyEnsureDirectoryExists(NSString *path) {
         });
     };
 
-    RCTLogInfo(@"RCTPushy -- download file %@", updateUrl);
-    NSTimeInterval timeoutSeconds = deadlineUptime - PushyMonotonicNow();
-    if (timeoutSeconds <= 0) {
-        completion(deadlineExpired());
+    PushyDownloadRegistration registration = PushyRegisterDownload(
+        hash, type, deadlineUptime, callback, progress, deferredStart);
+    if (registration != PushyDownloadRegistrationOwner) {
+        RCTLogInfo(
+            @"RCTPushy -- %@ in-flight download for %@",
+            registration == PushyDownloadRegistrationJoined ? @"join" : @"defer",
+            hash);
         return;
     }
+
     // Registered: every waiter now settles through `completion`.
     @try {
+        RCTLogInfo(@"RCTPushy -- download file %@", updateUrl);
+        NSTimeInterval timeoutSeconds = deadlineUptime - PushyMonotonicNow();
+        if (timeoutSeconds <= 0) {
+            completion(deadlineExpired());
+            return;
+        }
         [RCTPushyDownloader download:updateUrl
                             savePath:zipFilePath
                      timeoutInterval:timeoutSeconds
