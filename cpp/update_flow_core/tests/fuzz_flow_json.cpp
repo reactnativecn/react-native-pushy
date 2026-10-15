@@ -11,6 +11,7 @@
 #include "../flow_json.h"
 #include "../native_config.h"
 #include "../native_round.h"
+#include "../round_engine.h"
 #include "../update_flow_core.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
@@ -65,6 +66,47 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
       text, "{\"appKey\":\"k\",\"endpoints\":[\"https://a\"]}", env, "{}", 1));
   flowjson::Stringify(
       flowcore::HandleRoundResponse("{\"upToDate\":true}", text, env, text, 1));
+
+  // The round driver: the text as the response every endpoint returns, then
+  // as the binding's event and state. Every round must finish: one step per
+  // request, planned mirror (bounded by the response's node cap) and commit.
+  flowjson::Value engine;
+  flowjson::Value event = flowjson::Value::Object();
+  event.Set("type", flowjson::Value::String("start"));
+  event.Set("config", flowjson::Value::String(
+                          "{\"appKey\":\"k\",\"endpoints\":[\"https://a\"]}"));
+  for (int step = 0;; step++) {
+    if (step > 4 * static_cast<int>(flowjson::kMaxNodes)) {
+      std::abort();
+    }
+    const flowjson::Value result = flowcore::StepRound(engine, event);
+    engine = result.Get("state");
+    if (engine.Get("phase").AsString() == "done") {
+      break;
+    }
+    const std::string type = result.Get("commands")
+                                 .At(result.Get("commands").Size() - 1)
+                                 .Get("type")
+                                 .AsString();
+    event = flowjson::Value::Object();
+    if (type == "collectEnv") {
+      event.Set("type", flowjson::Value::String("env"));
+      event.Set("env", env);
+    } else if (type == "http") {
+      event.Set("type", flowjson::Value::String("http"));
+      event.Set("text", flowjson::Value::String(text));
+    } else if (type == "checkInstalled") {
+      event.Set("type", flowjson::Value::String("installed"));
+    } else if (type == "download") {
+      event.Set("type", flowjson::Value::String("download"));
+      event.Set("code", flowjson::Value::String("DOWNLOAD_FAILED"));
+    } else {
+      event.Set("type", flowjson::Value::String("committed"));
+      event.Set("ok", flowjson::Value::Bool(true));
+    }
+  }
+  flowcore::StepRoundJson(text, "{\"type\":\"committed\",\"ok\":true}");
+  flowcore::StepRoundJson("", text);
 
   // The persisted-config layer reads host/JS-written text: equivalence must
   // be reflexive for every object, and a normalized config must be runnable

@@ -28,7 +28,8 @@ c++ \
   "$ROOT_DIR/cpp/update_flow_core/tests/flow_vectors.json" \
   "$ROOT_DIR/cpp/update_flow_core/tests/config-equivalence-vectors.json" \
   "$ROOT_DIR/cpp/update_flow_core/tests/native-config-vectors.json" \
-  "$ROOT_DIR/cpp/update_flow_core/tests/native-round-vectors.json"
+  "$ROOT_DIR/cpp/update_flow_core/tests/native-round-vectors.json" \
+  "$ROOT_DIR/cpp/update_flow_core/tests/round-engine-vectors.json"
 
 # Opt-in libFuzzer run of the JSON parser + decision pipeline (raw server
 # bytes): FUZZ=1 bun run test:flow-core.

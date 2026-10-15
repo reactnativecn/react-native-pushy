@@ -1,0 +1,2996 @@
+{
+  "description": "The native round driver (cpp/update_flow_core/round_engine.h), shared by the Android, iOS and Harmony orchestrators and replayed by scripts/test-update-flow-core.sh. `rounds`: each step feeds `event` to StepRound with the previous step's state and expects exactly `commands` (compared as JSON, key order ignored). A string \"@name\" anywhere in a round or a host case stands for fixtures[name]. `host`: HostCancellation. `safePath`: IsSafePathComponent. `before` records what a platform did where it disagreed before the engine replaced its hand-written loop. Hand-maintained.",
+  "fixtures": {
+    "config": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\",\"https://b.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+    "config.silent": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[],\"afterDownload\":\"setNeedUpdate\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+    "config.lists": "{\"appKey\":\"key\",\"endpoints\":[\"https://a.example\"],\"queryUrls\":[\"https://l.example/list.json\"],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\"}",
+    "env": {
+      "packageVersion": "1.0.0",
+      "currentVersion": "cur",
+      "uuid": "u-1",
+      "buildTime": "1700000000",
+      "os": "android 34",
+      "bundleHash": "bh"
+    },
+    "env.fresh": {
+      "packageVersion": "1.0.0",
+      "uuid": "u-1",
+      "buildTime": "1700000000",
+      "os": "ios 18.0"
+    },
+    "upToDate": "{\"upToDate\":true}",
+    "v2": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\",\"diff\":\"d.hdiff\",\"pdiff\":\"p.hdiff\",\"full\":\"f.ppk\",\"paths\":[\"https://cdn1.example\",\"https://cdn2.example\"]}",
+    "v2.forceBoot": "{\"update\":true,\"hash\":\"h2\",\"name\":\"v2\",\"full\":\"f.ppk\",\"paths\":[\"https://cdn1.example\"],\"config\":{\"forceBoot\":true}}",
+    "body": "{\"packageVersion\":\"1.0.0\",\"hash\":\"cur\",\"buildTime\":\"1700000000\",\"cInfo\":{\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\",\"os\":\"android 34\",\"uuid\":\"u-1\"},\"diffV\":2,\"bundleHash\":\"bh\"}",
+    "body.fresh": "{\"packageVersion\":\"1.0.0\",\"buildTime\":\"1700000000\",\"cInfo\":{\"rnu\":\"10.0.0\",\"rn\":\"0.80.0\",\"os\":\"ios 18.0\",\"uuid\":\"u-1\"},\"diffV\":2}"
+  },
+  "rounds": [
+    {
+      "name": "no config: skipped, nothing marked",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "skipped",
+              "reason": "not_configured"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "disabled config: skipped",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "{\"appKey\":\"key\",\"disabled\":true}",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "skipped",
+              "reason": "disabled"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "blank appKey: invalid config",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "{\"appKey\":\"  \"}",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "invalid_config"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an env that is not an object: invalid request",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "x",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "invalid_request"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "up to date: commit the response cache only",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@upToDate",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "",
+              "hashInfo": "",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"upToDate\\\":true}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "noUpdate",
+              "reason": "noUpdate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "up to date, then a reset wins the commit",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@upToDate",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "",
+              "hashInfo": "",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"upToDate\\\":true}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "cancelled",
+              "reason": "reset"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a failed endpoint falls back to the next",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://b.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@upToDate",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "",
+              "hashInfo": "",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"upToDate\\\":true}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "noUpdate",
+              "reason": "noUpdate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an invalid response does not count",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "{\"error\":\"x\"}",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://b.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@upToDate",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "",
+              "hashInfo": "",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"upToDate\\\":true}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "noUpdate",
+              "reason": "noUpdate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "every endpoint fails: check_failed, nothing committed",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://b.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "check_failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "endpoints fail, the remote list answers",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config.lists",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://l.example/list.json",
+              "post": false,
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "[\"https://r.example/\"]",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://r.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@upToDate",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "",
+              "hashInfo": "",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"upToDate\\\":true}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[\\\"https://l.example/list.json\\\"],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "noUpdate",
+              "reason": "noUpdate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "download: diff on the first mirror, activation left to JS",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "download with afterDownload setNeedUpdate activates",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config.silent",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": true,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"setNeedUpdate\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "forceBoot activates and marks the version info",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2.forceBoot",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "full",
+              "url": "https://cdn1.example/f.ppk",
+              "hash": "h2",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"forceBootRescue\":true}",
+              "activate": true,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\"],\\\"config\\\":{\\\"forceBoot\\\":true}}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "already installed: commit without downloading",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "mirror retry: DOWNLOAD_FAILED tries the next mirror, PATCH_FAILED the next strategy",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 0,
+            "code": "DOWNLOAD_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn2.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 0,
+            "code": "PATCH_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "pdiff",
+              "url": "https://cdn1.example/p.hdiff",
+              "hash": "h2",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a failure without a code is mirror-retryable",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn2.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "every attempt fails: download_failed, the cache is still committed",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 0,
+            "code": "DOWNLOAD_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn2.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 0,
+            "code": "DOWNLOAD_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "pdiff",
+              "url": "https://cdn1.example/p.hdiff",
+              "hash": "h2",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 0,
+            "code": "PATCH_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "full",
+              "url": "https://cdn1.example/f.ppk",
+              "hash": "h2",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 0,
+            "code": "DOWNLOAD_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "full",
+              "url": "https://cdn2.example/f.ppk",
+              "hash": "h2",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 0,
+            "code": "DOWNLOAD_FAILED"
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "",
+              "hashInfo": "",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "download_failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the incremental budget runs out: pdiff is skipped, full opens its own window",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 1000,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 1000
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 601000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 601000,
+            "timedOut": true
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "full",
+              "url": "https://cdn1.example/f.ppk",
+              "hash": "h2",
+              "deadline": 1201000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 700000
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 700000
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the incremental budget spent by failures: the full window starts when full is reached",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 1000,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 1000
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 601000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 400000,
+            "code": "DOWNLOAD_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn2.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 601000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 601001,
+            "code": "DOWNLOAD_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "full",
+              "url": "https://cdn1.example/f.ppk",
+              "hash": "h2",
+              "deadline": 1201001
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 900000
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 900000
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the full download times out: download_failed",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2.forceBoot",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "full",
+              "url": "https://cdn1.example/f.ppk",
+              "hash": "h2",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 600000,
+            "timedOut": true
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "",
+              "hashInfo": "",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\"],\\\"config\\\":{\\\"forceBoot\\\":true}}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 600000
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "download_failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a reset during the download wins the commit",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "cancelled",
+              "reason": "reset"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the commit itself fails: commit_failed",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": false,
+            "now": 0,
+            "error": true
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "commit_failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "no running version: no diff attempt, no originHash",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env.fresh",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body.fresh",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "pdiff",
+              "url": "https://cdn1.example/p.hdiff",
+              "hash": "h2",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"ios 18.0\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an unsafe hash is an invalid response",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "{\"update\":true,\"hash\":\"../h\",\"full\":\"f.ppk\",\"paths\":[\"https://cdn1.example\"]}",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "invalid_response"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "crash hold: the deadline caps requests and downloads, the version is force-activated and marked",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 8000,
+            "now": 1000,
+            "crashHold": true
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 1000
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 7000,
+              "callTimeoutMs": 7000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 4000
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://b.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 4000,
+              "callTimeoutMs": 4000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 6000,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 6000
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 8000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": false,
+            "now": 7000,
+            "code": "DOWNLOAD_FAILED"
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn2.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 8000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 7900
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\",\"crashRescue\":true}",
+              "activate": true,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 7900
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a crash hold that begins mid-round still force-activates",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0,
+            "crashHold": true
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\",\"crashRescue\":true}",
+              "activate": true,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "the round deadline passes during the query: check_failed",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 5000,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 5000,
+              "callTimeoutMs": 5000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 5000
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "check_failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a deadline already past when the download would start: download_failed",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 5000,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 5000,
+              "callTimeoutMs": 5000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 5000,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 5000
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "",
+              "hashInfo": "",
+              "activate": false,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 5000
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "download_failed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "forceActivate (the launch waits): activation asked, the commit reports it dropped",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0,
+            "forceActivate": true
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@v2",
+            "at": 1700000000.9
+          },
+          "commands": [
+            {
+              "type": "checkInstalled",
+              "hash": "h2"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": false,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "download",
+              "strategy": "diff",
+              "url": "https://cdn1.example/d.hdiff",
+              "hash": "h2",
+              "originHash": "cur",
+              "deadline": 600000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "download",
+            "ok": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "commit",
+              "hash": "h2",
+              "hashInfo": "{\"name\":\"v2\",\"description\":\"notes\",\"metaInfo\":\"m\"}",
+              "activate": true,
+              "cache": "{\"ts\":1700000000,\"body\":\"{\\\"update\\\":true,\\\"hash\\\":\\\"h2\\\",\\\"name\\\":\\\"v2\\\",\\\"description\\\":\\\"notes\\\",\\\"metaInfo\\\":\\\"m\\\",\\\"diff\\\":\\\"d.hdiff\\\",\\\"pdiff\\\":\\\"p.hdiff\\\",\\\"full\\\":\\\"f.ppk\\\",\\\"paths\\\":[\\\"https://cdn1.example\\\",\\\"https://cdn2.example\\\"]}\",\"request\":\"{\\\"packageVersion\\\":\\\"1.0.0\\\",\\\"hash\\\":\\\"cur\\\",\\\"buildTime\\\":\\\"1700000000\\\",\\\"cInfo\\\":{\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\",\\\"os\\\":\\\"android 34\\\",\\\"uuid\\\":\\\"u-1\\\"},\\\"diffV\\\":2,\\\"bundleHash\\\":\\\"bh\\\"}\",\"config\":\"{\\\"appKey\\\":\\\"key\\\",\\\"endpoints\\\":[\\\"https://a.example\\\",\\\"https://b.example\\\"],\\\"queryUrls\\\":[],\\\"afterDownload\\\":\\\"none\\\",\\\"rnu\\\":\\\"10.0.0\\\",\\\"rn\\\":\\\"0.80.0\\\"}\"}",
+              "resetGeneration": 3,
+              "configGeneration": 5
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "committed",
+            "ok": true,
+            "now": 0,
+            "activated": false
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "downloaded",
+              "reason": "",
+              "hash": "h2",
+              "activated": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "an event the phase does not expect: internal_error, later events ignored",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "http",
+              "url": "https://a.example/checkUpdate/key",
+              "post": true,
+              "body": "@body",
+              "timeoutMs": 10000,
+              "callTimeoutMs": 15000
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "installed",
+            "installed": true,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "internal_error"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "http",
+            "now": 0,
+            "text": "@upToDate",
+            "at": 1700000000.9
+          },
+          "commands": []
+        }
+      ]
+    },
+    {
+      "name": "an event without a round: internal_error",
+      "steps": [
+        {
+          "event": {
+            "type": "env",
+            "env": "@env",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "internal_error"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "a new start replaces a finished round",
+      "steps": [
+        {
+          "event": {
+            "type": "start",
+            "config": "@config",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "markIncomplete"
+            },
+            {
+              "type": "collectEnv"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "env",
+            "env": "x",
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "failed",
+              "reason": "invalid_request"
+            }
+          ]
+        },
+        {
+          "event": {
+            "type": "start",
+            "config": "",
+            "resetGeneration": 3,
+            "configGeneration": 5,
+            "sample": 0,
+            "deadline": 0,
+            "now": 0
+          },
+          "commands": [
+            {
+              "type": "finish",
+              "status": "skipped",
+              "reason": "not_configured"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "host": [
+    {
+      "name": "the round's own config, nothing changed",
+      "hostConfig": "@config",
+      "roundConfig": "@config",
+      "storedConfig": "@config",
+      "roundConfigGeneration": 5,
+      "configGeneration": 5,
+      "roundResetGeneration": 3,
+      "resetGeneration": 3,
+      "expected": ""
+    },
+    {
+      "name": "the same config in another serialization is not a change",
+      "hostConfig": "{\"rn\":\"0.80.0\",\"appKey\":\"key\",\"endpoints\":[\"https://a.example/\",\"https://b.example\"],\"queryUrls\":[],\"afterDownload\":\"none\",\"rnu\":\"10.0.0\"}",
+      "roundConfig": "@config",
+      "storedConfig": "@config",
+      "roundConfigGeneration": 5,
+      "configGeneration": 5,
+      "roundResetGeneration": 3,
+      "resetGeneration": 3,
+      "expected": "",
+      "before": {
+        "harmony": "config_changed (string equality)"
+      }
+    },
+    {
+      "name": "the config generation moved",
+      "hostConfig": "@config",
+      "roundConfig": "@config",
+      "storedConfig": "@config",
+      "roundConfigGeneration": 5,
+      "configGeneration": 6,
+      "roundResetGeneration": 3,
+      "resetGeneration": 3,
+      "expected": "config_changed"
+    },
+    {
+      "name": "the round ran with another config",
+      "hostConfig": "@config",
+      "roundConfig": "@config.silent",
+      "storedConfig": "@config",
+      "roundConfigGeneration": 5,
+      "configGeneration": 5,
+      "roundResetGeneration": 3,
+      "resetGeneration": 3,
+      "expected": "config_changed"
+    },
+    {
+      "name": "the stored config changed after the wait",
+      "hostConfig": "@config",
+      "roundConfig": "@config",
+      "storedConfig": "@config.silent",
+      "roundConfigGeneration": 5,
+      "configGeneration": 5,
+      "roundResetGeneration": 3,
+      "resetGeneration": 3,
+      "expected": "config_changed"
+    },
+    {
+      "name": "no config is never equivalent",
+      "hostConfig": "",
+      "roundConfig": "",
+      "storedConfig": "",
+      "roundConfigGeneration": 5,
+      "configGeneration": 5,
+      "roundResetGeneration": 3,
+      "resetGeneration": 3,
+      "expected": "config_changed"
+    },
+    {
+      "name": "a reset since the round started",
+      "hostConfig": "@config",
+      "roundConfig": "@config",
+      "storedConfig": "@config",
+      "roundConfigGeneration": 5,
+      "configGeneration": 5,
+      "roundResetGeneration": 3,
+      "resetGeneration": 4,
+      "expected": "reset"
+    },
+    {
+      "name": "a config change outranks a reset",
+      "hostConfig": "@config",
+      "roundConfig": "@config",
+      "storedConfig": "@config",
+      "roundConfigGeneration": 5,
+      "configGeneration": 6,
+      "roundResetGeneration": 3,
+      "resetGeneration": 4,
+      "expected": "config_changed"
+    }
+  ],
+  "safePath": [
+    {
+      "name": "h2",
+      "expected": true
+    },
+    {
+      "name": "a.b-c_d",
+      "expected": true
+    },
+    {
+      "name": "",
+      "expected": false
+    },
+    {
+      "name": ".",
+      "expected": false
+    },
+    {
+      "name": "..",
+      "expected": false
+    },
+    {
+      "name": "../h",
+      "expected": false
+    },
+    {
+      "name": "a/b",
+      "expected": false
+    },
+    {
+      "name": "a\\b",
+      "expected": false
+    },
+    {
+      "name": "a\u0000b",
+      "expected": false
+    },
+    {
+      "name": "...",
+      "expected": true
+    }
+  ]
+}

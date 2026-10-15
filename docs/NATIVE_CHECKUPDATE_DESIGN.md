@@ -553,3 +553,92 @@ afterDownload)`：本地 silent 策略 或 响应标记 forceBoot 即激活。
 改动不触发 .so 重编。发版 10.52.0 后按 2026-08-12 同一实验复测:markSuccess
 → 落盘标记 → 每次启动 ~230ms 即崩,验证 handler 窗口完成 check+download+
 commit、下次启动进修复版,时序记录回 NATIVE_CHECK_FOLLOWUPS.md。
+
+## 12. 共享轮次引擎（RoundEngine，2026-10）
+
+### 12.1 动机
+
+§10 的纯决策早已下沉到 `cpp/update_flow_core`（`native_round.h` 的 PrepareRound /
+NextQueryStep / HandleRoundResponse，`native_config.h` 的配置门与 C1 等价），由
+`tests/*-vectors.json` 锁定。但把这些步骤串起来的**驱动循环**仍是三份手写：代数采样
+→ 配置门 → 面包屑 → query 循环 → 响应决策 → 已安装判定 → 双预算下载循环 → 原子提交
+→ 结果映射 → 宿主等待后的取消判定。2026-10 的架构审查在这一层逐个人工对照才发现了错误码
+分类、连接超时、prepareBundle 超时、激活前摘要门等漂移；向量只锁住了被调用的纯函数，
+锁不住"怎么调用"。
+
+### 12.2 形态：sans-IO 的 step 函数
+
+`cpp/update_flow_core/round_engine.h`：
+
+```text
+StepRound(state, event) -> { state, commands }
+```
+
+- **纯函数**：不做 IO、不读时钟、不加锁、不起线程。时间由事件带入（`now`，平台单调时钟
+  毫秒），墙钟只在 HTTP 响应事件里带入（`at`，响应到达时刻，供 §10.3 缓存）。
+- **状态是 JSON 值**（与 NextQueryStep 同一风格）：JNI / NAPI 绑定只传文本、不持有句柄，
+  没有生命周期与跨线程问题；iOS 直接用 `flowjson::Value`。绑定入口 `StepRoundJson`
+  解析失败时直接给出 `finish failed/internal_error`，平台不会卡在无命令的状态。
+- **鸿蒙单线程**：每步都是一次毫秒级的同步调用，绝不阻塞；HTTP、下载等重步骤仍由 ArkTS
+  异步执行（下载内部照旧走 napi_async_work）。
+
+事件（均带 `now`，可带粘滞标志 `crashHold` / `forceActivate`）：
+
+| 事件 | 字段 | 说明 |
+| --- | --- | --- |
+| start | config, resetGeneration, configGeneration, sample, deadline | 代数在读配置之前采样；deadline=0 表示无预算 |
+| env | env | 回应 collectEnv（bundleHash 等 IO 在面包屑落盘之后才算） |
+| http | text?, at | text 缺省 = 请求失败 |
+| installed | installed | 回应 checkInstalled |
+| download | ok, code?, timedOut? | timedOut：尝试超出了自己的 deadline |
+| committed | ok, activated?, error? | ok=false：reset 或配置变更赢了；error：提交本身失败（摘要门拒绝、写入抛错） |
+
+命令：
+
+| 命令 | 字段 | 平台职责 |
+| --- | --- | --- |
+| markIncomplete | — | 落盘 §11.4 面包屑；轮次结束（无论如何结束）由适配器清除 |
+| collectEnv | — | 采集本次启动事实，回 env 事件 |
+| http | url, post, body?, timeoutMs, callTimeoutMs | 空闲超时与整次超时都已按预算钳制；https→http 重定向拒绝、响应体上限仍在平台 |
+| checkInstalled | hash | 完整安装（`.pushy-complete`）是否已在磁盘 |
+| download | strategy, url, hash, originHash?, deadline | 下载 + 解压/打补丁；超时由平台取消任务 |
+| commit | hash, hashInfo, activate, cache, resetGeneration, configGeneration | 一把锁内复核两个代数，激活前走 CheckActivation 摘要门；hash 为空 = 只提交缓存 |
+| finish | status, reason, hash?, activated? | 轮次结束；之后的事件被忽略 |
+
+阶段：`env → http(循环) → installed → download(循环) → committed → done`。当前阶段不期待的事件
+直接 `finish failed/internal_error`，适配器的编排错误会立刻暴露，而不是静默挂起。
+
+### 12.3 引擎负责 / 平台保留
+
+引擎负责：配置门（ParseRunnableConfig）、面包屑时机、请求体与 query 遍历、单请求超时
+（空闲 10s、整次 15s，均被预算钳制，预算耗尽不再发请求）、响应决策、hash 路径安全校验、
+已安装短路、双下载预算（diff/pdiff 共享 600s，首个 full 尝试另开 600s，均被预算钳制）、
+镜像重试（IsMirrorRetryableCode：PATCH_FAILED 换策略不换镜像）、超时语义（增量超时换策略，
+full 超时整体失败）、激活判定（`activate || crashHold || forceActivate`）与 crash-hold
+版本信息标记、提交结果到 status/reason/hash/activated 的映射，以及宿主等待后的取消判定
+`HostCancellation`（配置三方 C1 等价且配置代数不变，否则 config_changed；再看 reset 代数）。
+
+平台保留：HTTP 客户端本身、下载与解压管线、持久化与提交的原子性（锁内复核代数、激活摘要门）、
+进程级单轮次（roundStarted CAS）、"JS 已查过"的跳过判定、5s 延迟与零延迟续传、crash-hold 的
+系统钩子与 hold 预算、iOS tvOS purge-restore 的启动阻塞与窗口关闭、Android 的线程与 JNI、
+鸿蒙的异步执行、RN reload。
+
+### 12.4 相对原手写循环的有意对齐
+
+由 `tests/round-engine-vectors.json` 锁定，接入各端时随之生效：
+
+- 宿主取消判定：鸿蒙原用字符串全等比较配置，改为 C1 等价（与 Android/iOS 一致）。
+- 提交带配置代数：iOS 早已在锁内复核；Android/鸿蒙接入时补上（原先只在宿主等待后检查）。
+- HTTP 超时：三端统一为空闲 10s + 整次 15s，并按预算钳制（iOS 原先的信号量兜底会比预算多等 5s）。
+- 下载超时：显式 `timedOut`，不再依赖鸿蒙把超时包装成 DOWNLOAD_FAILED 后由下一次循环看 deadline。
+- 只提交缓存的提交失败统一为 `failed/commit_failed`（Android 原为 internal_error）。
+- `finish.activated` 反映实际激活（iOS purge-restore 窗口关闭会丢弃激活），其余平台未上报时取请求值。
+- crash hold 在轮次中途开始也会强制激活（事件携带粘滞标志）。
+
+### 12.5 分期
+
+1. 引擎 + 轨迹向量 + C++ 测试进 CI（不改平台代码）。
+2. 补 CODE_AUDIT 4.4：鸿蒙 NAPI 回调与 iOS `.mm` 入口的 C++ `catch (...)`——引擎上移扩大了
+   C++ 异常穿越 NAPI/ObjC 的面，必须先兜住。
+3. 逐端接入（Android → iOS → 鸿蒙），每端的编排器改为"驱动引擎 + 执行命令"的薄适配器，
+   删除被取代的手写循环；Android/鸿蒙在 #669（prepareBundle 超时）合入之后基于最新 master 改。

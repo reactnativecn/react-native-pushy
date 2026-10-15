@@ -14,6 +14,7 @@
 #include "../flow_json.h"
 #include "../native_config.h"
 #include "../native_round.h"
+#include "../round_engine.h"
 #include "../update_flow_core.h"
 
 using flowjson::Parse;
@@ -703,6 +704,118 @@ int RunNativeRound(const Value& doc) {
   return failures;
 }
 
+// Replaces every "@name" string with fixtures[name].
+Value WithFixtures(const Value& value, const Value& fixtures) {
+  if (value.IsString() && !value.AsString().empty() &&
+      value.AsString()[0] == '@') {
+    const Value& fixture = fixtures.Get(value.AsString().substr(1));
+    if (fixture.IsUndefined()) {
+      std::fprintf(stderr, "unknown fixture %s\n", value.AsString().c_str());
+    }
+    return fixture;
+  }
+  if (value.IsArray()) {
+    Value out = Value::Array();
+    for (const Value& element : value.elements()) {
+      out.Push(WithFixtures(element, fixtures));
+    }
+    return out;
+  }
+  if (value.IsObject()) {
+    Value out = Value::Object();
+    for (const auto& member : value.members()) {
+      out.Set(member.first, WithFixtures(member.second, fixtures));
+    }
+    return out;
+  }
+  return value;
+}
+
+// The round driver (round_engine.h): every trace in
+// tests/round-engine-vectors.json is fed event by event, each step's
+// commands compared with the expected ones; then the host cancellation and
+// the path component rule. The JSON binding must agree with the Value API.
+int RunRoundEngine(const Value& doc) {
+  int failures = 0;
+  const Value& fixtures = doc.Get("fixtures");
+  const Value& rounds = doc.Get("rounds");
+  const Value& host = doc.Get("host");
+  const Value& safePath = doc.Get("safePath");
+  if (!rounds.IsArray() || rounds.Size() == 0 || !host.IsArray() ||
+      host.Size() == 0 || !safePath.IsArray() || safePath.Size() == 0) {
+    std::fprintf(stderr, "round engine vectors: missing cases\n");
+    return 1;
+  }
+  for (const Value& c : rounds.elements()) {
+    const std::string& name = c.Get("name").AsString();
+    Value state = Value::Undefined();
+    std::string stateJson;
+    size_t index = 0;
+    for (const Value& step : c.Get("steps").elements()) {
+      const Value event = WithFixtures(step.Get("event"), fixtures);
+      const Value expected = WithFixtures(step.Get("commands"), fixtures);
+      const Value result = flowcore::StepRound(state, event);
+      if (!Value::DeepEquals(result.Get("commands"), expected)) {
+        std::fprintf(stderr,
+                     "round \"%s\" step %zu MISMATCH\n  expected: %s\n"
+                     "  actual:   %s\n",
+                     name.c_str(), index, Stringify(expected).c_str(),
+                     Stringify(result.Get("commands")).c_str());
+        failures++;
+      }
+      bool ok = false;
+      const Value viaJson =
+          Parse(flowcore::StepRoundJson(stateJson, Stringify(event)), &ok);
+      if (!ok || Stringify(viaJson) != Stringify(result)) {
+        std::fprintf(stderr, "round \"%s\" step %zu: StepRoundJson differs\n",
+                     name.c_str(), index);
+        failures++;
+      }
+      state = result.Get("state");
+      stateJson = Stringify(state);
+      index++;
+    }
+    if (state.Get("phase").AsString() != "done") {
+      std::fprintf(stderr, "round \"%s\" did not finish\n", name.c_str());
+      failures++;
+    }
+  }
+  for (const Value& raw : host.elements()) {
+    const Value c = WithFixtures(raw, fixtures);
+    const std::string actual = flowcore::HostCancellation(
+        c.Get("hostConfig").AsString(), c.Get("roundConfig").AsString(),
+        c.Get("storedConfig").AsString(),
+        c.Get("roundConfigGeneration").AsNumber(),
+        c.Get("configGeneration").AsNumber(),
+        c.Get("roundResetGeneration").AsNumber(),
+        c.Get("resetGeneration").AsNumber());
+    if (actual != c.Get("expected").AsString()) {
+      std::fprintf(stderr, "host \"%s\" MISMATCH: expected \"%s\", got \"%s\"\n",
+                   c.Get("name").AsString().c_str(),
+                   c.Get("expected").AsString().c_str(), actual.c_str());
+      failures++;
+    }
+  }
+  for (const Value& c : safePath.elements()) {
+    if (flowcore::IsSafePathComponent(c.Get("name").AsString()) !=
+        c.Get("expected").AsBool()) {
+      std::fprintf(stderr, "safePath %s MISMATCH\n",
+                   Stringify(c.Get("name")).c_str());
+      failures++;
+    }
+  }
+  // A binding call that cannot parse its input still ends the round.
+  bool ok = false;
+  const Value broken =
+      Parse(flowcore::StepRoundJson("{", "{\"type\":\"env\"}"), &ok);
+  if (!ok || broken.Get("commands").At(0).Get("reason").AsString() !=
+                 "internal_error") {
+    std::fprintf(stderr, "StepRoundJson: an unparsable state must finish\n");
+    failures++;
+  }
+  return failures;
+}
+
 bool LoadJson(const char* path, Value* doc) {
   std::ifstream file(path);
   if (!file) {
@@ -722,12 +835,13 @@ bool LoadJson(const char* path, Value* doc) {
 }  // namespace
 
 int main(int argc, char* argv[]) {
-  if (argc < 5) {
+  if (argc < 6) {
     std::fprintf(stderr,
                  "usage: %s <flow_vectors.json> "
                  "<config-equivalence-vectors.json> "
                  "<native-config-vectors.json> "
-                 "<native-round-vectors.json>\n",
+                 "<native-round-vectors.json> "
+                 "<round-engine-vectors.json>\n",
                  argv[0]);
     return 2;
   }
@@ -735,9 +849,11 @@ int main(int argc, char* argv[]) {
   Value equivalenceDoc;
   Value nativeConfigDoc;
   Value nativeRoundDoc;
+  Value roundEngineDoc;
   if (!LoadJson(argv[1], &doc) || !LoadJson(argv[2], &equivalenceDoc) ||
       !LoadJson(argv[3], &nativeConfigDoc) ||
-      !LoadJson(argv[4], &nativeRoundDoc)) {
+      !LoadJson(argv[4], &nativeRoundDoc) ||
+      !LoadJson(argv[5], &roundEngineDoc)) {
     return 2;
   }
 
@@ -750,7 +866,8 @@ int main(int argc, char* argv[]) {
                  RunInputCaps() + RunHandleCheckResponse() +
                  RunConfigEquivalence(equivalenceDoc) +
                  RunNativeConfig(nativeConfigDoc) +
-                 RunNativeRound(nativeRoundDoc) + RunTrimAndDeepEquals();
+                 RunNativeRound(nativeRoundDoc) +
+                 RunRoundEngine(roundEngineDoc) + RunTrimAndDeepEquals();
   for (size_t i = 0; i < cases.Size(); i++) {
     const Value& testCase = cases.At(i);
     const std::string& fn = testCase.Get("fn").AsString();
@@ -782,12 +899,14 @@ int main(int argc, char* argv[]) {
   }
   std::printf(
       "all %zu flow vectors, %zu config equivalence vectors, %zu+%zu native "
-      "config vectors, %zu+%zu+%zu native round vectors + parser robustness "
-      "passed\n",
+      "config vectors, %zu+%zu+%zu native round vectors, %zu+%zu+%zu round "
+      "engine vectors + parser robustness passed\n",
       cases.Size(), equivalenceDoc.Get("cases").Size(),
       nativeConfigDoc.Get("runnable").Size(),
       nativeConfigDoc.Get("normalize").Size(),
       nativeRoundDoc.Get("prepare").Size(), nativeRoundDoc.Get("query").Size(),
-      nativeRoundDoc.Get("respond").Size());
+      nativeRoundDoc.Get("respond").Size(),
+      roundEngineDoc.Get("rounds").Size(), roundEngineDoc.Get("host").Size(),
+      roundEngineDoc.Get("safePath").Size());
   return 0;
 }
