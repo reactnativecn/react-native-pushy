@@ -15,9 +15,12 @@ import {
   jniFunctions,
   maxQueryRequests,
   napiFunctions,
+  nativeTexts,
   roundStatuses,
+  servicePresets,
   stateOperations,
   syncStorageKeys,
+  type TextHost,
   vendoredSources,
 } from './contract';
 import { encodeNativeText } from './encode-native-text';
@@ -596,6 +599,64 @@ region(
       }`
   )
 );
+
+// Encoded text registry.
+const textsFor = (host: TextHost) =>
+  nativeTexts
+    .filter(({ hosts }) => hosts.includes(host))
+    .map((text) => ({ ...text, value: text.values?.[host] ?? text.value }));
+const cppStringList = (name: string, values: string[]) => [
+  `inline std::vector<std::string> ${name}() {`,
+  '  return {',
+  ...values.map((value) => `      text::Reveal("${encodeNativeText(value)}"),`),
+  '  };',
+  '}',
+];
+region('cpp/patch_core/native_texts.h', 'texts', [
+  ...textsFor('cpp').flatMap(({ name, value, doc }) => [
+    ...comment(doc),
+    `inline const std::string& ${name}() {`,
+    `  static const std::string value = text::Reveal("${encodeNativeText(value)}");`,
+    '  return value;',
+    '}',
+  ]),
+  "// Pushy's own service addresses, configure()'s defaults.",
+  ...cppStringList('DefaultEndpoints', servicePresets.Pushy.main),
+  ...cppStringList('DefaultQueryUrls', servicePresets.Pushy.queryUrls),
+]);
+region(
+  `${javaDir}/Texts.java`,
+  'texts',
+  textsFor('java').flatMap(({ name, value, doc }) => [
+    ...comment(doc, 4),
+    `static final String ${snake(name)} = reveal("${encodeNativeText(value)}");`,
+  ])
+);
+region(
+  `${ets}/Texts.ts`,
+  'texts',
+  textsFor('arkts').flatMap(({ name, value, doc }) => [
+    ...comment(doc),
+    `export const ${snake(name)}: string = revealText('${encodeNativeText(value)}');`,
+  ])
+);
+// `    key: [...],` on one line when it fits (as biome formats it).
+const jsArray = (key: string, values: string[]) => {
+  const line = `    ${key}: [${values.map((value) => `'${value}'`).join(', ')}],`;
+  return line.length <= 80
+    ? [line]
+    : [`    ${key}: [`, ...values.map((value) => `      '${value}',`), '    ],'];
+};
+region('src/client.ts', 'service-presets', [
+  'const SERVER_PRESETS = {',
+  ...Object.entries(servicePresets).flatMap(([brand, { main, queryUrls }]) => [
+    `  ${brand}: {`,
+    ...jsArray('main', main),
+    ...jsArray('queryUrls', queryUrls),
+    '  },',
+  ]),
+  '};',
+]);
 
 // --- Apply -----------------------------------------------------------------
 

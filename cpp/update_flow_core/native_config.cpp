@@ -4,7 +4,7 @@
 #include <utility>
 #include <vector>
 
-#include "../patch_core/obscured_text.h"
+#include "../patch_core/native_texts.h"
 
 namespace flowcore {
 
@@ -104,30 +104,10 @@ Value ParseObject(const std::string& json) {
   return ok && value.IsObject() ? value : Value::Undefined();
 }
 
-const std::string& PolicyNextLaunch() {
-  static const std::string value =
-      pushy::text::Reveal("2912e0ffab8e6c70323b1dedd3");
-  return value;
-}
-
-// Pushy's own service addresses, encoded by scripts/encode-native-text.ts.
-std::vector<std::string> DefaultEndpoints() {
-  return {
-      pushy::text::Reveal(
-          "3203e0c1bdd1270a372f18f8c2b6de7f4f2607f5b3d5b9817b592947e5cdefbc8a7e"),
-      pushy::text::Reveal(
-          "3203e0c1bdd1270a372f18f8c2b6de7f4f2607f5f0daac9c644a620ae88ca1ad93"),
-  };
-}
-
-// One literal per address: src/__tests__/nativeTextEncoding.test.ts finds
-// them by pattern.
-std::vector<std::string> DefaultQueryUrls() {
-  return {
-      pushy::text::Reveal("3203e0c1bdd1270a253608fcd3fd9362476817f4f0d5a1996342631be3c2a3a9d779552507fdcde8928a6f512f5ce2ccbdc869404d2f1de79daa826d562c0913eec4fa9b7d4426"),
-      pushy::text::Reveal("3203e0c1bdd1270a213b12b7dca09468462e12f3b0d5bd813d482446f4c6a1be8e79552507fdcda68cd06e5c3710e480a4867048483e55e0c2ab8d7d43030d1ce9c3b183214e2601f2f0d5b782601e2719e8ca"),
-  };
-}
+// Stored encoded (native_texts.h), Pushy's service addresses among them.
+using pushy::texts::DefaultEndpoints;
+using pushy::texts::DefaultQueryUrls;
+using pushy::texts::PolicyNextLaunch;
 
 Value StringArray(const std::vector<std::string>& values) {
   Value array = Value::Array();

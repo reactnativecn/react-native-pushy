@@ -3,7 +3,7 @@
 #include <cmath>
 
 #include "../patch_core/error_codes.h"
-#include "../patch_core/obscured_text.h"
+#include "../patch_core/native_texts.h"
 
 namespace flowcore {
 
@@ -11,19 +11,10 @@ using flowjson::Value;
 
 namespace {
 
-// Protocol and policy strings, stored encoded (see obscured_text.h).
-const std::string& FieldAvailable() {
-  static const std::string value = pushy::text::Reveal("2f07f0d0ba8e");
-  return value;
-}
-const std::string& StatusNone() {
-  static const std::string value = pushy::text::Reveal("3418c1c1aa8a7c40");
-  return value;
-}
-const std::string& PolicyNextLaunch() {
-  static const std::string value = pushy::text::Reveal("2912e0ffab8e6c70323b1dedd3");
-  return value;
-}
+// Protocol and policy strings, stored encoded (native_texts.h).
+using pushy::texts::FieldAvailable;
+using pushy::texts::PolicyNextLaunch;
+using pushy::texts::StatusNone;
 
 // The low byte of every UTF-16 code unit of `utf8`, which is exactly what the
 // TS reference hashes (`key.charCodeAt(i) & 0xff` over `key.length` units).

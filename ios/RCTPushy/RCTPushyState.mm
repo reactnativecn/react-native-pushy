@@ -5,6 +5,7 @@
 
 #include <exception>
 #include "../../cpp/patch_core/digest.h"
+#include "../../cpp/patch_core/native_texts.h"
 
 #import <React/RCTConvert.h>
 #import <os/lock.h>
@@ -29,10 +30,10 @@ PUSHY_HIDDEN NSString *const keyUuid = @"REACTNATIVECN_PUSHY_UUID";
 PUSHY_HIDDEN NSString *const keyHashInfo = @"REACTNATIVECN_PUSHY_HASH_";
 PUSHY_HIDDEN NSString *const keyFirstLoadMarked = @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY";
 PUSHY_HIDDEN NSString *const keyRolledBackMarked = @"REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY";
-// Encoded constants (RCTPushyRevealText) are decoded on first use, not by
+// Encoded constants (native_texts.h) are decoded on first use, not by
 // static initializers at image load.
 PUSHY_HIDDEN NSString *KeyPackageUpdatedMarked(void) {
-    static NSString *value = RCTPushyRevealText("0832d5f29aa549710b0939daf88ca058790f3dded7e888b451640d2ec3f69099bb43711523cafa8ea7bb4372132a");
+    static NSString *value = PushyFromStdString(pushy::texts::PackageUpdatedMarkedKey());
     return value;
 }
 // bundleHash cache: "<cacheKey>|<sha256hex>" where cacheKey identifies the

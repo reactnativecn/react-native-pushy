@@ -306,3 +306,109 @@ export const napiFunctions: Record<string, string> = {
   runnableConfig: 'FlowRunnableConfig',
   normalizeConfiguration: 'FlowNormalizeConfiguration',
 };
+
+export type TextHost = 'cpp' | 'java' | 'arkts';
+
+export interface NativeText {
+  /** C++ function name; Java/ArkTS use its SCREAMING_SNAKE. */
+  name: string;
+  value: string;
+  /** cpp covers the shared cores and iOS (cpp/patch_core/native_texts.h). */
+  hosts: TextHost[];
+  /** Per-host values where a platform names the same thing differently. */
+  values?: Partial<Record<TextHost, string>>;
+  doc?: string;
+}
+
+// Plain text with update wording (or a service address) that shipped native
+// code needs: stored encoded (scripts/encode-native-text.ts) so it never
+// appears in the binaries' string tables, and decoded on first use.
+export const nativeTexts: NativeText[] = [
+  {
+    name: 'StatusNone',
+    value: 'noUpdate',
+    hosts: ['cpp', 'arkts'],
+    doc: 'The round status / decision reason when nothing is to be installed.',
+  },
+  {
+    name: 'InfoCrashHold',
+    value: 'crashRescue',
+    hosts: ['cpp', 'java'],
+    doc: 'Version-info flag of a version a crash hold installed (read by JS).',
+  },
+  {
+    name: 'InfoForceBoot',
+    value: 'forceBootRescue',
+    hosts: ['cpp'],
+    doc: 'Version-info flag of a version the server forceBoot-activated.',
+  },
+  { name: 'QueryPath', value: '/checkUpdate/', hosts: ['cpp'] },
+  {
+    name: 'PolicyNextLaunch',
+    value: 'setNeedUpdate',
+    hosts: ['cpp'],
+    doc: 'The afterDownload policy that activates for the next launch.',
+  },
+  { name: 'FieldAvailable', value: 'update', hosts: ['cpp'] },
+  { name: 'PreferencesName', value: 'update', hosts: ['java', 'arkts'] },
+  { name: 'StorageDirName', value: '_update', hosts: ['java', 'arkts'] },
+  {
+    name: 'BundleDeltaEntry',
+    value: 'index.bundlejs.patch',
+    hosts: ['cpp', 'java', 'arkts'],
+    values: { arkts: 'bundle.harmony.js.patch' },
+    doc: 'The bundle patch entry inside a patch archive.',
+  },
+  { name: 'OptionUrlKey', value: 'updateUrl', hosts: ['cpp', 'java'] },
+  { name: 'PpkDeltaSuffix', value: '.ppk.patch', hosts: ['cpp', 'java', 'arkts'] },
+  {
+    name: 'PackageDeltaSuffix',
+    value: '.ipa.patch',
+    hosts: ['cpp', 'java', 'arkts'],
+    values: { java: '.apk.patch', arkts: '.app.patch' },
+    doc: 'Archive suffix of a patch against the installed package.',
+  },
+  {
+    name: 'PackageUpdatedMarkedKey',
+    value: 'REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY',
+    hosts: ['cpp'],
+  },
+  { name: 'LogTag', value: 'react-native-update', hosts: ['cpp', 'java'] },
+  { name: 'LibraryName', value: 'rnpushy', hosts: ['java'] },
+  {
+    name: 'InstallerSessionExtra',
+    value: 'cn.reactnative.modules.update.extra.PACKAGE_INSTALLER_SESSION_ID',
+    hosts: ['java'],
+  },
+  { name: 'ReloadMethod', value: 'reload', hosts: ['java'] },
+  { name: 'DevtoolsRestartEvent', value: 'RELOAD', hosts: ['arkts'] },
+  { name: 'DevtoolsRestartReason', value: 'HotReload2', hosts: ['arkts'] },
+  {
+    name: 'StateResultClass',
+    value: 'cn/reactnative/modules/update/StateCoreResult',
+    hosts: ['cpp'],
+  },
+  {
+    name: 'CopyGroupResultClass',
+    value: 'cn/reactnative/modules/update/CopyGroupResult',
+    hosts: ['cpp'],
+  },
+];
+
+// Default service addresses: the JS client's presets, and Pushy's (the only
+// brand native configure() defaults to) encoded for native code.
+export const servicePresets = {
+  Pushy: {
+    main: ['https://update.react-native.cn/api', 'https://update.reactnative.cn/api'],
+    queryUrls: [
+      'https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json',
+      'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json',
+    ],
+  },
+  Cresc: {
+    main: ['https://api.cresc.dev', 'https://api.cresc.app'],
+    queryUrls: [
+      'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints_cresc.json',
+    ],
+  },
+};

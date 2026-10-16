@@ -112,15 +112,15 @@ public class UpdateContext {
         this.context = context.getApplicationContext();
         this.executor = Threads.single("pushy-download", false);
 
-        this.rootDir = new File(this.context.getFilesDir(), Texts.reveal("0502e4d5af9f6d"));
+        this.rootDir = new File(this.context.getFilesDir(), Texts.STORAGE_DIR_NAME);
 
         if (!rootDir.exists() && !rootDir.mkdirs() && !rootDir.exists()) {
             throw new IllegalStateException("Failed to create storage root dir: " + rootDir);
         }
 
-        this.sp = this.context.getSharedPreferences(Texts.reveal("2f07f0d0ba8e"), Context.MODE_PRIVATE);
+        this.sp = this.context.getSharedPreferences(Texts.PREFERENCES_NAME, Context.MODE_PRIVATE);
         this.checkCacheSp = this.context.getSharedPreferences(
-            Texts.reveal("2f07f0d0ba8e") + "_check", Context.MODE_PRIVATE);
+            Texts.PREFERENCES_NAME + "_check", Context.MODE_PRIVATE);
         this.packageInfo = lookupPackageInfo(this.context);
         this.reactInstanceManager = pendingReactInstanceManager;
 
@@ -387,7 +387,7 @@ public class UpdateContext {
         }
         DownloadTaskParams params = downloadParams(
             DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK, url, hash, listener, deadlineNanos);
-        params.targetFile = new File(rootDir, hash + Texts.reveal("7416e4dae09b69512137"));
+        params.targetFile = new File(rootDir, hash + Texts.PACKAGE_DELTA_SUFFIX);
         params.unzipDirectory = new File(rootDir, hash);
         enqueue(params);
         return params;
@@ -407,7 +407,7 @@ public class UpdateContext {
         DownloadTaskParams params = downloadParams(
             DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK, url, hash, listener, deadlineNanos);
         params.originHash = originHash;
-        params.targetFile = new File(rootDir, originHash + "-" + hash + Texts.reveal("7407e4dae09b69512137"));
+        params.targetFile = new File(rootDir, originHash + "-" + hash + Texts.PPK_DELTA_SUFFIX);
         params.unzipDirectory = new File(rootDir, hash);
         params.originDirectory = new File(rootDir, originHash);
         enqueue(params);

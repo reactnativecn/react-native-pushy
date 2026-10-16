@@ -2,7 +2,7 @@
 
 #include "jni_log.h"
 #include "jni_natives.h"
-#include "../patch_core/obscured_text.h"
+#include "../patch_core/native_texts.h"
 
 #include <string>
 #include <vector>
@@ -105,8 +105,7 @@ bool LookupConstructor(
 }
 
 bool InitStateResultIds(JNIEnv* env) {
-  const std::string name = pushy::text::Reveal(
-      "3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c93a99b63511201f9cd97878c695522");
+  const std::string& name = pushy::texts::StateResultClass();
   StateResultIds ids;
   ids.clazz = FindGlobalClass(env, name);
   if (ids.clazz == nullptr) {
@@ -131,8 +130,7 @@ bool InitStateResultIds(JNIEnv* env) {
 }
 
 bool InitCopyGroupIds(JNIEnv* env) {
-  const std::string name = pushy::text::Reveal(
-      "3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c83b28a6e732301fed897878c695522");
+  const std::string& name = pushy::texts::CopyGroupResultClass();
   CopyGroupIds ids;
   ids.clazz = FindGlobalClass(env, name);
   ids.string_class = FindGlobalClass(env, "java/lang/String");

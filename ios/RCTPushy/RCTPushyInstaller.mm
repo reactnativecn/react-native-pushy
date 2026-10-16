@@ -7,6 +7,7 @@
 #include "../../cpp/patch_core/archive_limits.h"
 #include "../../cpp/patch_core/archive_patch_core.h"
 #include "../../cpp/patch_core/digest.h"
+#include "../../cpp/patch_core/native_texts.h"
 #include "../../cpp/patch_core/error_codes.h"
 #include "../../cpp/patch_core/install_record.h"
 #include "../../cpp/patch_core/patch_core.h"
@@ -17,22 +18,22 @@
 static NSString *const SOURCE_PATCH_NAME = @"__diff.json";
 static NSString *const ERROR_FILE_OPERATION = @"file operation error";
 
-// Protocol strings stored encoded (RCTPushyRevealText) so they do not appear
-// as plain binary strings; decoded on first use.
+// Protocol strings stored encoded (cpp/patch_core/native_texts.h) so they do
+// not appear as plain binary strings; decoded on first use.
 static NSString *BUNDLE_PATCH_NAME(void) {
-    static NSString *value = RCTPushyRevealText("3319f0d4b6c56a502c3b10fcdca0de7d4b3307e9");
+    static NSString *value = PushyFromStdString(pushy::texts::BundleDeltaEntry());
     return value;
 }
 PUSHY_HIDDEN NSString *PushyOptionUrlKey(void) {
-    static NSString *value = RCTPushyRevealText("2f07f0d0ba8e5d572e");
+    static NSString *value = PushyFromStdString(pushy::texts::OptionUrlKey());
     return value;
 }
 static NSString *PushyIpaDeltaSuffix(void) {
-    static NSString *value = RCTPushyRevealText("741ee4d0e09b69512137");
+    static NSString *value = PushyFromStdString(pushy::texts::PackageDeltaSuffix());
     return value;
 }
 static NSString *PushyPpkDeltaSuffix(void) {
-    static NSString *value = RCTPushyRevealText("7407e4dae09b69512137");
+    static NSString *value = PushyFromStdString(pushy::texts::PpkDeltaSuffix());
     return value;
 }
 

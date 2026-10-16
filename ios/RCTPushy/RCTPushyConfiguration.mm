@@ -1,16 +1,7 @@
 #import "RCTPushyConfiguration.h"
 #import "RCTPushyCommon.h"
 #include "../../cpp/patch_core/error_codes.h"
-#include "../../cpp/patch_core/obscured_text.h"
 #include "../../cpp/update_flow_core/native_config.h"
-
-NSString *RCTPushyRevealText(const char *hex) {
-    // The texts are ASCII (scripts/encode-native-text.ts).
-    std::string text = pushy::text::Reveal(hex);
-    return [[NSString alloc] initWithBytes:text.data()
-                                    length:text.size()
-                                  encoding:NSUTF8StringEncoding] ?: @"";
-}
 
 // Validation and defaults are the shared core's (flowcore::NormalizeConfiguration,
 // also used by Android and Harmony); this only bridges the dictionary.

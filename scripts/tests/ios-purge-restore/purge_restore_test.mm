@@ -18,6 +18,7 @@
 #include "cpp/patch_core/error_codes.h"
 #include "cpp/patch_core/digest.h"
 #include "cpp/patch_core/install_record.h"
+#include "cpp/patch_core/native_texts.h"
 #include "cpp/update_flow_core/native_config.h"
 #include "ios/RCTPushy/RCTPushyCommon.h"
 

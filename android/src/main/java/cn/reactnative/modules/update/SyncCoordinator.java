@@ -32,7 +32,7 @@ import org.json.JSONObject;
  */
 final class SyncCoordinator {
     // Version-info flag read by JS (metadata.ts), stored encoded.
-    private static final String INFO_CRASH_HOLD = Texts.reveal("3905f5c2a6b96d56212a19");
+    private static final String INFO_CRASH_HOLD = Texts.INFO_CRASH_HOLD;
 
     // Shared with Harmony. The response cache lives in its own
     // SharedPreferences file (UpdateContext.getNativeCheckCache).

@@ -14,8 +14,9 @@ import { assertWeb, info, log, noop, setDebugLogging } from './utils';
 
 export type { UpdateErrorListener } from './clientReporter';
 
+// Pushy for China users, Cresc for international ones.
+// <generated:service-presets> (scripts/contract.ts; bun scripts/generate-contract.ts)
 const SERVER_PRESETS = {
-  // cn
   Pushy: {
     main: [
       'https://update.react-native.cn/api',
@@ -26,7 +27,6 @@ const SERVER_PRESETS = {
       'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json',
     ],
   },
-  // i18n
   Cresc: {
     main: ['https://api.cresc.dev', 'https://api.cresc.app'],
     queryUrls: [
@@ -34,6 +34,7 @@ const SERVER_PRESETS = {
     ],
   },
 };
+// </generated:service-presets>
 
 const cloneServerConfig = (server: UpdateServerConfig): UpdateServerConfig => ({
   main: dedupeEndpoints([...(server.main || [])]),

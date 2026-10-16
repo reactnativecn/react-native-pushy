@@ -25,7 +25,7 @@ import org.json.JSONTokener;
  */
 public class UpdateModule extends NativePushySpec {
     // Download URL option key, stored encoded.
-    private static final String OPTION_URL = Texts.reveal("2f07f0d0ba8e5d572e");
+    private static final String OPTION_URL = Texts.OPTION_URL_KEY;
 
     private final ReactApplicationContext reactContext;
     private final UpdateContext updateContext;

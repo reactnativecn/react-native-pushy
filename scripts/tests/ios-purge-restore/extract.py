@@ -94,7 +94,7 @@ GLOBALS = [
 HELPERS = [
     # The exception boundary every entry point uses (CODE_AUDIT 4.4).
     'PushyCaughtReason', 'PushyGuard',
-    'KeyPackageUpdatedMarked', 'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString',
+    'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString', 'KeyPackageUpdatedMarked',
     'PushyJsonDictionary', 'PushyJsonString', 'PushyRejectCaught', 'PushyFileQueue',
     'PushySetNullableString', 'PushyHashInfoKey', 'PushyBinaryIdentityValue',
     'PushyStateFromDefaults', 'PushyApplyStateToDefaults', 'PushySwitchVersionLocked',
