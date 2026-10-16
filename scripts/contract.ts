@@ -64,8 +64,10 @@ export const errorCodes: ErrorCode[] = [
     name: 'ResetFailed',
     value: 'RESET_FAILED',
     doc:
-      'resetToPackagedBundle failed (state wipe or cleanup could not run), or the ' +
-      'installed native module predates the method (JS-layer detection).',
+      'resetToPackagedBundle could not persist the reset state, or the installed ' +
+      'native module predates the method (JS-layer detection). Deleting the ' +
+      'downloaded versions afterwards is best-effort on every platform and never ' +
+      'reports this code: the reset is complete once the state is.',
   },
   {
     name: 'InvalidHashInfo',
