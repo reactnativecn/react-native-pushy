@@ -14,11 +14,16 @@ export function revealText(hex: string): string {
 }
 
 // Protocol values, version-info flags and storage names, stored encoded.
+// <generated:texts> (scripts/contract.ts; bun scripts/generate-contract.ts)
+// The round status / decision reason when nothing is to be installed.
 export const STATUS_NONE: string = revealText('3418c1c1aa8a7c40');
-export const STORAGE_DIR_NAME: string = revealText('0502e4d5af9f6d');
 export const PREFERENCES_NAME: string = revealText('2f07f0d0ba8e');
-export const PPK_DELTA_SUFFIX: string = revealText('7407e4dae09b69512137');
-export const APP_DELTA_SUFFIX: string = revealText('7416e4c1e09b69512137');
+export const STORAGE_DIR_NAME: string = revealText('0502e4d5af9f6d');
+// The bundle patch entry inside a patch archive.
 export const BUNDLE_DELTA_ENTRY: string = revealText('3802fad5a28e264d232d11f6d8aade67596914e0ead8b0');
+export const PPK_DELTA_SUFFIX: string = revealText('7407e4dae09b69512137');
+// Archive suffix of a patch against the installed package.
+export const PACKAGE_DELTA_SUFFIX: string = revealText('7416e4c1e09b69512137');
 export const DEVTOOLS_RESTART_EVENT: string = revealText('0832d8fe8faf');
 export const DEVTOOLS_RESTART_REASON: string = revealText('1218e0e3ab876744266d');
+// </generated:texts>

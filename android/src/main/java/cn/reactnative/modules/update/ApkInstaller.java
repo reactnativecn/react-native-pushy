@@ -21,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 final class ApkInstaller {
     private static final String SESSION_ID_EXTRA =
-        Texts.reveal("3919bac3ab8a6b512c3e08f0c0b6de60452311edfbc8f680624b2d1de38da5a58e65557f3ecaeb8ea3b859661f3dc3f98bab48646c042bd0e19ca546681c2939");
+        Texts.INSTALLER_SESSION_EXTRA;
     private static final ConcurrentHashMap<Integer, Promise> pendingPromises =
         new ConcurrentHashMap<Integer, Promise>();
 

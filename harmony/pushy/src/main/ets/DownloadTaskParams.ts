@@ -3,9 +3,11 @@
  */
 export class DownloadTaskParams {
   // 任务类型常量
-  static readonly TASK_TYPE_PATCH_FULL: number = 1; // 全量补丁
-  static readonly TASK_TYPE_PATCH_FROM_APP: number = 2; // 从APP补丁
-  static readonly TASK_TYPE_PATCH_FROM_PPK: number = 3; // 从PPK补丁
+  // <generated:archive-patch-types> (scripts/contract.ts; bun scripts/generate-contract.ts)
+  static readonly TASK_TYPE_PATCH_FULL: number = 1;
+  static readonly TASK_TYPE_PATCH_FROM_APP: number = 2;
+  static readonly TASK_TYPE_PATCH_FROM_PPK: number = 3;
+  // </generated:archive-patch-types>
 
   type: number = DownloadTaskParams.TASK_TYPE_PATCH_FULL; // 任务类型
   url: string = ''; // 下载URL

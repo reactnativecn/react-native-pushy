@@ -237,7 +237,7 @@ final class ReactReloadManager {
         jsBundleLoaderField.setAccessible(true);
         jsBundleLoaderField.set(reactHostDelegate, loader);
 
-        Method reloadMethod = reactHost.getClass().getMethod(Texts.reveal("2812f8deaf8f"), String.class);
+        Method reloadMethod = reactHost.getClass().getMethod(Texts.RELOAD_METHOD, String.class);
         reloadMethod.invoke(reactHost, Texts.LOG_TAG);
     }
 

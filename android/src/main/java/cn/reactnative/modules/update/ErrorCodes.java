@@ -4,11 +4,12 @@ package cn.reactnative.modules.update;
  * Stable, machine-readable error codes used as the promise rejection code so
  * the JS layer and user loggers can aggregate errors across platforms.
  *
- * MUST stay in sync with cpp/patch_core/error_codes.h (the single source of
- * truth) and src/error.ts (UpdateErrorCode). Messages are free-form; only the
- * codes are part of the contract.
+ * The codes of cpp/patch_core/error_codes.h and src/error.ts
+ * (UpdateErrorCode), all generated from scripts/contract.ts. Messages are
+ * free-form; only the codes are part of the contract.
  */
 final class ErrorCodes {
+    // <generated:error-codes> (scripts/contract.ts; bun scripts/generate-contract.ts)
     static final String INVALID_OPTIONS = "INVALID_OPTIONS";
     static final String DOWNLOAD_FAILED = "DOWNLOAD_FAILED";
     // Encoded (see Texts.reveal): the value is "PATCH_FAILED".
@@ -22,6 +23,7 @@ final class ErrorCodes {
     static final String UNSUPPORTED_PLATFORM = "UNSUPPORTED_PLATFORM";
     static final String APK_INSTALL_PERMISSION_REQUIRED = "APK_INSTALL_PERMISSION_REQUIRED";
     static final String APK_INSTALL_FAILED = "APK_INSTALL_FAILED";
+    // </generated:error-codes>
 
     private ErrorCodes() {
     }

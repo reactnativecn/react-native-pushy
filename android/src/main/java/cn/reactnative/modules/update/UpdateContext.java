@@ -57,12 +57,14 @@ public class UpdateContext {
     private String bundleHash;
     private java.util.ArrayList<BundleHashListener> pendingBundleHashListeners =
         new java.util.ArrayList<>();
+    // <generated:state-operations> (scripts/contract.ts; bun scripts/generate-contract.ts)
     private static final int STATE_OP_SWITCH_VERSION = 1;
     private static final int STATE_OP_MARK_SUCCESS = 2;
     private static final int STATE_OP_ROLLBACK = 3;
-    // 4 (clear first time) exists in the state core but has no Android caller.
+    // 4 (ClearFirstTime) has no caller on this side.
     private static final int STATE_OP_CLEAR_ROLLBACK_MARK = 5;
     private static final int STATE_OP_RESOLVE_LAUNCH = 6;
+    // </generated:state-operations>
     static final String KEY_FIRST_LOAD_MARKED = "firstLoadMarked";
     // Bumped by resetToPackagedBundle. The cold-start check runs for minutes
     // and may already hold a decision when the app resets to the packaged
@@ -110,15 +112,15 @@ public class UpdateContext {
         this.context = context.getApplicationContext();
         this.executor = Threads.single("pushy-download", false);
 
-        this.rootDir = new File(this.context.getFilesDir(), Texts.reveal("0502e4d5af9f6d"));
+        this.rootDir = new File(this.context.getFilesDir(), Texts.STORAGE_DIR_NAME);
 
         if (!rootDir.exists() && !rootDir.mkdirs() && !rootDir.exists()) {
             throw new IllegalStateException("Failed to create storage root dir: " + rootDir);
         }
 
-        this.sp = this.context.getSharedPreferences(Texts.reveal("2f07f0d0ba8e"), Context.MODE_PRIVATE);
+        this.sp = this.context.getSharedPreferences(Texts.PREFERENCES_NAME, Context.MODE_PRIVATE);
         this.checkCacheSp = this.context.getSharedPreferences(
-            Texts.reveal("2f07f0d0ba8e") + "_check", Context.MODE_PRIVATE);
+            Texts.PREFERENCES_NAME + "_check", Context.MODE_PRIVATE);
         this.packageInfo = lookupPackageInfo(this.context);
         this.reactInstanceManager = pendingReactInstanceManager;
 
@@ -134,7 +136,7 @@ public class UpdateContext {
             // Execute cleanUp before clearing SharedPreferences to avoid race condition
             cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
             SharedPreferences.Editor editor = this.sp.edit();
-            removeVersionScopedKeys(editor);
+            removeKeys(editor, VersionScopedKeys.clearedOnUpgrade(sp.getAll().keySet()));
             applyState(editor, nextState);
             persistEditor(editor, "sync state with binary version");
             clearNativeCheckCache();
@@ -385,7 +387,7 @@ public class UpdateContext {
         }
         DownloadTaskParams params = downloadParams(
             DownloadTaskParams.TASK_TYPE_PATCH_FROM_APK, url, hash, listener, deadlineNanos);
-        params.targetFile = new File(rootDir, hash + Texts.reveal("7416e4dae09b69512137"));
+        params.targetFile = new File(rootDir, hash + Texts.PACKAGE_DELTA_SUFFIX);
         params.unzipDirectory = new File(rootDir, hash);
         enqueue(params);
         return params;
@@ -405,7 +407,7 @@ public class UpdateContext {
         DownloadTaskParams params = downloadParams(
             DownloadTaskParams.TASK_TYPE_PATCH_FROM_PPK, url, hash, listener, deadlineNanos);
         params.originHash = originHash;
-        params.targetFile = new File(rootDir, originHash + "-" + hash + Texts.reveal("7407e4dae09b69512137"));
+        params.targetFile = new File(rootDir, originHash + "-" + hash + Texts.PPK_DELTA_SUFFIX);
         params.unzipDirectory = new File(rootDir, hash);
         params.originDirectory = new File(rootDir, originHash);
         enqueue(params);
@@ -439,8 +441,8 @@ public class UpdateContext {
     // Not editor.clear(): that also wiped the uuid (re-bucketing every gray
     // release on each app upgrade) and the native config (no crash hold and
     // no cold-start round until JS ran again). See VersionScopedKeys.
-    private void removeVersionScopedKeys(SharedPreferences.Editor editor) {
-        for (String key : VersionScopedKeys.select(sp.getAll().keySet())) {
+    private void removeKeys(SharedPreferences.Editor editor, java.util.List<String> keys) {
+        for (String key : keys) {
             editor.remove(key);
         }
     }
@@ -654,7 +656,7 @@ public class UpdateContext {
             throw new IllegalStateException("Failed to persist state for reset check cache");
         }
         SharedPreferences.Editor editor = sp.edit();
-        removeVersionScopedKeys(editor);
+        removeKeys(editor, VersionScopedKeys.clearedOnReset(sp.getAll().keySet()));
         applyState(editor, resetState);
         persistEditorOrThrow(editor, "reset to packaged bundle");
         ignoreRollback = false;

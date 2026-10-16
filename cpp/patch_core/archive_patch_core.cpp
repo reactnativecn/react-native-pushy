@@ -3,7 +3,7 @@
 #include <unordered_map>
 #include <utility>
 
-#include "obscured_text.h"
+#include "native_texts.h"
 
 namespace pushy {
 namespace archive_patch {
@@ -22,8 +22,7 @@ bool HasEntry(const std::vector<std::string>& entry_names, const std::string& na
 }  // namespace
 
 const std::string& DefaultBundleDeltaEntryName() {
-  static const std::string name = text::Reveal("3319f0d4b6c56a502c3b10fcdca0de7d4b3307e9");
-  return name;
+  return texts::BundleDeltaEntry();
 }
 
 EntryAction ClassifyEntry(

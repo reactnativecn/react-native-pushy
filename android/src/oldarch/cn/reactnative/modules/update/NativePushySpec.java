@@ -31,6 +31,7 @@ public abstract class NativePushySpec extends ReactContextBaseJavaModule {
         return getTypedExportedConstants();
     }
 
+    // <generated:spec-methods> (scripts/contract.ts; bun scripts/generate-contract.ts)
     public abstract void setLocalHashInfo(String hash, String info, Promise promise);
 
     public abstract void getLocalHashInfo(String hash, Promise promise);
@@ -66,4 +67,5 @@ public abstract class NativePushySpec extends ReactContextBaseJavaModule {
     public abstract void addListener(String eventName);
 
     public abstract void removeListeners(double count);
+    // </generated:spec-methods>
 }

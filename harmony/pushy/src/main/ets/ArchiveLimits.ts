@@ -9,11 +9,13 @@ import NativePatchCore from './NativePatchCore';
 
 // 解压资源上限的计数规则(条目数、单条/总解压量、压缩比、保留名、符号链接、
 // 未知长度下载的磁盘探测计划)只在 cpp/patch_core/archive_limits.h 里实现,
-// 三端共用(这里经 NAPI)。下面只镜像本端仍需自己比较的常量,
-// scripts/check-constant-parity.js 断言与头文件一致。
+// 三端共用(这里经 NAPI)。下面只是本端仍需自己比较的常量,与头文件一样
+// 由 scripts/contract.ts 生成。
+// <generated:limits> (scripts/contract.ts; bun scripts/generate-contract.ts)
 export const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 export const MAX_MANIFEST_BYTES = 16 * 1024 * 1024;
 export const FREE_DISK_MARGIN_BYTES = 64 * 1024 * 1024;
+// </generated:limits>
 
 /**
  * 解压前的整包校验(zlib.getOriginalSize 给出的归档解压后总字节数):总解压

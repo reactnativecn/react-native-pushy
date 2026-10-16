@@ -167,6 +167,27 @@ describe('Pushy server config', () => {
     );
   });
 
+  test('errors and invalid-update reports go through the client report', async () => {
+    setupClientMocks();
+    const { client } = await createClient();
+    const report = spyOn(client as any, 'report').mockImplementation(
+      async () => {}
+    );
+
+    (client as any).emitError(new Error('offline'), 'errorChecking');
+    client.reportInvalidUpdateOnce('noArtifact', 'h2');
+
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'errorChecking', message: 'offline' })
+    );
+    expect(report).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'errorUpdate',
+        data: { newVersion: 'h2' },
+      })
+    );
+  });
+
   test('calls afterCheckUpdate with skipped when beforeCheckUpdate returns false', async () => {
     setupClientMocks();
     const beforeCheckUpdate = mock(() => false);

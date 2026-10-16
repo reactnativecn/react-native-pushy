@@ -3,7 +3,7 @@
 
 #include <android/log.h>
 
-#include "../patch_core/obscured_text.h"
+#include "../patch_core/native_texts.h"
 
 // Keep the core internal to whichever binary links it (see podspec Core).
 #pragma GCC visibility push(hidden)
@@ -13,8 +13,7 @@ namespace jni_log {
 
 // Same logcat tag as the Java layer (Texts.LOG_TAG), stored encoded.
 inline const char* Tag() {
-  static const char* const tag =
-      text::RevealStatic("2812f5d2bac6664436360afc9ba680694b3301");
+  static const char* const tag = texts::LogTag().c_str();
   return tag;
 }
 

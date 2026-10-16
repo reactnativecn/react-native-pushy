@@ -5,15 +5,16 @@ package cn.reactnative.modules.update;
  * itself (entry count, sizes, ratios, reserved names, the unknown-length
  * probe plan) is the shared core's (cpp/patch_core/archive_limits.h, over
  * JNI); the constants below are the ones this side still compares against
- * itself, mirrored by hand (scripts/check-constant-parity.js asserts they
- * match the header).
+ * itself, generated from scripts/contract.ts like the header.
  */
 final class ArchiveLimits {
+    // <generated:limits> (scripts/contract.ts; bun scripts/generate-contract.ts)
     static final long MAX_ARCHIVE_BYTES = 512L * 1024 * 1024;
     static final long MAX_TOTAL_UNCOMPRESSED_BYTES = 2048L * 1024 * 1024;
     static final long MAX_ENTRY_BYTES = 512L * 1024 * 1024;
     static final long MAX_MANIFEST_BYTES = 16L * 1024 * 1024;
     static final long FREE_DISK_MARGIN_BYTES = 64L * 1024 * 1024;
+    // </generated:limits>
 
     private ArchiveLimits() {
     }

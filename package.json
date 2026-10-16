@@ -46,7 +46,8 @@
   ],
   "scripts": {
     "prepack": "bun submodule && bun lint",
-    "lint": "biome check src && tsc --noEmit && node scripts/check-harmony-types.js && node scripts/check-native-spec-parity.js && node scripts/check-constant-parity.js && node scripts/check-readme-options.js",
+    "lint": "biome check src && tsc --noEmit && node scripts/check-harmony-types.js && node scripts/check-native-spec-parity.js && bun scripts/generate-contract.ts --check && node scripts/check-readme-options.js",
+    "contract": "bun scripts/generate-contract.ts",
     "lint:harmony": "node scripts/check-harmony-types.js",
     "submodule": "git submodule update --init --recursive",
     "test": "bun test src/__tests__",

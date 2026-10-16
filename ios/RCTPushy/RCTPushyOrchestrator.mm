@@ -1,5 +1,6 @@
 #import "RCTPushyInternal.h"
 #include "../../cpp/patch_core/error_codes.h"
+#include "../../cpp/patch_core/native_texts.h"
 #include "../../cpp/update_flow_core/flow_json.h"
 #include "../../cpp/update_flow_core/native_config.h"
 #include "../../cpp/update_flow_core/round_engine.h"
@@ -19,9 +20,10 @@ static NSString *const keyNativeConfig = @"REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY
 static NSString *const keyNativeCheckIncomplete = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY";
 
 // The crash-hold version-info flag read by JS, stored encoded
-// (RCTPushyRevealText) so it does not appear as a plain binary string.
+// (cpp/patch_core/native_texts.h) so it does not appear as a plain binary
+// string.
 static NSString *PushyInfoCrashHold(void) {
-    static NSString *value = RCTPushyRevealText("3905f5c2a6b96d56212a19");
+    static NSString *value = PushyFromStdString(pushy::texts::InfoCrashHold());
     return value;
 }
 

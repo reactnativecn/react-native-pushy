@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { revealText } from '../../harmony/pushy/src/main/ets/Texts';
+import { nativeTexts, servicePresets } from '../../scripts/contract';
 import {
   decodeNativeText,
   encodeNativeText,
@@ -7,13 +8,14 @@ import {
 import { shippedNativeSources, source, stripComments } from './nativeSources';
 
 // Service addresses and the request path must only appear encoded in shipped
-// native code (see scripts/encode-native-text.ts).
+// native code (see scripts/encode-native-text.ts). They come from the same
+// registry the generated code does (scripts/contract.ts).
 const plainTexts = [
-  '/checkUpdate/',
-  'https://update.react-native.cn/api',
-  'https://update.reactnative.cn/api',
-  'https://gitee.com/sunnylqm/react-native-pushy/raw/master/endpoints.json',
-  'https://cdn.jsdelivr.net/gh/reactnativecn/react-native-update@master/endpoints.json',
+  ...nativeTexts
+    .filter(({ name }) => name === 'QueryPath')
+    .map(({ value }) => value),
+  ...servicePresets.Pushy.main,
+  ...servicePresets.Pushy.queryUrls,
 ];
 
 const paths = [
@@ -26,11 +28,20 @@ const paths = [
 const encodedIn = (text: string) =>
   [
     ...text.matchAll(
-      /\b(?:reveal|RCTPushyRevealText|revealText|RevealStatic|Reveal)\(\s*["']([0-9a-f]+)["']\s*\)/g
+      /\b(?:reveal|revealText|RevealStatic|Reveal)\(\s*["']([0-9a-f]+)["']\s*\)/g
     ),
   ].map((match) => match[1]);
 
+// The text of `code` outside its <generated:NAME> regions.
+const handWritten = (code: string) =>
+  code.replace(/<generated:([\w-]+)>[\s\S]*?<\/generated:\1>/g, '');
+
 describe('native text encoding', () => {
+  test('plain texts are known', () => {
+    expect(plainTexts).toContain('/checkUpdate/');
+    expect(plainTexts.length).toBeGreaterThan(2);
+  });
+
   test('encoding round-trips', () => {
     for (const text of plainTexts) {
       expect(decodeNativeText(encodeNativeText(text))).toBe(text);
@@ -38,9 +49,9 @@ describe('native text encoding', () => {
     }
   });
 
-  // The request path is appended by the shared round core
-  // (cpp/update_flow_core/native_round.cpp); the default service addresses
-  // only live in the shared normalizer (cpp/update_flow_core/native_config.cpp).
+  // The request path and the default service addresses live in the generated
+  // cpp/patch_core/native_texts.h, used by the shared round core and the
+  // shared normalizer.
   test('the request path and the addresses are encoded in cpp/', () => {
     const shared = paths
       .filter((path) => path.startsWith('cpp/'))
@@ -52,6 +63,19 @@ describe('native text encoding', () => {
         found: true,
       });
     }
+  });
+
+  // Encoded text is registered once (scripts/contract.ts) and generated into
+  // native_texts.h / Texts.java / Texts.ts (error codes and the JNI table in
+  // their own generated regions); a hand-written encoded literal would be an
+  // unregistered copy that can drift.
+  test('every encoded literal is generated from the registry', () => {
+    const offenders = paths.flatMap((path) =>
+      encodedIn(stripComments(handWritten(source(path)))).map(
+        (hex) => `${path}: ${decodeNativeText(hex)}`
+      )
+    );
+    expect(offenders).toEqual([]);
   });
 
   test('shipped native code has no plain service addresses or paths', () => {

@@ -8,29 +8,33 @@ import java.util.List;
 import org.junit.Test;
 
 public class VersionScopedKeysTest {
+    private static final List<String> STORED = Arrays.asList(
+        "uuid",
+        "nativeConfig",
+        "bundleHashCache",
+        "packageVersion",
+        "currentVersion",
+        "hash_abc",
+        "hash_def",
+        "firstLoadMarked",
+        "nativeCheckIncomplete",
+        "nativeCheckResp",
+        null
+    );
+
+    // The round breadcrumb survives both: it only decides whether the next
+    // launch resumes the round without the start delay.
+    private static final HashSet<String> VERSION_KEYS = new HashSet<>(Arrays.asList(
+        "hash_abc", "hash_def", "firstLoadMarked", "nativeCheckResp"));
+
     @Test
-    public void dropsVersionKeysAndKeepsInstallKeys() {
-        List<String> doomed = VersionScopedKeys.select(Arrays.asList(
-            "uuid",
-            "nativeConfig",
-            "bundleHashCache",
-            "packageVersion",
-            "currentVersion",
-            "hash_abc",
-            "hash_def",
-            "firstLoadMarked",
-            "nativeCheckIncomplete",
-            "nativeCheckResp",
-            null
-        ));
-        assertEquals(
-            new HashSet<>(Arrays.asList(
-                "hash_abc",
-                "hash_def",
-                "firstLoadMarked",
-                "nativeCheckIncomplete",
-                "nativeCheckResp")),
-            new HashSet<>(doomed));
+    public void resetDropsVersionKeysAndKeepsInstallKeys() {
+        assertEquals(VERSION_KEYS, new HashSet<>(VersionScopedKeys.clearedOnReset(STORED)));
+    }
+
+    @Test
+    public void upgradeDropsVersionKeysAndKeepsInstallKeys() {
+        assertEquals(VERSION_KEYS, new HashSet<>(VersionScopedKeys.clearedOnUpgrade(STORED)));
     }
 
     @Test

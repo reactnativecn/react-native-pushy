@@ -5,6 +5,7 @@
 
 #include <exception>
 #include "../../cpp/patch_core/digest.h"
+#include "../../cpp/patch_core/native_texts.h"
 
 #import <React/RCTConvert.h>
 #import <os/lock.h>
@@ -29,10 +30,10 @@ PUSHY_HIDDEN NSString *const keyUuid = @"REACTNATIVECN_PUSHY_UUID";
 PUSHY_HIDDEN NSString *const keyHashInfo = @"REACTNATIVECN_PUSHY_HASH_";
 PUSHY_HIDDEN NSString *const keyFirstLoadMarked = @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY";
 PUSHY_HIDDEN NSString *const keyRolledBackMarked = @"REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY";
-// Encoded constants (RCTPushyRevealText) are decoded on first use, not by
+// Encoded constants (native_texts.h) are decoded on first use, not by
 // static initializers at image load.
 PUSHY_HIDDEN NSString *KeyPackageUpdatedMarked(void) {
-    static NSString *value = RCTPushyRevealText("0832d5f29aa549710b0939daf88ca058790f3dded7e888b451640d2ec3f69099bb43711523cafa8ea7bb4372132a");
+    static NSString *value = PushyFromStdString(pushy::texts::PackageUpdatedMarkedKey());
     return value;
 }
 // bundleHash cache: "<cacheKey>|<sha256hex>" where cacheKey identifies the
@@ -42,6 +43,43 @@ static NSString *const keyBundleHashCache = @"REACTNATIVECN_PUSHY_BUNDLEHASH_KEY
 // Raw response cache written by the native cold-start check for the JS side
 // to reuse (§10.3), scoped to the request and config that produced it.
 PUSHY_HIDDEN NSString *const keyNativeCheckCache = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY";
+
+// <generated:lifecycle> (scripts/contract.ts; bun scripts/generate-contract.ts)
+// What a reset to the packaged bundle and a binary upgrade delete besides
+// the state fields (scripts/contract.ts storedItems; every other item survives
+// both: the uuid, the native config, the round breadcrumb, the bundle hash
+// cache).
+PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOnReset(void) {
+    return @[keyFirstLoadMarked, KeyPackageUpdatedMarked(), keyNativeCheckCache];
+}
+PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOnReset(void) {
+    return @[keyHashInfo];
+}
+PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOnUpgrade(void) {
+    return @[keyFirstLoadMarked, keyNativeCheckCache];
+}
+PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOnUpgrade(void) {
+    return @[keyHashInfo];
+}
+// </generated:lifecycle>
+
+PUSHY_HIDDEN void PushyRemoveKeys(NSUserDefaults *defaults, NSArray<NSString *> *keys,
+                                  NSArray<NSString *> *prefixes) {
+    for (NSString *key in keys) {
+        [defaults removeObjectForKey:key];
+    }
+    if (prefixes.count == 0) {
+        return;
+    }
+    for (NSString *key in [defaults dictionaryRepresentation].allKeys) {
+        for (NSString *prefix in prefixes) {
+            if ([key hasPrefix:prefix]) {
+                [defaults removeObjectForKey:key];
+                break;
+            }
+        }
+    }
+}
 
 // error def — messages are human-readable; the stable cross-platform codes
 // live in cpp/patch_core/error_codes.h and travel in RCTPushyErrorCodeKey.
