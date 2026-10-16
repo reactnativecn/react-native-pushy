@@ -56,11 +56,34 @@ function nativeConfigsEquivalent(a: string | undefined, b: string | undefined): 
   return NativePatchCore.configsEquivalent(a, b);
 }
 
+// Per-version info key prefix and the first-load marker key.
+const HASH_INFO_PREFIX = 'hash_';
+const FIRST_LOAD_MARKED_KEY = 'firstLoadMarked';
+
+interface ClearedKeys {
+  keys: string[];
+  prefixes: string[];
+}
+
+// <generated:lifecycle> (scripts/contract.ts; bun scripts/generate-contract.ts)
+// What a reset to the packaged bundle and a binary upgrade delete besides
+// the state fields (scripts/contract.ts storedItems; every other item survives
+// both: the uuid, the native config, the round breadcrumb, the bundle hash
+// cache).
+const RESET_CLEARED: ClearedKeys = {
+  keys: [FIRST_LOAD_MARKED_KEY, KEY_RESP_CACHE],
+  prefixes: [HASH_INFO_PREFIX],
+};
+const UPGRADE_CLEARED: ClearedKeys = {
+  keys: [FIRST_LOAD_MARKED_KEY, KEY_RESP_CACHE],
+  prefixes: [HASH_INFO_PREFIX],
+};
+// </generated:lifecycle>
+
 interface PersistOptions {
   removeStaleHash?: boolean;
   cleanUp?: boolean;
   markFirstLoadMarker?: boolean;
-  clearFirstLoadMarker?: boolean;
 }
 
 export class UpdateContext {
@@ -141,7 +164,7 @@ export class UpdateContext {
         ` cv=${snap.currentVersion} lv=${snap.lastVersion}` +
         ` ft=${snap.firstTime} fto=${snap.firstTimeOk}` +
         ` rb=${snap.rolledBackVersion}` +
-        ` flm=${this.readString('firstLoadMarked')}` +
+        ` flm=${this.readString(FIRST_LOAD_MARKED_KEY)}` +
         ` uuidSet=${!!this.readString('uuid')}`,
     );
   }
@@ -372,10 +395,7 @@ export class UpdateContext {
       this.preferences.deleteSync(`hash_${state.staleVersionToDelete}`);
     }
     if (options.markFirstLoadMarker) {
-      this.preferences.putSync('firstLoadMarked', 'true');
-    }
-    if (options.clearFirstLoadMarker) {
-      this.preferences.deleteSync('firstLoadMarked');
+      this.preferences.putSync(FIRST_LOAD_MARKED_KEY, 'true');
     }
     if (options.cleanUp) {
       this.cleanUp();
@@ -499,6 +519,27 @@ export class UpdateContext {
     });
   }
 
+  // Deletes `cleared` from the store (in memory; the caller flushes). A
+  // failed read leaves harmless orphans: none of them affects the state.
+  private removeKeys(cleared: ClearedKeys, event: string): void {
+    for (const key of cleared.keys) {
+      this.preferences.deleteSync(key);
+    }
+    if (cleared.prefixes.length === 0) {
+      return;
+    }
+    try {
+      const all = this.preferences.getAllSync();
+      for (const key of Object.keys(all)) {
+        if (cleared.prefixes.some(prefix => key.startsWith(prefix))) {
+          this.preferences.deleteSync(key);
+        }
+      }
+    } catch (e) {
+      logger.error(TAG, `Failed to clear keys on ${event}: ${getErrorMessage(e)}`);
+    }
+  }
+
   public syncStateWithBinaryVersion(
     packageVersion: string,
     buildTime: string,
@@ -522,10 +563,11 @@ export class UpdateContext {
     );
     UpdateContext.ignoreRollback = false;
     this.cleanUp();
-    // 仅重置状态机字段（currentVersion / lastVersion / firstTime / firstTimeOk /
-    // rolledBackVersion）。不再 clearExisting，避免连带清除 uuid / firstLoadMarked /
-    // hash_* 等与 binary 版本无关的 KV —— 它们在多实例场景下本就脆弱，连带清除会
-    // 让 getConstants() 永远读到空，从而 isFirstTime=false、markSuccess 永不执行。
+    // 旧二进制的版本已不在状态里:删掉它们的元信息、首启标记与响应缓存,与
+    // 各端一致(scripts/contract.ts storedItems)。uuid、原生配置等属于安装本身的
+    // 键保留——不走 clearExisting(那会让 getConstants 读到空的 uuid)。升级后
+    // 没有运行中的热更版本,首启标记不会在本次启动里先写后删。
+    this.removeKeys(UPGRADE_CLEARED, 'binary upgrade');
     this.writeState(nextState, {});
     this.flushInBackground('sync binary version');
   }
@@ -629,25 +671,11 @@ export class UpdateContext {
     this.beginFlushBatch();
     let flushed: Promise<void> = Promise.resolve();
     try {
-      // 删除已下载版本的 hash_* 元信息（不走 clear()：它是异步的，且会连带清掉
-      // uuid —— 见 syncStateWithBinaryVersion 的注释）。读取失败时残留的
-      // hash_* 只是无害孤儿数据，不影响 reset 语义。
-      try {
-        const all = this.preferences.getAllSync();
-        for (const key of Object.keys(all)) {
-          if (key.startsWith('hash_')) {
-            this.preferences.deleteSync(key);
-          }
-        }
-      } catch (e) {
-        logger.error(
-          TAG,
-          `Failed to clear hash info on reset: ${getErrorMessage(e)}`,
-        );
-      }
-      this.writeState(resetState, { clearFirstLoadMarker: true });
-      // 缓存里的响应仍在宣告本次 reset 刚删掉的版本,一并丢弃,避免 JS 侧复用。
-      this.preferences.deleteSync(KEY_RESP_CACHE);
+      // 删除版本元信息、首启标记与响应缓存(缓存仍在宣告本次 reset 刚删掉的
+      // 版本),与各端一致(scripts/contract.ts storedItems)。不走 clear():
+      // 它是异步的,且会连带清掉 uuid。
+      this.removeKeys(RESET_CLEARED, 'reset');
+      this.writeState(resetState, {});
     } finally {
       flushed = this.endFlushBatch('reset to packaged bundle');
     }
@@ -843,10 +871,10 @@ export class UpdateContext {
   }
 
   public consumeFirstLoadMarker(): boolean {
-    const marked = this.readString('firstLoadMarked') === 'true';
+    const marked = this.readString(FIRST_LOAD_MARKED_KEY) === 'true';
     this.trace(`consumeFirstLoadMarker:marked=${marked}`);
     if (marked) {
-      this.preferences.deleteSync('firstLoadMarked');
+      this.preferences.deleteSync(FIRST_LOAD_MARKED_KEY);
       this.flushInBackground('clear first load marker');
     }
     return marked;

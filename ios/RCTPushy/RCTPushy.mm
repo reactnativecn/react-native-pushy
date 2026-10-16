@@ -445,16 +445,11 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
             state.build_time = PushyToStdString([RCTPushy buildTime]);
             PushyApplyStateToDefaults(defaults, state);
 
-            for (NSString *key in [defaults dictionaryRepresentation].allKeys) {
-                if ([key hasPrefix:keyHashInfo]) {
-                    [defaults removeObjectForKey:key];
-                }
-            }
-            [defaults removeObjectForKey:keyFirstLoadMarked];
-            [defaults removeObjectForKey:KeyPackageUpdatedMarked()];
-            // A cached response still advertises the version this reset just
-            // removed; dropping it stops the JS side from reusing that answer.
-            [defaults removeObjectForKey:keyNativeCheckCache];
+            // Version info, the first-load and package-updated markers and the
+            // response cache (it still advertises the versions this reset just
+            // removed), the same on every platform (scripts/contract.ts).
+            PushyRemoveKeys(defaults, PushyKeysClearedOnReset(),
+                            PushyKeyPrefixesClearedOnReset());
             ignoreRollback = false;
         });
     } @catch (...) {

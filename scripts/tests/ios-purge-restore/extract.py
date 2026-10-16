@@ -95,6 +95,9 @@ HELPERS = [
     # The exception boundary every entry point uses (CODE_AUDIT 4.4).
     'PushyCaughtReason', 'PushyGuard',
     'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString', 'KeyPackageUpdatedMarked',
+    # What reset / binary upgrade delete (generated from scripts/contract.ts).
+    'PushyKeysClearedOnReset', 'PushyKeyPrefixesClearedOnReset', 'PushyKeysClearedOnUpgrade',
+    'PushyKeyPrefixesClearedOnUpgrade', 'PushyRemoveKeys',
     'PushyJsonDictionary', 'PushyJsonString', 'PushyRejectCaught', 'PushyFileQueue',
     'PushySetNullableString', 'PushyHashInfoKey', 'PushyBinaryIdentityValue',
     'PushyStateFromDefaults', 'PushyApplyStateToDefaults', 'PushySwitchVersionLocked',

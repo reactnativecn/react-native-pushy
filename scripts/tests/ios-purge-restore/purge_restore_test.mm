@@ -740,6 +740,38 @@ static void RoundCommitVerifies(void) {
     Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
 }
 
+// A binary upgrade drops what belonged to the old binary's versions — their
+// info, the first-load marker, the response cache — and keeps the install's
+// own keys, the same on every platform (scripts/contract.ts storedItems).
+static void BinaryUpgradeClearsVersionKeys(void) {
+    SetUp(Order::ResetFirst);
+    NSString *hashInfoKey = PushyHashInfoKey(@"B");
+    NSString *breadcrumb = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY";
+    PushyWithStateLock(^{
+        pushy::state::State state;
+        state.package_version = "0.9";  // the previous binary
+        state.build_time = "100";
+        state.current_version = "B";
+        PushyApplyStateToDefaults(testDefaults, state);
+        [testDefaults setObject:@"{\"name\":\"B\"}" forKey:hashInfoKey];
+        [testDefaults setObject:@YES forKey:keyFirstLoadMarked];
+        [testDefaults setObject:@"{}" forKey:keyNativeCheckCache];
+        [testDefaults setObject:@YES forKey:breadcrumb];
+    });
+    NSString *rolledBack = nil;
+    NSString *purged = nil;
+    [RCTPushy resolveLaunchBundleURL:&rolledBack purgedVersion:&purged];
+    Expect(State().package_version == "1.0", "the state takes the new binary identity");
+    Expect(State().current_version.empty(), "the old binary's version is not launched");
+    Expect(Value(hashInfoKey) == nil, "an upgrade drops the old versions' info");
+    Expect(Value(keyFirstLoadMarked) == nil, "an upgrade drops the first-load marker");
+    Expect(Value(keyNativeCheckCache) == nil, "an upgrade drops the response cache");
+    Expect([Value(KeyPackageUpdatedMarked()) boolValue], "an upgrade is reported to getConstants");
+    Expect([Value(keyUuid) isEqual:@"installation-uuid"], "an upgrade keeps the install identity");
+    Expect([Value(breadcrumb) boolValue], "an upgrade keeps the round breadcrumb");
+    Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
+}
+
 // CODE_AUDIT 4.4: a C++ exception from the shared cores is caught at the
 // entry point, with its reason, and never leaves the state lock held. The
 // launch falls back to the packaged bundle and still schedules the round.
@@ -812,6 +844,7 @@ int main(int argc, char **argv) {
             {"install_record_activation", InstallRecordActivation},
             {"switch_version_records", SwitchVersionRecords},
             {"round_commit_verifies", RoundCommitVerifies},
+            {"binary_upgrade_clears_version_keys", BinaryUpgradeClearsVersionKeys},
             {"cpp_exception_boundary", CppExceptionBoundary},
         };
         int ran = 0;
