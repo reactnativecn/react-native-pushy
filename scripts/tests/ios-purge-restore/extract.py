@@ -108,6 +108,20 @@ HELPERS = [
     'PushyIsCurrentOrLastLocked', 'PushyVerifyActivation',
     'PushyVerifiedActivationUnchangedLocked',
 ]
+# The round adapter (round_replay_test.mm): RCTPushyOrchestrator's runOnce and
+# the methods that run the engine's commands, compiled in their own host
+# against a scripted engine. Their globals and pure helpers come along; the
+# IO collaborators are the host's.
+ROUND_GLOBALS = [
+    'keyNativeConfig', 'keyNativeCheckIncomplete', 'pushyResetGeneration',
+    'pushyNativeConfigGeneration', 'pushyCrashHoldActive', 'pushyPurgeRestoreActive',
+    'pushyHostRoundResult', 'pushyHostRoundConfig', 'pushyHostRoundGeneration',
+    'pushyHostRoundConfigGeneration', 'pushyUnactivatedHash', 'pushyUnactivatedGeneration',
+    'pushyUnactivatedConfigGeneration',
+]
+ROUND_HELPERS = ['PushyToStdString', 'PushyFromStdString', 'PushyJsonDictionary',
+                 'PushyHostResult', 'PushyWaitSeconds']
+ROUND_METHODS = ['runOnce', 'perform', 'download', 'commit', 'finishRound']
 # Emitted ahead of HELPERS, which use them.
 STRUCTS: list[str] = ['PushyVerifiedActivation']
 # The completion record core switchVersion:error: calls. Copied (with #line)
@@ -115,8 +129,10 @@ STRUCTS: list[str] = ['PushyVerifiedActivation']
 # test script compiles the copy instead of the checkout's file.
 CORE_SOURCE = Path('cpp/patch_core/install_record.cpp')
 CORE_MUTATIONS = ('trust-digestless', 'grandfather-recorded')
+# Mutate the round adapter (round.inc) instead of the purge-restore methods.
+ROUND_MUTATIONS = ('drop-config-changed',)
 MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset',
-             'skip-commit-verify') + CORE_MUTATIONS
+             'skip-commit-verify') + CORE_MUTATIONS + ROUND_MUTATIONS
 
 
 def mutate(text: str, mutation: str) -> str:
@@ -134,6 +150,10 @@ def mutate(text: str, mutation: str) -> str:
         # Grandfather current/last versions even when they carry a record.
         'grandfather-recorded': (
             r'if \(grandfathered && state == Record::State::kAbsent\)', 'if (grandfathered)'),
+        # Report a commit lost to a config change as an ordinary reset.
+        'drop-config-changed': (
+            r'event\.Set\("reason", flowjson::Value::String\("config_changed"\)\);',
+            '(void)configGeneration;'),
         # Activate from the round commit without the activation gate (both
         # the out-of-lock verification and the under-lock re-check).
         'skip-commit-verify': [
@@ -183,7 +203,11 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
     switch_version = locate(sources, method, 'switchVersion')
     core_path = (source_dir / '..' / '..' / CORE_SOURCE).resolve()
     core = core_path.read_text(encoding='utf-8')
-    if mutation in CORE_MUTATIONS:
+    round_methods = [locate(sources, method, name) for name in ROUND_METHODS]
+    if mutation in ROUND_MUTATIONS:
+        round_methods = [(path, line, mutate(text, mutation) if name == 'commit' else text)
+                         for name, (path, line, text) in zip(ROUND_METHODS, round_methods)]
+    elif mutation in CORE_MUTATIONS:
         core = mutate(core, mutation)
     elif mutation == 'skip-reresolve':
         restore = (restore[0], restore[1], mutate(restore[2], mutation))
@@ -199,6 +223,9 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
         # The launch wait helper precedes restorePurgedLaunch so the host's
         # dispatch seams apply to it as well.
         'orchestrator.inc': [locate(sources, function, 'PushyWaitSeconds'), restore, commit],
+        'round_globals.inc': [locate(sources, declaration, name) for name in ROUND_GLOBALS],
+        'round_helpers.inc': [locate(sources, function, name) for name in ROUND_HELPERS],
+        'round.inc': round_methods,
     }
     output.mkdir(parents=True, exist_ok=True)
     for name, snippets in sections.items():
