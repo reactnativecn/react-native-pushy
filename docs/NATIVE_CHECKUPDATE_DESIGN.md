@@ -628,7 +628,7 @@ full 超时整体失败）、激活判定（`activate || crashHold || forceActiv
 由 `tests/round-engine-vectors.json` 锁定，接入各端时随之生效：
 
 - 宿主取消判定：鸿蒙原用字符串全等比较配置，改为 C1 等价（与 Android/iOS 一致）。
-- 提交带配置代数：iOS 早已在锁内复核；Android/鸿蒙接入时补上（原先只在宿主等待后检查）。
+- 提交带配置代数：iOS 在锁内复核两个代数；Android 换配置时同时递增 reset 代数，提交天然被拒，适配器再按配置代数回报 `config_changed`；鸿蒙接入时对齐。
 - HTTP 超时：三端统一为空闲 10s + 整次 15s，并按预算钳制（iOS 原先的信号量兜底会比预算多等 5s）。
 - 下载超时：显式 `timedOut`，不再依赖鸿蒙把超时包装成 DOWNLOAD_FAILED 后由下一次循环看 deadline。
 - 只提交缓存的提交失败统一为 `failed/commit_failed`（Android 原为 internal_error）。
@@ -643,6 +643,14 @@ full 超时整体失败）、激活判定（`activate || crashHold || forceActiv
 3. 逐端接入（Android → iOS → 鸿蒙），每端的编排器改为"驱动引擎 + 执行命令"的薄适配器，
    删除被取代的手写循环；Android/鸿蒙在 #669（prepareBundle 超时）合入之后基于最新 master 改。
 
-进度：1、2 已合入（#673、#674）。iOS 已接入：`RCTPushyOrchestrator.mm` 的 `runOnce` 驱动引擎，
-命令由 `perform:` / `download:` / `commit:` 执行，宿主取消判定改用 `HostCancellation`；提交败于配置
-变更时由适配器按配置代数回报 `reason: "config_changed"`。
+状态（2026-10-15）：全部落地。引擎与向量 #673，异常兜底 #674，iOS #675，Android #676，鸿蒙 #677
+（实际顺序 iOS 在前：Android/鸿蒙要等 #669）。三端编排器现在都是"驱动引擎 + 执行命令"：
+
+| 端 | 驱动入口 | 绑定 | 适配器自身的测试 |
+| --- | --- | --- | --- |
+| iOS | `RCTPushyOrchestrator.mm` `runOnce` → `perform:` / `download:` / `commit:` | 直接调 `flowcore::StepRound` | purge-restore 测试（提交与窗口；`round_replay_test` 以轨迹向量回放适配器）、e2e-ios native |
+| Android | `SyncCoordinator.java` `runOnce` → `perform` / `download` / `commit` | `FlowBridge.stepRound`（JNI，`.so` 已重编） | `SyncRoundReplayTest`（经 `RoundHost` 注入，以轨迹向量回放适配器；JVM 单测仅本地跑）、`SyncCoordinatorTest`（单次下载的回报）、e2e-android |
+| 鸿蒙 | `SyncCoordinator.ts` `runOnce` → `perform` / `download` / `commit` | `NativePatchCore.stepRound`（NAPI，同步） | `harmonySyncRound.test.ts`（以轨迹向量回放适配器）、`nativeHostApi.test.ts` |
+
+三端适配器都在提交被拒时按配置代数回报 `reason: "config_changed"`（Android/鸿蒙换配置时同时递增 reset
+代数，提交天然被拒）。改轮次策略只改 `round_engine.cpp` 并更新向量；适配器只在新增命令或事件字段时才需要动。

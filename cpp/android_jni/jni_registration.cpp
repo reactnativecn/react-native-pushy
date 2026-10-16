@@ -53,6 +53,8 @@ const std::vector<NativeClass>& NativeClasses() {
         reinterpret_cast<void*>(&pushy::jni_natives::FlowPrepareRound)},
        {"3412ecc59f9e6d573b0c08fcc6", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655a2e4af83897d163a12fecae5b4705357351fae",
         reinterpret_cast<void*>(&pushy::jni_natives::FlowNextQueryStep)},
+       {"2903f1c19c847d4b26", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655a2e4af83897d163a12fecae5b4705357351fae",
+        reinterpret_cast<void*>(&pushy::jni_natives::FlowStepRound)},
        {"3216fad5a28e5a40312f13f7c5b6", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43d9d8ae9a68092f0113fd9887857c422602b9d595959c72462c45ebc5afb9d44b412006e2cefd",
         reinterpret_cast<void*>(&pushy::jni_natives::FlowHandleResponse)},
        {"3918fad7a78c7b60332a15efd7bf95635e", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655a2f2",

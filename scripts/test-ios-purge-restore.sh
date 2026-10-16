@@ -42,10 +42,21 @@ build() {
     "$ROOT_DIR"/cpp/update_flow_core/*.cpp \
     "$ROOT_DIR/ios/RCTPushy/RCTPushyConfiguration.mm" \
     -framework Foundation -o "$destination/purge_restore_test"
+  # The round adapter against the engine vectors: the extracted runOnce and
+  # command methods, a scripted engine instead of round_engine.cpp.
+  xcrun clang++ -std=c++17 -fobjc-arc -fblocks $WARNING_FLAGS $SANITIZE_FLAGS \
+    -I"$ROOT_DIR" -I"$destination" \
+    "$TEST_DIR/round_replay_test.mm" "$ROOT_DIR/cpp/update_flow_core/flow_json.cpp" \
+    -framework Foundation -o "$destination/round_replay_test"
 }
+
+VECTORS="$ROOT_DIR/cpp/update_flow_core/tests/round-engine-vectors.json"
 
 build baseline
 "$BUILD_DIR/baseline/purge_restore_test" "$@"
+if [ "$#" -eq 0 ]; then
+  "$BUILD_DIR/baseline/round_replay_test" "$VECTORS"
+fi
 
 # Negative controls execute only generated test copies. Every original bug must
 # fail its named assertion, not merely fail to compile or time out.
@@ -121,4 +132,21 @@ if [ "${VERIFY_REGRESSIONS:-0}" = "1" ]; then
     fi
     echo "[PASS] negative control: $variant is detected by $testcase"
   done
+
+  # The round adapter: a lost commit reported as a reset instead of a config
+  # change must fail that trace.
+  variant=drop-config-changed
+  round="a config change during the download wins the commit"
+  build "$variant"
+  logfile="$BUILD_DIR/$variant/result.log"
+  if "$BUILD_DIR/$variant/round_replay_test" "$VECTORS" "$round" >"$logfile" 2>&1; then
+    echo "ERROR: the round replay did not detect $variant" >&2
+    exit 1
+  fi
+  if ! grep -F "[FAIL] $round: event 5: expected" "$logfile"; then
+    cat "$logfile" >&2
+    echo "ERROR: $variant failed for an unexpected reason" >&2
+    exit 1
+  fi
+  echo "[PASS] negative control: $variant is detected by the round replay"
 fi

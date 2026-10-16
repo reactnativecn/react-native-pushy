@@ -14,6 +14,7 @@
 #include "../update_flow_core/flow_json.h"
 #include "../update_flow_core/native_config.h"
 #include "../update_flow_core/native_round.h"
+#include "../update_flow_core/round_engine.h"
 
 using pushy::jni_util::ToJString;
 
@@ -45,6 +46,22 @@ jstring pushy::jni_natives::FlowPrepareRound(JNIEnv* env, jclass,
         env, flowcore::PrepareRound(
                  pushy::jni_util::JStringToString(env, configJson),
                  ParseObject(env, envJson), randomSample));
+  } catch (...) {
+    return nullptr;
+  }
+}
+
+// The round driver (update_flow_core/round_engine.h). A null state starts
+// fresh; input that does not parse finishes the round inside the core, so
+// only an exception yields null.
+jstring pushy::jni_natives::FlowStepRound(JNIEnv* env, jclass,
+                                          jstring stateJson,
+                                          jstring eventJson) {
+  try {
+    return ToJString(
+        env, flowcore::StepRoundJson(
+                 pushy::jni_util::JStringToString(env, stateJson),
+                 pushy::jni_util::JStringToString(env, eventJson)));
   } catch (...) {
     return nullptr;
   }

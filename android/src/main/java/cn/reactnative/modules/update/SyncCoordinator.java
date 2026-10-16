@@ -43,7 +43,6 @@ final class SyncCoordinator {
     // next launch means the previous process died mid-round (a crash rescue
     // was truncated): that launch resumes immediately instead of waiting 5s.
     static final String KEY_ROUND_INCOMPLETE = "nativeCheckIncomplete";
-    private static final long DOWNLOAD_PHASE_TIMEOUT_SECONDS = 600;
     // The check response (and a remote queryUrls list) is a small JSON
     // document; anything bigger is a broken or hijacked endpoint.
     private static final long MAX_QUERY_RESPONSE_BYTES = 1024 * 1024;
@@ -66,7 +65,7 @@ final class SyncCoordinator {
     // bumps it, and the late activation must lose to that reset exactly like
     // the round itself would. Written generation-first, read hash-first, so
     // a torn read can only see a stricter (newer) generation.
-    private static volatile String unactivatedHash;
+    static volatile String unactivatedHash;
     private static volatile long unactivatedGeneration;
     private static volatile UpdateContext sContext;
     private static volatile String sLaunchRolledBackVersion;
@@ -76,7 +75,7 @@ final class SyncCoordinator {
     private static volatile String sJsCompletedConfig;
     // Published after the launch rollback snapshot, before host calls are accepted.
     private static volatile boolean nativeReady;
-    private static volatile BundlePreparationResult roundResult =
+    static volatile BundlePreparationResult roundResult =
         BundlePreparationResult.of(BundlePreparationResult.FAILED, "check_failed");
     private static volatile long roundGeneration = -1;
     private static volatile long roundConfigGeneration = -1;
@@ -247,7 +246,7 @@ final class SyncCoordinator {
 
     private static void runClaimedRound(long deadlineNanos) {
         try {
-            runOnce(sContext, sLaunchRolledBackVersion, deadlineNanos);
+            runOnce(new DeviceRound(sContext, sLaunchRolledBackVersion), deadlineNanos);
         } catch (Throwable e) {
             Log.w(Texts.LOG_TAG, "native sync failed: " + e);
             roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "internal_error");
@@ -319,53 +318,271 @@ final class SyncCoordinator {
         }
     }
 
-    private static void runOnce(
-        UpdateContext context,
-        String launchRolledBackVersion,
-        long deadlineNanos
-    ) throws JSONException {
-        final long resetGeneration = UpdateContext.getResetGeneration();
+    // The engine's clock: milliseconds on System.nanoTime, offset from this
+    // class's load so every value is positive (0 means "no deadline"). The
+    // nanoTime origin is arbitrary, so a hold deadline in nanos may be
+    // negative: only 0 means none on this side too.
+    private static final long CLOCK_ORIGIN_NANOS = System.nanoTime() - TimeUnit.SECONDS.toNanos(1);
+
+    static double engineMillis(long nanos) {
+        return (nanos - CLOCK_ORIGIN_NANOS) / 1e6;
+    }
+
+    static long engineNanos(double millis) {
+        return CLOCK_ORIGIN_NANOS + (long) (millis * 1e6);
+    }
+
+    /** A monotonic clock in nanoseconds (System.nanoTime on the device). */
+    interface Clock {
+        long nanoTime();
+    }
+
+    /**
+     * Everything a round does besides deciding: the engine step, the clock,
+     * the persisted state and the IO the engine's commands ask for.
+     * DeviceRound is the device's; the JVM tests replay the engine vectors
+     * through a scripted one (SyncRoundReplayTest).
+     */
+    interface RoundHost extends DownloadStarter, Clock {
+        /** FlowBridge.stepRound; null when the engine is unavailable. */
+        @Nullable
+        String stepRound(@Nullable String state, String event);
+
+        /** Whether a crash is being held right now (crashHoldActive). */
+        boolean crashHold();
+
+        long resetGeneration();
+
+        long configGeneration();
+
+        @Nullable
+        String getKv(String key);
+
+        void setKv(String key, String value);
+
+        void removeKv(String key);
+
+        /** This launch as the shared core sees it (native_round.h). */
+        JSONObject launchEnv() throws JSONException;
+
+        /** The response body; null when the request failed. */
+        @Nullable
+        String httpRequest(String url, @Nullable String postBody, long timeoutMs, long callTimeoutMs);
+
+        /** Wall-clock seconds, stamped on each response. */
+        double wallSeconds();
+
+        boolean hasCompletedVersion(String hash);
+
+        /** UpdateContext.commitSyncResult: whether the commit landed. */
+        boolean commitSyncResult(
+            long expectedGeneration, @Nullable String hash, @Nullable String hashInfoJson,
+            boolean activate, String responseCacheJson) throws Exception;
+    }
+
+    /** The round on the device: the JNI engine, UpdateContext, OkHttp. */
+    private static final class DeviceRound implements RoundHost {
+        private final UpdateContext context;
+        private final String launchRolledBackVersion;
+
+        DeviceRound(UpdateContext context, String launchRolledBackVersion) {
+            this.context = context;
+            this.launchRolledBackVersion = launchRolledBackVersion;
+        }
+
+        @Override
+        public long nanoTime() {
+            return System.nanoTime();
+        }
+
+        @Override
+        public String stepRound(String state, String event) {
+            return FlowBridge.stepRound(state, event);
+        }
+
+        @Override
+        public boolean crashHold() {
+            return crashHoldActive;
+        }
+
+        @Override
+        public long resetGeneration() {
+            return UpdateContext.getResetGeneration();
+        }
+
+        @Override
+        public long configGeneration() {
+            return UpdateContext.getNativeConfigGeneration();
+        }
+
+        @Override
+        public String getKv(String key) {
+            return context.getKv(key);
+        }
+
+        @Override
+        public void setKv(String key, String value) {
+            context.setKv(key, value);
+        }
+
+        @Override
+        public void removeKv(String key) {
+            context.removeKv(key);
+        }
+
+        @Override
+        public JSONObject launchEnv() throws JSONException {
+            return SyncCoordinator.launchEnv(context, launchRolledBackVersion);
+        }
+
+        @Override
+        public String httpRequest(String url, String postBody, long timeoutMs, long callTimeoutMs) {
+            return SyncCoordinator.httpRequest(url, postBody, timeoutMs, callTimeoutMs);
+        }
+
+        @Override
+        public double wallSeconds() {
+            return System.currentTimeMillis() / 1000.0;
+        }
+
+        @Override
+        public boolean hasCompletedVersion(String hash) {
+            return context.hasCompletedVersion(hash);
+        }
+
+        @Override
+        public boolean commitSyncResult(
+            long expectedGeneration, String hash, String hashInfoJson,
+            boolean activate, String responseCacheJson) {
+            return context.commitSyncResult(
+                expectedGeneration, hash, hashInfoJson, activate, responseCacheJson);
+        }
+
+        @Override
+        public DownloadTaskParams start(
+            String strategy, String url, String hash, String originHash,
+            UpdateContext.DownloadFileListener listener, long deadlineNanos) {
+            if ("diff".equals(strategy)) {
+                return context.downloadPatchFromPpk(url, hash, originHash, listener, deadlineNanos);
+            }
+            if ("pdiff".equals(strategy)) {
+                return context.downloadPatchFromApk(url, hash, listener, deadlineNanos);
+            }
+            return context.downloadFullUpdate(url, hash, listener, deadlineNanos);
+        }
+    }
+
+    /**
+     * The round itself is the shared engine's (cpp/update_flow_core
+     * round_engine.h, NATIVE_CHECKUPDATE_DESIGN §12): this drives it on the
+     * calling thread and runs what it asks for — the breadcrumb, the launch
+     * facts, the requests, the downloads and the commit.
+     */
+    static void runOnce(RoundHost host, long deadlineNanos) throws JSONException {
+        final long resetGeneration = host.resetGeneration();
+        final long configGeneration = host.configGeneration();
         roundGeneration = resetGeneration;
-        roundConfigGeneration = UpdateContext.getNativeConfigGeneration();
+        roundConfigGeneration = configGeneration;
         roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "check_failed");
-        String configJson = context.getKv(KEY_CONFIG);
+        String configJson = host.getKv(KEY_CONFIG);
         roundConfigJson = configJson;
-        BundlePreparationResult rejection = configRejection(configJson);
-        if (rejection != null) {
-            roundResult = rejection;
-            return;
-        }
-        // Keep the existing interrupted-round breadcrumb and reset generation.
+
+        JSONObject event = new JSONObject()
+            .put("type", "start")
+            .put("config", configJson == null ? "" : configJson)
+            .put("resetGeneration", resetGeneration)
+            .put("configGeneration", configGeneration)
+            .put("sample", Math.random())
+            .put("deadline", deadlineNanos != 0 ? engineMillis(deadlineNanos) : 0);
+        String state = null;
+        boolean marked = false;
         try {
-            context.setKv(KEY_ROUND_INCOMPLETE, "1");
-        } catch (IllegalStateException ignored) {
-        }
-        try {
-            runConfiguredRound(
-                context, launchRolledBackVersion, deadlineNanos, resetGeneration, configJson);
+            while (true) {
+                event.put("now", engineMillis(host.nanoTime()))
+                    .put("crashHold", host.crashHold());
+                String step = host.stepRound(state, event.toString());
+                if (step == null) {
+                    roundResult = BundlePreparationResult.of(
+                        BundlePreparationResult.FAILED, "internal_error");
+                    return;
+                }
+                JSONObject result = new JSONObject(step);
+                state = result.getJSONObject("state").toString();
+                JSONArray commands = result.getJSONArray("commands");
+                event = new JSONObject();
+                for (int i = 0; i < commands.length(); i++) {
+                    JSONObject command = commands.getJSONObject(i);
+                    String type = command.getString("type");
+                    if ("markIncomplete".equals(type)) {
+                        marked = true;
+                        try {
+                            host.setKv(KEY_ROUND_INCOMPLETE, "1");
+                        } catch (IllegalStateException ignored) {
+                        }
+                    } else if ("finish".equals(type)) {
+                        finishRound(command, resetGeneration);
+                        return;
+                    } else {
+                        event = perform(host, command, configGeneration);
+                    }
+                }
+            }
         } finally {
             // A committed round already cleared the breadcrumb in its own
             // commit (UpdateContext.commitSyncResult); only rounds that ended
             // without committing need the extra write.
-            try {
-                if (context.getKv(KEY_ROUND_INCOMPLETE) != null) {
-                    context.removeKv(KEY_ROUND_INCOMPLETE);
+            if (marked) {
+                try {
+                    if (host.getKv(KEY_ROUND_INCOMPLETE) != null) {
+                        host.removeKv(KEY_ROUND_INCOMPLETE);
+                    }
+                } catch (IllegalStateException ignored) {
                 }
-            } catch (IllegalStateException ignored) {
             }
         }
     }
 
-    private static void runConfiguredRound(
-        UpdateContext context,
-        String launchRolledBackVersion,
-        long deadlineNanos,
-        long resetGeneration,
-        String configJson
-    ) throws JSONException {
+    /** Runs one engine command and returns the event that answers it. */
+    private static JSONObject perform(RoundHost host, JSONObject command, long configGeneration)
+        throws JSONException {
+        String type = command.getString("type");
+        switch (type) {
+            case "collectEnv":
+                return new JSONObject()
+                    .put("type", "env")
+                    .put("env", host.launchEnv());
+            case "http": {
+                boolean post = command.optBoolean("post");
+                String text = host.httpRequest(
+                    command.getString("url"),
+                    post ? command.getString("body") : null,
+                    (long) command.getDouble("timeoutMs"),
+                    (long) command.getDouble("callTimeoutMs"));
+                JSONObject event = new JSONObject().put("type", "http");
+                if (text != null) {
+                    event.put("text", text).put("at", host.wallSeconds());
+                }
+                return event;
+            }
+            case "checkInstalled":
+                return new JSONObject()
+                    .put("type", "installed")
+                    .put("installed", host.hasCompletedVersion(command.getString("hash")));
+            case "download":
+                return download(command, host, host);
+            case "commit":
+                return commit(host, command, configGeneration);
+            default:
+                // Unknown to this adapter: the engine finishes the round.
+                return new JSONObject().put("type", type);
+        }
+    }
+
+    // This launch as the shared core sees it (native_round.h). Absent values
+    // (null) are left out.
+    private static JSONObject launchEnv(UpdateContext context, String launchRolledBackVersion)
+        throws JSONException {
         String currentVersion = context.getCurrentVersion();
-        // This launch as the shared core sees it (native_round.h). Absent
-        // values (null) are left out.
         JSONObject env = new JSONObject();
         env.put("packageVersion", context.getPackageVersion());
         // The JS constant's form, so JS can reuse the response cache.
@@ -381,111 +598,57 @@ final class SyncCoordinator {
         // same value so this request can be fingerprinted against the JS one.
         env.put("os", "android " + Build.VERSION.SDK_INT);
         env.put("bundleHash", context.computeBundleHash());
-        String envJson = env.toString();
+        return env;
+    }
 
-        String preparedJson = FlowBridge.prepareRound(configJson, envJson, Math.random());
-        if (preparedJson == null) {
-            roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_request");
-            return;
-        }
-        JSONObject prepared = new JSONObject(preparedJson);
-        String body = prepared.getString("body");
-        String responseText =
-            runQueryRequest(prepared.getJSONObject("query").toString(), body, deadlineNanos);
-        if (responseText == null) {
-            Log.i(Texts.LOG_TAG,
-                "native sync: no endpoint reachable, giving up until next launch");
-            return;
-        }
-        // Cache freshness is anchored to when the server response arrived,
-        // not to when a potentially long download/patch/activation finished.
-        String decisionJson = FlowBridge.handleResponse(
-            responseText, configJson, envJson, body, System.currentTimeMillis() / 1000);
-        if (decisionJson == null) {
-            roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_response");
-            return;
-        }
-        JSONObject decision = new JSONObject(decisionJson);
-        // Built once; every commit below caches it for JS.
-        final String responseCacheJson = decision.getString("cache");
-        if (!"download".equals(decision.optString("action"))) {
-            boolean committed = context.commitSyncResult(
-                resetGeneration, null, null, false, responseCacheJson);
-            roundResult = committed
-                ? BundlePreparationResult.of(BundlePreparationResult.NO_UPDATE, decision.optString("reason"))
-                : BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "reset");
-            Log.i(Texts.LOG_TAG,
-                "native sync: nothing to do (" + decision.optString("reason") + ")");
-            return;
-        }
-        String hash = decision.optString("hash", "");
-        if (!UpdateFileUtils.isSafePathComponent(hash)) {
-            roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "invalid_response");
-            return;
-        }
-
-        boolean downloaded = context.hasCompletedVersion(hash);
-        if (!downloaded) {
-            downloaded = performAttempts(
-                decision.optJSONArray("attempts"), deadlineNanos,
-                downloadStarter(context, hash, currentVersion));
-        }
-        if (!downloaded) {
-            // The native attempt has finished, so JS may safely reuse the
-            // response and retry through its own strategy chain.
-            boolean committed = context.commitSyncResult(
-                resetGeneration, null, null, false, responseCacheJson);
-            roundResult = BundlePreparationResult.of(
-                committed ? BundlePreparationResult.FAILED : BundlePreparationResult.CANCELLED,
-                committed ? "download_failed" : "reset");
-            return;
-        }
-
-        // Version info (mirroring the JS side's setLocalHashInfo, the
-        // forceBoot rescue marked by the core), the activation and the
-        // response cache all land in one atomic commit — see
-        // UpdateContext.commitSyncResult.
-        JSONObject hashInfo = decision.getJSONObject("hashInfo");
-        if (crashHoldActive) {
-            hashInfo.put(INFO_CRASH_HOLD, true);
-        }
-        String hashInfoJson = hashInfo.toString();
-        // Silent strategies or a server-marked forceBoot version (per-version
-        // remote override — the brick rescue) activate for the next launch;
-        // otherwise activation stays with the JS side. Unless a crash is
-        // being held: JS is dead, deferring to it would leave the fix on
-        // disk forever (§11.3).
-        boolean activate = decision.optBoolean("activate", false) || crashHoldActive;
-        boolean committed;
+    // Version info, the activation and the response cache land in one atomic
+    // commit (UpdateContext.commitSyncResult). A config change bumps the
+    // reset generation too, so the commit refuses either; the config
+    // generation tells the two apart.
+    private static JSONObject commit(RoundHost host, JSONObject command, long configGeneration)
+        throws JSONException {
+        String hash = command.getString("hash");
+        String hashInfo = command.getString("hashInfo");
+        JSONObject event = new JSONObject().put("type", "committed");
         try {
-            committed = context.commitSyncResult(
-                resetGeneration,
-                hash,
-                hashInfoJson,
-                activate,
-                responseCacheJson);
+            boolean committed = host.commitSyncResult(
+                (long) command.getDouble("resetGeneration"),
+                hash.isEmpty() ? null : hash,
+                hashInfo.isEmpty() ? null : hashInfo,
+                command.getBoolean("activate"),
+                command.getString("cache"));
+            event.put("ok", committed);
+            if (!committed && host.configGeneration() != configGeneration) {
+                event.put("reason", "config_changed");
+            }
         } catch (Exception e) {
             Log.w(Texts.LOG_TAG, "native sync: commit failed: " + e);
-            roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "commit_failed");
+            event.put("error", true);
+        }
+        return event;
+    }
+
+    private static void finishRound(JSONObject finish, long resetGeneration) {
+        String status = finish.optString("status");
+        String reason = finish.optString("reason");
+        if (!BundlePreparationResult.DOWNLOADED.equals(status)) {
+            Log.i(Texts.LOG_TAG, "native sync: " + status + " (" + reason + ")");
+            roundResult = BundlePreparationResult.of(status, reason);
             return;
         }
-        if (!committed) {
-            Log.i(Texts.LOG_TAG, "native sync: reset during round, dropping result");
-        } else if (activate) {
+        String hash = finish.optString("hash");
+        boolean activated = finish.optBoolean("activated");
+        if (activated) {
             unactivatedHash = null;
-            Log.i(Texts.LOG_TAG,
-                "native sync: downloaded " + hash + " and set for next launch");
+            Log.i(Texts.LOG_TAG, "native sync: downloaded " + hash + " and set for next launch");
         } else {
             // Remembered so a crash later in this process can still activate
             // it (activatePendingVersion) — JS never will.
             unactivatedGeneration = resetGeneration;
             unactivatedHash = hash;
-            Log.i(Texts.LOG_TAG,
-                "native sync: downloaded " + hash + ", activation left to JS");
+            Log.i(Texts.LOG_TAG, "native sync: downloaded " + hash + ", activation left to JS");
         }
-        roundResult = committed
-            ? BundlePreparationResult.downloaded(hash, activate)
-            : BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "reset");
+        roundResult = BundlePreparationResult.downloaded(hash, activated);
     }
 
     private static final OkHttpClient httpClient = HttpClients.base().newBuilder()
@@ -494,7 +657,10 @@ final class SyncCoordinator {
         .callTimeout(15, TimeUnit.SECONDS)
         .build();
 
-    private static String httpRequest(String url, String postBody, long deadlineNanos) {
+    // The engine's per-request bounds, already capped by the round deadline.
+    private static String httpRequest(
+        String url, String postBody, long timeoutMs, long callTimeoutMs
+    ) {
         try {
             Request.Builder builder =
                 new Request.Builder().url(url).header("Accept", "application/json");
@@ -502,9 +668,11 @@ final class SyncCoordinator {
                 builder.post(RequestBody.create(
                     postBody, MediaType.parse("application/json; charset=utf-8")));
             }
-            // Crash-rescue budget: never let a single request outlive the
-            // handler's hold window.
-            OkHttpClient client = HttpClients.withDeadline(httpClient, deadlineNanos);
+            OkHttpClient client = httpClient.newBuilder()
+                .connectTimeout(Math.max(1, timeoutMs), TimeUnit.MILLISECONDS)
+                .readTimeout(Math.max(1, timeoutMs), TimeUnit.MILLISECONDS)
+                .callTimeout(Math.max(1, callTimeoutMs), TimeUnit.MILLISECONDS)
+                .build();
             try (Response response = client.newCall(builder.build()).execute()) {
                 // Same rule as the artifact download: an https endpoint that
                 // redirects to plaintext http is a failed endpoint.
@@ -546,167 +714,70 @@ final class SyncCoordinator {
         return source.readString(charset == null ? StandardCharsets.UTF_8 : charset);
     }
 
-    /**
-     * Sequential fallback over the endpoints (§5.1), one request at a time
-     * with its own timeout, as the shared core walks it
-     * (FlowBridge.nextQueryStep: order, list discovery, https-only remote
-     * bases, budget, response validity). No hedged race on purpose — this
-     * path is latency-insensitive.
-     */
-    @Nullable
-    private static String runQueryRequest(String state, String body, long deadlineNanos)
-        throws JSONException {
-        String text = null;
-        while (true) {
-            state = FlowBridge.nextQueryStep(state, text);
-            if (state == null) {
-                return null;
-            }
-            JSONObject step = new JSONObject(state);
-            if (step.optBoolean("found")) {
-                return text;
-            }
-            String url = step.optString("url", "");
-            if (url.isEmpty()) {
-                return null;
-            }
-            text = httpRequest(url, step.optBoolean("post") ? body : null, deadlineNanos);
-        }
-    }
-
-    private static long capToHoldBudget(long phaseDeadlineNanos, long holdDeadlineNanos) {
-        if (holdDeadlineNanos <= 0) {
-            return phaseDeadlineNanos;
-        }
-        return Math.min(phaseDeadlineNanos, holdDeadlineNanos);
-    }
-
     /** Queues one download attempt; null when it was rejected up front (the listener was told). */
     interface DownloadStarter {
         @Nullable
         DownloadTaskParams start(
-            String type, String url, UpdateContext.DownloadFileListener listener, long deadlineNanos);
-    }
-
-    private static DownloadStarter downloadStarter(
-        final UpdateContext context, final String hash, final String originHash
-    ) {
-        return (type, url, listener, deadlineNanos) -> {
-            if ("diff".equals(type)) {
-                return context.downloadPatchFromPpk(url, hash, originHash, listener, deadlineNanos);
-            }
-            if ("pdiff".equals(type)) {
-                return context.downloadPatchFromApk(url, hash, listener, deadlineNanos);
-            }
-            return context.downloadFullUpdate(url, hash, listener, deadlineNanos);
-        };
+            String strategy, String url, String hash, @Nullable String originHash,
+            UpdateContext.DownloadFileListener listener, long deadlineNanos);
     }
 
     /**
-     * Strategies in the core's order (diff, pdiff, full), each over its
-     * mirrors, already planned for this device (FlowBridge.handleResponse:
-     * no diff without a running version, no cleartext URL under an
-     * https-only config).
+     * One download attempt the engine asked for, waited on up to its
+     * deadline: {"type": "download", ok, code?, timedOut?}.
      */
-    static boolean performAttempts(
-        @Nullable JSONArray attempts, long holdDeadlineNanos, DownloadStarter starter
-    ) {
-        if (attempts == null) {
-            return false;
-        }
-        final long incrementalDeadlineNanos = capToHoldBudget(
-            System.nanoTime() + TimeUnit.SECONDS.toNanos(DOWNLOAD_PHASE_TIMEOUT_SECONDS),
-            holdDeadlineNanos);
-        long fullDeadlineNanos = 0;
-        for (int i = 0; i < attempts.length(); i++) {
-            JSONObject attempt = attempts.optJSONObject(i);
-            if (attempt == null) {
-                continue;
-            }
-            String type = attempt.optString("type");
-            final boolean isFullAttempt = !"diff".equals(type) && !"pdiff".equals(type);
-            if (isFullAttempt && fullDeadlineNanos == 0) {
-                // Incremental failures must not consume the last-resort full
-                // download's budget. Each phase gets one bounded 10min window.
-                fullDeadlineNanos = capToHoldBudget(
-                    System.nanoTime()
-                        + TimeUnit.SECONDS.toNanos(DOWNLOAD_PHASE_TIMEOUT_SECONDS),
-                    holdDeadlineNanos);
-            }
-            final long deadlineNanos = isFullAttempt
-                ? fullDeadlineNanos : incrementalDeadlineNanos;
-            JSONArray urls = attempt.optJSONArray("urls");
-            if (urls == null) {
-                continue;
-            }
-            for (int j = 0; j < urls.length(); j++) {
-                String url = urls.optString(j, "");
-                // Check before enqueueing: once the phase budget is gone we
-                // must not launch an orphan download that outlives the round.
-                long remainingNanos = deadlineNanos - System.nanoTime();
-                if (remainingNanos <= 0) {
-                    if (isFullAttempt) {
-                        return false;
-                    }
-                    break;
-                }
-                final CountDownLatch latch = new CountDownLatch(1);
-                final AtomicBoolean succeeded = new AtomicBoolean(false);
-                final AtomicReference<Throwable> failure = new AtomicReference<>();
-                final String attemptType = type;
-                UpdateContext.DownloadFileListener listener =
-                    new UpdateContext.DownloadFileListener() {
-                        @Override
-                        public void onDownloadCompleted(DownloadTaskParams params) {
-                            succeeded.set(true);
-                            latch.countDown();
-                        }
+    static JSONObject download(JSONObject command, DownloadStarter starter) throws JSONException {
+        return download(command, starter, System::nanoTime);
+    }
 
-                        @Override
-                        public void onDownloadFailed(Throwable error) {
-                            Log.i(Texts.LOG_TAG, "native sync: " + attemptType
-                                + " attempt failed: " + error);
-                            failure.set(error);
-                            latch.countDown();
-                        }
-                    };
-                DownloadTaskParams task = starter.start(type, url, listener, deadlineNanos);
-                try {
-                    if (!latch.await(remainingNanos, TimeUnit.NANOSECONDS)) {
-                        Log.w(Texts.LOG_TAG,
-                            "native sync: download phase timed out during " + type);
-                        // The task shares one download thread with the next
-                        // attempt: cancel its transfer (or keep it from
-                        // starting) instead of queueing behind it
-                        // (CODE_AUDIT 2.12).
-                        if (task != null) {
-                            task.cancel();
-                        }
-                        if (isFullAttempt) {
-                            return false;
-                        }
-                        break;
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    if (task != null) {
-                        task.cancel();
-                    }
-                    return false;
-                }
-                if (succeeded.get()) {
-                    return true;
-                }
-                Throwable error = failure.get();
-                if (error != null
-                    && !ErrorCodes.isMirrorRetryable(ErrorCodes.forDownloadFailure(error))) {
-                    // The bytes arrived but could not be applied: every
-                    // mirror serves the same artifact, so move on to the
-                    // next strategy instead of downloading it again.
-                    break;
-                }
+    static JSONObject download(JSONObject command, DownloadStarter starter, Clock clock)
+        throws JSONException {
+        final String strategy = command.getString("strategy");
+        final long deadlineNanos = engineNanos(command.getDouble("deadline"));
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AtomicBoolean succeeded = new AtomicBoolean(false);
+        final AtomicReference<Throwable> failure = new AtomicReference<>();
+        UpdateContext.DownloadFileListener listener = new UpdateContext.DownloadFileListener() {
+            @Override
+            public void onDownloadCompleted(DownloadTaskParams params) {
+                succeeded.set(true);
+                latch.countDown();
             }
+
+            @Override
+            public void onDownloadFailed(Throwable error) {
+                Log.i(Texts.LOG_TAG, "native sync: " + strategy + " attempt failed: " + error);
+                failure.set(error);
+                latch.countDown();
+            }
+        };
+        DownloadTaskParams task = starter.start(
+            strategy, command.getString("url"), command.getString("hash"),
+            command.has("originHash") ? command.getString("originHash") : null,
+            listener, deadlineNanos);
+        JSONObject event = new JSONObject().put("type", "download");
+        boolean settled;
+        try {
+            settled = latch.await(deadlineNanos - clock.nanoTime(), TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            settled = false;
         }
-        return false;
+        if (!settled) {
+            Log.w(Texts.LOG_TAG, "native sync: download phase timed out during " + strategy);
+            // The task shares one download thread with the next attempt:
+            // cancel its transfer (or keep it from starting) instead of
+            // queueing behind it (CODE_AUDIT 2.12).
+            if (task != null) {
+                task.cancel();
+            }
+            return event.put("timedOut", true);
+        }
+        event.put("ok", succeeded.get());
+        Throwable error = failure.get();
+        if (error != null) {
+            event.put("code", ErrorCodes.forDownloadFailure(error));
+        }
+        return event;
     }
 }
