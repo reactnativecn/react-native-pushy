@@ -30,7 +30,7 @@ import org.json.JSONTokener;
 class DownloadTask implements Runnable {
     // Bundle delta entry inside a patch archive, stored encoded.
     private static final String BUNDLE_DELTA_ENTRY =
-        Texts.reveal("3319f0d4b6c56a502c3b10fcdca0de7d4b3307e9");
+        Texts.BUNDLE_DELTA_ENTRY;
 
     // Resume sidecars are a few hundred bytes of JSON.
     private static final long MAX_SIDECAR_BYTES = 64 * 1024;

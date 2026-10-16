@@ -34,7 +34,7 @@ import {
   getErrorMessage,
   toPushyError,
 } from './ErrorCodes';
-import { APP_DELTA_SUFFIX, PPK_DELTA_SUFFIX, PREFERENCES_NAME, STORAGE_DIR_NAME } from './Texts';
+import { PACKAGE_DELTA_SUFFIX, PPK_DELTA_SUFFIX, PREFERENCES_NAME, STORAGE_DIR_NAME } from './Texts';
 
 export { isSafePathComponent } from './PathUtils';
 
@@ -764,7 +764,7 @@ export class UpdateContext {
       url,
       hash,
     );
-    params.targetFile = `${this.rootDir}/${hash}${APP_DELTA_SUFFIX}`;
+    params.targetFile = `${this.rootDir}/${hash}${PACKAGE_DELTA_SUFFIX}`;
     params.unzipDirectory = `${this.rootDir}/${hash}`;
     params.deadlineUptimeMs = deadlineUptimeMs;
     await this.executeTask(params);

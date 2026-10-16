@@ -17,12 +17,6 @@
 static NSString *const RCTPushyErrorDomain = @"cn.reactnative.pushy";
 static NSString *const RCTPushyErrorCodeKey = @"PushyErrorCode";
 
-// Text produced by scripts/encode-native-text.ts, decoded with
-// pushy::text::Reveal (cpp/patch_core/obscured_text.h). Keeps service
-// addresses, paths and protocol strings out of static string scans of the
-// binary; not a secret.
-PUSHY_HIDDEN NSString *RCTPushyRevealText(const char *hex);
-
 // Whether following a redirect from `from` to `to` would leave https for
 // plaintext http. Every https request (check and artifact) refuses that
 // downgrade before the redirected request is sent.

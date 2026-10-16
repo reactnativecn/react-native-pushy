@@ -21,7 +21,7 @@ final class NativeCore {
         }
 
         try {
-            System.loadLibrary(Texts.reveal("2819e4c4bd8371"));
+            System.loadLibrary(Texts.LIBRARY_NAME);
         } catch (UnsatisfiedLinkError error) {
             UnsatisfiedLinkError wrapped = new UnsatisfiedLinkError(
                 "Failed to load the native library. Original error: "

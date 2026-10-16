@@ -3,7 +3,7 @@
 #include <cmath>
 #include <utility>
 
-#include "../patch_core/obscured_text.h"
+#include "../patch_core/native_texts.h"
 #include "native_config.h"
 #include "native_round.h"
 #include "update_flow_core.h"
@@ -14,18 +14,11 @@ using flowjson::Value;
 
 namespace {
 
-// Stored encoded (see obscured_text.h): the result status of a round that
-// found nothing to install, and the version-info flag of a version a crash
-// hold installed (read by JS).
-const std::string& StatusNone() {
-  static const std::string value = pushy::text::Reveal("3418c1c1aa8a7c40");
-  return value;
-}
-const std::string& InfoCrashHold() {
-  static const std::string value =
-      pushy::text::Reveal("3905f5c2a6b96d56212a19");
-  return value;
-}
+// Stored encoded (native_texts.h): the result status of a round that found
+// nothing to install, and the version-info flag of a version a crash hold
+// installed (read by JS).
+using pushy::texts::InfoCrashHold;
+using pushy::texts::StatusNone;
 
 // Phases: what the round waits for.
 const char kAwaitEnv[] = "env";

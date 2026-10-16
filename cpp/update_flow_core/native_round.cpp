@@ -4,7 +4,7 @@
 #include <utility>
 
 #include "../patch_core/hbc_transform_wire.h"
-#include "../patch_core/obscured_text.h"
+#include "../patch_core/native_texts.h"
 #include "native_config.h"
 #include "update_flow_core.h"
 
@@ -14,16 +14,9 @@ using flowjson::Value;
 
 namespace {
 
-// Stored encoded (see obscured_text.h).
-const std::string& QueryPath() {
-  static const std::string value = pushy::text::Reveal("7514fcd4ad805d55263e08fc99");
-  return value;
-}
-const std::string& InfoForceBoot() {
-  static const std::string value =
-      pushy::text::Reveal("3c18e6d2aba9674a360d19ead5a695");
-  return value;
-}
+// Stored encoded (native_texts.h).
+using pushy::texts::InfoForceBoot;
+using pushy::texts::QueryPath;
 
 // The lists NextQueryStep walks, in order; the state's "list" names the
 // current one ("" once the query is over).
