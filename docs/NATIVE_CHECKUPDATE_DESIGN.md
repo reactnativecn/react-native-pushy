@@ -648,8 +648,8 @@ full 超时整体失败）、激活判定（`activate || crashHold || forceActiv
 
 | 端 | 驱动入口 | 绑定 | 适配器自身的测试 |
 | --- | --- | --- | --- |
-| iOS | `RCTPushyOrchestrator.mm` `runOnce` → `perform:` / `download:` / `commit:` | 直接调 `flowcore::StepRound` | purge-restore 测试（提交与窗口）、e2e-ios native |
-| Android | `SyncCoordinator.java` `runOnce` → `perform` / `download` / `commit` | `FlowBridge.stepRound`（JNI，`.so` 已重编） | `SyncCoordinatorTest`（单次下载的回报）、e2e-android |
+| iOS | `RCTPushyOrchestrator.mm` `runOnce` → `perform:` / `download:` / `commit:` | 直接调 `flowcore::StepRound` | purge-restore 测试（提交与窗口；`round_replay_test` 以轨迹向量回放适配器）、e2e-ios native |
+| Android | `SyncCoordinator.java` `runOnce` → `perform` / `download` / `commit` | `FlowBridge.stepRound`（JNI，`.so` 已重编） | `SyncRoundReplayTest`（经 `RoundHost` 注入，以轨迹向量回放适配器；JVM 单测仅本地跑）、`SyncCoordinatorTest`（单次下载的回报）、e2e-android |
 | 鸿蒙 | `SyncCoordinator.ts` `runOnce` → `perform` / `download` / `commit` | `NativePatchCore.stepRound`（NAPI，同步） | `harmonySyncRound.test.ts`（以轨迹向量回放适配器）、`nativeHostApi.test.ts` |
 
 三端适配器都在提交被拒时按配置代数回报 `reason: "config_changed"`（Android/鸿蒙换配置时同时递增 reset
