@@ -17,8 +17,8 @@ Shared_Files := \
 	$(sort $(wildcard $(CPP_DIR)/hpatch/*.c))
 
 # HDiffPatch / lzma submodules: only the decoder sources hpatch.c uses.
-Hdp_Files := \
 # <generated:vendored-sources> (scripts/contract.ts; bun scripts/generate-contract.ts)
+Hdp_Files := \
 	HDiffPatch/libHDiffPatch/HPatch/patch.c \
 	HDiffPatch/file_for_patch.c \
 	lzma/C/LzmaDec.c \

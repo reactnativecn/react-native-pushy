@@ -432,14 +432,14 @@ region('scripts/verify-android-so.js', 'abis', [
 ]);
 
 // Vendored decoder sources.
-region(
-  'android/jni/Android.mk',
-  'vendored-sources',
-  vendoredSources.map(
+// The whole assignment: a comment line would end a backslash continuation.
+region('android/jni/Android.mk', 'vendored-sources', [
+  'Hdp_Files := \\',
+  ...vendoredSources.map(
     (path, i) =>
       `\t${path.replace('android/jni/', '')}${i < vendoredSources.length - 1 ? ' \\' : ''}`
-  )
-);
+  ),
+]);
 region(
   'harmony/pushy/src/main/cpp/CMakeLists.txt',
   'vendored-sources',
