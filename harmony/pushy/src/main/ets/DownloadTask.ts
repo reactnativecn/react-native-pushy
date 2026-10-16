@@ -63,47 +63,25 @@ const DOWNLOAD_CALL_TIMEOUT_MS = 10 * 60 * 1000;
 
 // 断点续传 sidecar(NATIVE_CHECKUPDATE_DESIGN §11.4):记录 partial 属于
 // 哪个 url、验证器与总长。归档与 sidecar 同生共死;有归档无 sidecar(或
-// url 不符)一律视为不可信,删掉重来。
-interface ResumeMeta {
-  url: string;
-  etag?: string;
-  lastModified?: string;
+// url 不符)一律视为不可信,删掉重来。续传的所有判定(读 sidecar、发不发
+// Range、响应怎么处理、写什么 sidecar)都在共享内核
+// cpp/patch_core/resume_plan.h,与 Android/iOS 同一份实现,这里只做 IO。
+const MAX_SIDECAR_BYTES = 64 * 1024;
+
+interface ResumeRequestPlan {
+  action: string;
   total?: number;
+  offset?: number;
+  headers?: Record<string, string>;
 }
 
-// "bytes <start>-<end>/<total>"。返回总长(“*”记 0);缺失/畸形/起点与
-// 本地 partial 不符、或 range 与 total 自相矛盾(end 在 start 之前、数值
-// total 不大于 end)返回 -1——那样追加的字节不可信。RFC 9110 §14.4 要求
-// 完整长度必须大于 last-pos。
-export function parseContentRangeTotal(
-  header: string,
-  expectedStart: number,
-): number {
-  if (!header.startsWith('bytes ')) {
-    return -1;
-  }
-  const range = header.substring('bytes '.length).trim();
-  const slash = range.indexOf('/');
-  const dash = range.indexOf('-');
-  if (slash < 0 || dash < 0 || dash > slash) {
-    return -1;
-  }
-  const start = parseInt(range.substring(0, dash).trim(), 10);
-  const end = parseInt(range.substring(dash + 1, slash).trim(), 10);
-  if (
-    Number.isNaN(start) ||
-    Number.isNaN(end) ||
-    start !== expectedStart ||
-    end < start
-  ) {
-    return -1;
-  }
-  const totalPart = range.substring(slash + 1).trim();
-  if (totalPart === '*') {
-    return 0;
-  }
-  const total = parseInt(totalPart, 10);
-  return Number.isNaN(total) || total <= end ? -1 : total;
+interface ResumeResponseDecision {
+  action: string;
+  total?: number;
+  append?: boolean;
+  base?: number;
+  encoded?: boolean;
+  persistSidecar?: boolean;
 }
 
 export class DownloadTask {
@@ -142,33 +120,33 @@ export class DownloadTask {
     return `${targetFile}.resume`;
   }
 
-  private async readResumeMeta(
-    targetFile: string,
-    url: string,
-  ): Promise<ResumeMeta | null> {
+  // sidecar 原文;不存在、超过 sidecar 应有的大小或读失败时为 ""
+  // (共享内核把这些都当作“没有可信的 partial”)。
+  private async readSidecarText(targetFile: string): Promise<string> {
     const sidecar = this.resumeSidecarPath(targetFile);
-    if (!fileIo.accessSync(sidecar)) {
-      return null;
-    }
     try {
-      const meta = this.parseJsonEntry(
-        await this.readFileContent(sidecar),
-      ) as ResumeMeta;
-      if (meta && meta.url === url) {
-        return meta;
+      if (!fileIo.accessSync(sidecar)) {
+        return '';
       }
+      const stat = await fileIo.stat(sidecar);
+      if (stat.size > MAX_SIDECAR_BYTES) {
+        return '';
+      }
+      return new util.TextDecoder().decodeToString(
+        new Uint8Array(await this.readFileContent(sidecar)),
+      );
     } catch (e) {
       // 坏 sidecar 只意味着“无法续传”。
+      return '';
     }
-    return null;
   }
 
-  private async writeResumeMeta(
+  private async writeSidecarText(
     targetFile: string,
-    meta: ResumeMeta,
+    text: string,
   ): Promise<void> {
     try {
-      const encoded = new util.TextEncoder().encodeInto(JSON.stringify(meta));
+      const encoded = new util.TextEncoder().encodeInto(text);
       await this.writeFileContent(this.resumeSidecarPath(targetFile), encoded);
     } catch (e) {
       // 非致命:没有 sidecar,下次从零开始。
@@ -482,32 +460,36 @@ export class DownloadTask {
       );
     }
 
-    // 续传状态盘点:有匹配的 sidecar 且 partial 未收齐才发 Range。
-    let resumeMeta: ResumeMeta | null = allowResume
-      ? await this.readResumeMeta(params.targetFile, params.url)
-      : null;
-    let resumeOffset = 0;
-    if (resumeMeta && fileIo.accessSync(params.targetFile)) {
-      const stat = await fileIo.stat(params.targetFile);
-      const knownTotal = resumeMeta.total ?? 0;
-      if (stat.size > 0 && knownTotal > 0 && stat.size === knownTotal) {
-        // 上次尝试已收齐(进程死在下载结束与解压之间):无需再传。
-        httpRequest.destroy();
-        this.onProgressUpdate(knownTotal, knownTotal);
-        return 'done';
-      }
-      if (stat.size > 0 && (knownTotal <= 0 || stat.size < knownTotal)) {
-        resumeOffset = stat.size;
-      }
+    // 续传状态盘点(共享内核决定):已收齐 / 带 Range 续传 / 从零开始。
+    let sidecarText = allowResume
+      ? await this.readSidecarText(params.targetFile)
+      : '';
+    const partialSize = fileIo.accessSync(params.targetFile)
+      ? (await fileIo.stat(params.targetFile)).size
+      : 0;
+    const plan = JSON.parse(
+      NativePatchCore.resumePlanRequest(sidecarText, params.url, partialSize),
+    ) as ResumeRequestPlan;
+    if (plan.action === 'complete') {
+      // 上次尝试已收齐(进程死在下载结束与解压之间):无需再传。
+      httpRequest.destroy();
+      const knownTotal = plan.total ?? 0;
+      this.onProgressUpdate(knownTotal, knownTotal);
+      return 'done';
     }
-    if (resumeOffset === 0) {
+    let resumeOffset = 0;
+    let resumeHeaders: Record<string, string> = {};
+    if (plan.action === 'resume') {
+      resumeOffset = plan.offset ?? 0;
+      resumeHeaders = plan.headers ?? {};
+    } else {
       if (fileIo.accessSync(params.targetFile)) {
         await fileIo.unlink(params.targetFile);
       } else {
         await this.ensureParentDirectory(params.targetFile);
       }
       await this.deleteResumeSidecar(params.targetFile);
-      resumeMeta = null;
+      sidecarText = '';
     }
 
     // 响应体在状态码判定前一律只进内存缓冲:416/5xx 的错误体若被追加进
@@ -520,23 +502,16 @@ export class DownloadTask {
       authorize = resolve;
     });
 
-    // 本 url 的 sidecar 内容:验证器优先取本次响应头,缺失时沿用上次的;
-    // 总长未知(0)时不写。
-    const buildResumeMeta = (total: number): ResumeMeta => {
-      const meta: ResumeMeta = { url: params.url };
-      const etag = etagHeader || resumeMeta?.etag;
-      const lastModified = lastModifiedHeader || resumeMeta?.lastModified;
-      if (etag) {
-        meta.etag = etag;
-      }
-      if (lastModified) {
-        meta.lastModified = lastModified;
-      }
-      if (total > 0) {
-        meta.total = total;
-      }
-      return meta;
-    };
+    // 本 url 的 sidecar 原文:验证器优先取本次响应头,缺失时沿用上次的;
+    // 总长未知(0)时不写(共享内核)。
+    const sidecarFor = (total: number): string =>
+      NativePatchCore.resumeSidecar(
+        params.url,
+        etagHeader,
+        lastModifiedHeader,
+        sidecarText,
+        total,
+      );
 
     const reportProgress = () => {
       const overall = baseOffset + received;
@@ -729,17 +704,10 @@ export class DownloadTask {
       const requestHeader: Record<string, string> = {
         'Content-Type': 'application/octet-stream',
       };
-      if (resumeOffset > 0) {
-        // 只有续传请求钉死编码:Range 偏移必须与盘上字节一一对应。
-        // 全新下载保留平台默认的压缩处理,与引入续传前的行为一致。
-        requestHeader['Accept-Encoding'] = 'identity';
-        requestHeader.Range = `bytes=${resumeOffset}-`;
-        const validator = resumeMeta?.etag || resumeMeta?.lastModified;
-        if (validator) {
-          // 带验证器时文件已变更的服务端会退回完整 200,而不是把不匹配
-          // 的字节接上来。
-          requestHeader['If-Range'] = validator;
-        }
+      // 续传请求的 Range / Accept-Encoding: identity / If-Range(共享内核
+      // 给出);全新下载不带,保留平台默认的压缩处理。
+      for (const name of Object.keys(resumeHeaders)) {
+        requestHeader[name] = resumeHeaders[name];
       }
 
       const remainingMs = Math.max(1, deadlineUptimeMs - monotonicNowMs());
@@ -768,31 +736,6 @@ export class DownloadTask {
         deadlinePromise,
       ]);
 
-      if (responseCode === 416) {
-        discardBody = true;
-        pendingChunks = null;
-        const knownTotal = resumeMeta?.total ?? 0;
-        if (knownTotal > 0 && fileIo.accessSync(params.targetFile)) {
-          const stat = await fileIo.stat(params.targetFile);
-          if (stat.size === knownTotal) {
-            // partial 实际上就是完整文件。
-            this.onProgressUpdate(knownTotal, knownTotal);
-            return 'done';
-          }
-        }
-        return 'staleRange';
-      }
-      if (responseCode > 299) {
-        // 响应体从未落盘,partial + sidecar 原样保留——那就是续传状态。
-        discardBody = true;
-        pendingChunks = null;
-        throw createPushyError(
-          ERROR_DOWNLOAD_FAILED,
-          `Server error: ${responseCode}`,
-        );
-      }
-
-      let encodedBody = false;
       if (resumeOffset > 0 && responseCode === 206) {
         // Content-Range 只能从 headersReceive 拿到,而它与 promise 的先后
         // 顺序不保证——等头到达(dataEnd 前必到,兜底 5s)再判定。
@@ -804,22 +747,50 @@ export class DownloadTask {
           }),
         ]);
         clearTimeout(headersTimer);
-        encodedBody =
-          !!contentEncodingHeader &&
-          contentEncodingHeader.toLowerCase() !== 'identity';
-        const parsedTotal = encodedBody
-          ? -1
-          : parseContentRangeTotal(contentRangeHeader, resumeOffset);
-        if (parsedTotal < 0) {
-          // 编码过的 range 字节、或 Content-Range 缺失/畸形/起点不符:
-          // 追加不可信。按“partial 已过期”处理(删掉、干净地重来一次),
-          // 而不是抛错——抛错会保留 partial,之后每次都撞同一堵墙。
-          discardBody = true;
-          pendingChunks = null;
-          return 'staleRange';
-        }
-        baseOffset = resumeOffset;
-        totalAll = parsedTotal;
+      }
+      // 这个响应怎么处理由共享内核决定(与 Android/iOS 同一份)。
+      const partialNow = fileIo.accessSync(params.targetFile)
+        ? (await fileIo.stat(params.targetFile)).size
+        : 0;
+      const decision = JSON.parse(
+        NativePatchCore.resumeClassifyResponse(
+          responseCode,
+          resumeOffset,
+          contentRangeHeader,
+          contentEncodingHeader,
+          contentLength > 0 ? contentLength : -1,
+          sidecarText,
+          params.url,
+          partialNow,
+        ),
+      ) as ResumeResponseDecision;
+      if (decision.action !== 'write') {
+        // 响应体从未落盘,partial + sidecar 原样保留,除非下面判定要重来。
+        discardBody = true;
+        pendingChunks = null;
+      }
+      if (decision.action === 'complete') {
+        // 416 且 partial 实际上就是完整文件。
+        const knownTotal = decision.total ?? 0;
+        this.onProgressUpdate(knownTotal, knownTotal);
+        return 'done';
+      }
+      if (decision.action === 'restart') {
+        // 过期的 416、编码过的 range 字节、或 Content-Range 缺失/畸形/
+        // 起点不符:追加不可信。按“partial 已过期”处理(删掉、干净地
+        // 重来一次),而不是抛错——抛错会保留 partial,之后每次都撞同一堵墙。
+        return 'staleRange';
+      }
+      if (decision.action !== 'write') {
+        // 其余非 2xx:partial + sidecar 原样保留——那就是续传状态。
+        throw createPushyError(
+          ERROR_DOWNLOAD_FAILED,
+          `Server error: ${responseCode}`,
+        );
+      }
+      baseOffset = decision.base ?? 0;
+      totalAll = decision.total ?? 0;
+      if (decision.append) {
         writer = await fileIo.open(
           params.targetFile,
           fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.APPEND,
@@ -827,8 +798,6 @@ export class DownloadTask {
       } else {
         // 服务端忽略了 Range(或本就没发):从零开始。
         await unlinkIfExists(params.targetFile);
-        baseOffset = 0;
-        totalAll = contentLength > 0 ? contentLength : 0;
         writer = await fileIo.open(
           params.targetFile,
           fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY,
@@ -846,8 +815,13 @@ export class DownloadTask {
         totalAll > 0 ? totalAll - baseOffset : 0,
         ERROR_DOWNLOAD_FAILED,
       );
-      // 先落 sidecar 再放行写入,流中崩溃才有得续。
-      await this.writeResumeMeta(params.targetFile, buildResumeMeta(totalAll));
+      if (decision.persistSidecar) {
+        // 先落 sidecar 再放行写入,流中崩溃才有得续。
+        await this.writeSidecarText(params.targetFile, sidecarFor(totalAll));
+      } else {
+        // 编码传输不可续传:偏移会落在编码后的表示上。
+        await this.deleteResumeSidecar(params.targetFile);
+      }
 
       // 鉴权通过:回放缓冲,之后的数据直写。
       const buffered = pendingChunks ?? [];
@@ -889,10 +863,7 @@ export class DownloadTask {
         }
         // 用最终观测值刷新 sidecar:首次写入可能因头部竞态缺 total/验证器,
         // 补齐后“下载完、解压前死”的窗口才能被 complete 检测覆盖。
-        await this.writeResumeMeta(
-          params.targetFile,
-          buildResumeMeta(stats.size),
-        );
+        await this.writeSidecarText(params.targetFile, sidecarFor(stats.size));
       } else {
         // 编码传输不可续传:盘上是解码后的字节,编码域的长度与偏移都失效。
         await this.deleteResumeSidecar(params.targetFile);

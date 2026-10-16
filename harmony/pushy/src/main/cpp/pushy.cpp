@@ -21,6 +21,7 @@
 #include "install_record.h"
 #include "hbc_transform_wire.h"
 #include "patch_core.h"
+#include "resume_plan.h"
 #include "state_core.h"
 #include "state_ops.h"
 
@@ -1442,6 +1443,59 @@ static napi_value FlowNormalizeConfiguration(napi_env env,
   return NewString(env, config);
 }
 
+// ---- resumable download (patch_core/resume_plan.h) ----
+// Strings in (null/undefined read as ""), JSON text out; DownloadTask.ts
+// keeps the IO.
+
+// planRequest(sidecar, url, partialSize)
+static napi_value ResumePlanRequest(napi_env env, napi_callback_info info) {
+  napi_value args[3] = {nullptr, nullptr, nullptr};
+  std::string text[3];
+  double partial_size = 0;
+  if (!GetFlowArgs(env, info, "resumePlanRequest", 3, 0b011, args, text) ||
+      !GetFlowNumber(env, args[2], "resumePlanRequest", &partial_size)) {
+    return nullptr;
+  }
+  return NewString(env, pushy::resume::PlanRequestJson(
+                            text[0], text[1], static_cast<long long>(partial_size)));
+}
+
+// classifyResponse(status, resumeOffset, contentRange, contentEncoding,
+//                  contentLength, sidecar, url, partialSize)
+static napi_value ResumeClassifyResponse(napi_env env, napi_callback_info info) {
+  napi_value args[8] = {};
+  std::string text[8];
+  double status = 0;
+  double resume_offset = 0;
+  double content_length = 0;
+  double partial_size = 0;
+  if (!GetFlowArgs(env, info, "resumeClassifyResponse", 8, 0b01101100, args, text) ||
+      !GetFlowNumber(env, args[0], "resumeClassifyResponse", &status) ||
+      !GetFlowNumber(env, args[1], "resumeClassifyResponse", &resume_offset) ||
+      !GetFlowNumber(env, args[4], "resumeClassifyResponse", &content_length) ||
+      !GetFlowNumber(env, args[7], "resumeClassifyResponse", &partial_size)) {
+    return nullptr;
+  }
+  return NewString(env, pushy::resume::ClassifyResponseJson(
+                            static_cast<int>(status),
+                            static_cast<long long>(resume_offset), text[2], text[3],
+                            static_cast<long long>(content_length), text[5], text[6],
+                            static_cast<long long>(partial_size)));
+}
+
+// sidecar(url, etag, lastModified, previousSidecar, total)
+static napi_value ResumeSidecar(napi_env env, napi_callback_info info) {
+  napi_value args[5] = {};
+  std::string text[5];
+  double total = 0;
+  if (!GetFlowArgs(env, info, "resumeSidecar", 5, 0b01111, args, text) ||
+      !GetFlowNumber(env, args[4], "resumeSidecar", &total)) {
+    return nullptr;
+  }
+  return NewString(env, pushy::resume::SidecarJson(text[0], text[1], text[2], text[3],
+                                                   static_cast<long long>(total)));
+}
+
 napi_value Init(napi_env env, napi_value exports) {
   // <generated:exports> (scripts/contract.ts; bun scripts/generate-contract.ts)
   if (!ExportFunction(env, exports, "syncStateWithBinaryVersion", Guarded<SyncStateWithBinaryVersion>) ||
@@ -1466,7 +1520,10 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "handleResponse", Guarded<FlowHandleResponse>) ||
       !ExportFunction(env, exports, "configsEquivalent", Guarded<FlowConfigsEquivalent>) ||
       !ExportFunction(env, exports, "runnableConfig", Guarded<FlowRunnableConfig>) ||
-      !ExportFunction(env, exports, "normalizeConfiguration", Guarded<FlowNormalizeConfiguration>)) {
+      !ExportFunction(env, exports, "normalizeConfiguration", Guarded<FlowNormalizeConfiguration>) ||
+      !ExportFunction(env, exports, "resumePlanRequest", Guarded<ResumePlanRequest>) ||
+      !ExportFunction(env, exports, "resumeClassifyResponse", Guarded<ResumeClassifyResponse>) ||
+      !ExportFunction(env, exports, "resumeSidecar", Guarded<ResumeSidecar>)) {
   // </generated:exports>
     return nullptr;
   }

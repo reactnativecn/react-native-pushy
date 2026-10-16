@@ -35,6 +35,9 @@ jstring InstallRecordPromote(JNIEnv* env, jclass, jstring staging_dir, jstring v
 jstring InstallRecordBundleSha256(JNIEnv* env, jclass, jstring version_dir);
 jlong ArchiveCheckEntries(JNIEnv* env, jclass, jlong archive_bytes, jobjectArray names, jlongArray sizes, jlongArray compressed_sizes);
 jlongArray ArchivePlanFreeSpaceProbe(JNIEnv* env, jclass, jlong known_total, jlong written_before, jlong chunk_bytes, jlong reserved_until);
+jstring ResumePlanRequest(JNIEnv* env, jclass, jstring sidecar, jstring url, jlong partial_size);
+jstring ResumeClassifyResponse(JNIEnv* env, jclass, jint status, jlong resume_offset, jstring content_range, jstring content_encoding, jlong content_length, jstring sidecar, jstring url, jlong partial_size);
+jstring ResumeSidecar(JNIEnv* env, jclass, jstring url, jstring etag, jstring last_modified, jstring previous_sidecar, jlong total);
 // </generated:prototypes>
 
 }  // namespace jni_natives

@@ -197,6 +197,30 @@ interface NativePatchCoreBindings {
    * 不合法时抛出 Error("Invalid native configuration: ...")。
    */
   normalizeConfiguration(optionsJson: string | undefined): string;
+
+  // 断点续传决策(cpp/patch_core/resume_plan.h,与 Android/iOS 共用),
+  // 返回 JSON 文本;IO 留在 DownloadTask.ts。sidecar 为 "" 表示没有。
+  /** 请求前:complete / resume(offset + headers) / fresh。 */
+  resumePlanRequest(sidecar: string, url: string, partialSize: number): string;
+  /** 响应到达后:complete / restart / httpError / write(append, base, total, encoded, persistSidecar)。 */
+  resumeClassifyResponse(
+    status: number,
+    resumeOffset: number,
+    contentRange: string,
+    contentEncoding: string,
+    contentLength: number,
+    sidecar: string,
+    url: string,
+    partialSize: number,
+  ): string;
+  /** 要写入的 sidecar 文本:本次响应的验证器,缺失时沿用上一份;total>0 才记。 */
+  resumeSidecar(
+    url: string,
+    etag: string,
+    lastModified: string,
+    previousSidecar: string,
+    total: number,
+  ): string;
 }
 
 export default NativeCore as unknown as NativePatchCoreBindings;

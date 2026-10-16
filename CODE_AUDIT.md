@@ -108,7 +108,7 @@
 
 **3.14（P3，可测试性）纯决策下沉 C++ + XCTest**（部分）
 已做：`__diff.json` → `PatchManifest` 解析含类型校验下沉 `cpp/patch_core/patch_manifest.h`（`ParsePatchManifest`，向量 `cpp/patch_core/tests/patch-manifest-vectors.json` + fuzz），三端经 `archive_patch::ApplyArchivePatch` 直接传 manifest 原文，`PushyPatchManifestFromJson`、Java `appendManifestEntries`、Harmony `parseManifestToArrays` 已删。完成记录的解析/写入/激活校验在 `cpp/patch_core/install_record.cpp`（三端共用）。归档限额计数在 `cpp/patch_core/archive_limits.cpp`（`EntryAccumulator`、`CheckUncompressedSize`、`CheckExtractedDirectory`、`PlanUnknownLengthFreeSpaceProbe`，向量 `archive-limits-vectors.json`）：iOS unzip guard 直接调用，Android `SafeZipFile.inspect` 每归档一次 JNI，鸿蒙解压前整包校验 + 解压后遍历经 NAPI；三端规则漂移取最严（精确比值、整包比值、任意层 `.pushy-` 保留名、拒绝 symlink 与未知大小条目）。
-剩余应下沉到 `cpp/` 的纯决策：下载注册表 join/defer 规则与 `Content-Range` 解析（Java/ObjC 各一份）；crash-rescue 门控与检查端点尝试策略；`PushyIsSafePathComponent` 放到 `IsSafeRelativePath` 旁边。另建 `ios/Tests` XCTest target：`RCTPushyDownloader` 对 `NSURLProtocol` stub（416/206/redirect/encoded）、`unzipFileAtPath` 对夹具 zip（symlink、保留名、比值炸弹）。
+剩余应下沉到 `cpp/` 的纯决策：下载注册表 join/defer 规则（Java/ObjC 各一份；`Content-Range` 解析连同整个续传决策已下沉 `cpp/patch_core/resume_plan.h`）；crash-rescue 门控与检查端点尝试策略；`PushyIsSafePathComponent` 放到 `IsSafeRelativePath` 旁边。另建 `ios/Tests` XCTest target：`RCTPushyDownloader` 对 `NSURLProtocol` stub（416/206/redirect/encoded）、`unzipFileAtPath` 对夹具 zip（symlink、保留名、比值炸弹）。
 
 ---
 
