@@ -65,6 +65,11 @@ static NSString *PushyReadBuildTime(void) {
                 PushyToStdString(curBuildTime)
             );
             if (sync.changed) {
+                // The old binary's versions are gone from the state: drop
+                // their info, the first-load marker and the response cache,
+                // as every platform does (scripts/contract.ts storedItems).
+                PushyRemoveKeys(defaults, PushyKeysClearedOnUpgrade(),
+                                PushyKeyPrefixesClearedOnUpgrade());
                 [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked()];
                 state = sync.state;
                 PushyApplyStateToDefaults(defaults, state);

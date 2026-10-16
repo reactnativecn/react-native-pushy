@@ -19,7 +19,9 @@ import {
   roundStatuses,
   servicePresets,
   stateOperations,
+  storedItems,
   syncStorageKeys,
+  type Lifecycle,
   type TextHost,
   vendoredSources,
 } from './contract';
@@ -656,6 +658,66 @@ region('src/client.ts', 'service-presets', [
     '  },',
   ]),
   '};',
+]);
+
+// Stored-item lifecycle: what a reset / binary upgrade deletes.
+const cleared = (
+  event: Lifecycle,
+  platform: 'objc' | 'java' | 'arkts',
+  prefix: boolean
+) =>
+  storedItems
+    .filter(
+      (item) =>
+        item.clearedOn.includes(event) &&
+        !!item.prefix === prefix &&
+        item.keys[platform] !== undefined
+    )
+    .map((item) => item.keys[platform] as string);
+const lifecycleDoc = [
+  'What a reset to the packaged bundle and a binary upgrade delete besides',
+  'the state fields (scripts/contract.ts storedItems; every other item survives',
+  'both: the uuid, the native config, the round breadcrumb, the bundle hash',
+  'cache).',
+];
+const events: [Lifecycle, string, string][] = [
+  ['reset', 'Reset', 'RESET'],
+  ['binaryUpgrade', 'Upgrade', 'UPGRADE'],
+];
+region(
+  `${javaDir}/VersionScopedKeys.java`,
+  'lifecycle',
+  [
+    ...lifecycleDoc.map((line) => `// ${line}`),
+    ...events.flatMap(([event, , upper]) => [
+      `static final String[] ${upper}_KEYS = {${cleared(event, 'java', false).join(', ')}};`,
+      `static final String[] ${upper}_PREFIXES = {${cleared(event, 'java', true).join(', ')}};`,
+    ]),
+  ]
+);
+region(
+  'ios/RCTPushy/RCTPushyState.mm',
+  'lifecycle',
+  [
+    ...lifecycleDoc.map((line) => `// ${line}`),
+    ...events.flatMap(([event, camel]) => [
+      `PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOn${camel}(void) {`,
+      `    return @[${cleared(event, 'objc', false).join(', ')}];`,
+      '}',
+      `PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOn${camel}(void) {`,
+      `    return @[${cleared(event, 'objc', true).join(', ')}];`,
+      '}',
+    ]),
+  ]
+);
+region(`${ets}/UpdateContext.ts`, 'lifecycle', [
+  ...lifecycleDoc.map((line) => `// ${line}`),
+  ...events.flatMap(([event, , upper]) => [
+    `const ${upper}_CLEARED: ClearedKeys = {`,
+    `  keys: [${cleared(event, 'arkts', false).join(', ')}],`,
+    `  prefixes: [${cleared(event, 'arkts', true).join(', ')}],`,
+    '};',
+  ]),
 ]);
 
 // --- Apply -----------------------------------------------------------------

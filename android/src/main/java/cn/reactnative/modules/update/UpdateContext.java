@@ -136,7 +136,7 @@ public class UpdateContext {
             // Execute cleanUp before clearing SharedPreferences to avoid race condition
             cleanUp(DownloadTaskParams.DEFAULT_MAX_AGE_DAYS);
             SharedPreferences.Editor editor = this.sp.edit();
-            removeVersionScopedKeys(editor);
+            removeKeys(editor, VersionScopedKeys.clearedOnUpgrade(sp.getAll().keySet()));
             applyState(editor, nextState);
             persistEditor(editor, "sync state with binary version");
             clearNativeCheckCache();
@@ -441,8 +441,8 @@ public class UpdateContext {
     // Not editor.clear(): that also wiped the uuid (re-bucketing every gray
     // release on each app upgrade) and the native config (no crash hold and
     // no cold-start round until JS ran again). See VersionScopedKeys.
-    private void removeVersionScopedKeys(SharedPreferences.Editor editor) {
-        for (String key : VersionScopedKeys.select(sp.getAll().keySet())) {
+    private void removeKeys(SharedPreferences.Editor editor, java.util.List<String> keys) {
+        for (String key : keys) {
             editor.remove(key);
         }
     }
@@ -656,7 +656,7 @@ public class UpdateContext {
             throw new IllegalStateException("Failed to persist state for reset check cache");
         }
         SharedPreferences.Editor editor = sp.edit();
-        removeVersionScopedKeys(editor);
+        removeKeys(editor, VersionScopedKeys.clearedOnReset(sp.getAll().keySet()));
         applyState(editor, resetState);
         persistEditorOrThrow(editor, "reset to packaged bundle");
         ignoreRollback = false;

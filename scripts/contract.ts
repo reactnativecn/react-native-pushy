@@ -412,3 +412,86 @@ export const servicePresets = {
     ],
   },
 };
+
+export type Lifecycle = 'reset' | 'binaryUpgrade';
+
+export interface StoredItem {
+  name: string;
+  doc: string;
+  /** The key is a prefix (one entry per version). */
+  prefix?: boolean;
+  /** The events that delete it; everything else survives both. */
+  clearedOn: Lifecycle[];
+  /** The key (or prefix) as an expression in each platform's own code. */
+  keys: { objc?: string; java?: string; arkts?: string };
+}
+
+// The persisted items next to the state fields (which the shared state core
+// rewrites itself) and what a reset to the packaged bundle or a binary
+// upgrade does to them, the same on every platform. The physical keys stay
+// as each platform has always stored them (no format migration).
+export const storedItems: StoredItem[] = [
+  {
+    name: 'HashInfo',
+    prefix: true,
+    doc: 'Per-version info: name, description, metaInfo and the rescue flags.',
+    clearedOn: ['reset', 'binaryUpgrade'],
+    keys: { objc: 'keyHashInfo', java: 'HASH_INFO_PREFIX', arkts: 'HASH_INFO_PREFIX' },
+  },
+  {
+    name: 'FirstLoadMarker',
+    doc: 'Set when a launch consumes first_time; getConstants reports and clears it.',
+    clearedOn: ['reset', 'binaryUpgrade'],
+    keys: {
+      objc: 'keyFirstLoadMarked',
+      java: 'UpdateContext.KEY_FIRST_LOAD_MARKED',
+      arkts: 'FIRST_LOAD_MARKED_KEY',
+    },
+  },
+  {
+    name: 'PackageUpdatedMarker',
+    doc: 'iOS: set by a binary upgrade, consumed by getConstants (old version cleanup).',
+    clearedOn: ['reset'],
+    keys: { objc: 'KeyPackageUpdatedMarked()' },
+  },
+  {
+    name: 'CheckCache',
+    doc:
+      "The native round's response cache: it describes versions the event just\n" +
+      'removed (Android: its legacy location here; its own file is cleared too).',
+    clearedOn: ['reset', 'binaryUpgrade'],
+    keys: {
+      objc: 'keyNativeCheckCache',
+      java: 'SyncCoordinator.KEY_RESP_CACHE',
+      arkts: 'KEY_RESP_CACHE',
+    },
+  },
+  {
+    name: 'RoundBreadcrumb',
+    doc: 'Only decides whether the next launch resumes the round without the 5s delay.',
+    clearedOn: [],
+    keys: {
+      objc: 'keyNativeCheckIncomplete',
+      java: 'SyncCoordinator.KEY_ROUND_INCOMPLETE',
+      arkts: 'KEY_ROUND_INCOMPLETE',
+    },
+  },
+  {
+    name: 'Uuid',
+    doc: 'Identifies the install for gray-release bucketing: must never change.',
+    clearedOn: [],
+    keys: {},
+  },
+  {
+    name: 'NativeConfig',
+    doc: 'The host or JS config the cold-start round and crash hold run from.',
+    clearedOn: [],
+    keys: {},
+  },
+  {
+    name: 'BundleHashCache',
+    doc: 'Keyed by the binary identity, so it invalidates itself on upgrade.',
+    clearedOn: [],
+    keys: {},
+  },
+];

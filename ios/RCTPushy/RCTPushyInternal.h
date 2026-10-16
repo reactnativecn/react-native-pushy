@@ -55,6 +55,15 @@ extern PUSHY_HIDDEN std::atomic<bool> ignoreRollback;
 extern PUSHY_HIDDEN std::atomic<uint64_t> pushyResetGeneration;
 
 PUSHY_HIDDEN NSString *KeyPackageUpdatedMarked(void);
+// What a reset / a binary upgrade deletes besides the state fields
+// (generated from scripts/contract.ts storedItems), and the removal itself:
+// every key in `keys` and every stored key starting with one of `prefixes`.
+PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOnReset(void);
+PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOnReset(void);
+PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOnUpgrade(void);
+PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOnUpgrade(void);
+PUSHY_HIDDEN void PushyRemoveKeys(NSUserDefaults *defaults, NSArray<NSString *> *keys,
+                                  NSArray<NSString *> *prefixes);
 PUSHY_HIDDEN NSString *PushyHashInfoKey(NSString *hash);
 // Immutable host-facing snapshot; activated always means NEXT launch.
 PUSHY_HIDDEN NSDictionary *PushyHostResult(NSString *status, NSString *reason,

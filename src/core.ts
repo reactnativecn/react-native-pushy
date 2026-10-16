@@ -126,8 +126,10 @@ export const currentBundleSha256: string =
     ? PushyConstants.currentBundleSha256
     : '';
 
-export const isFirstTime: boolean = PushyConstants.isFirstTime;
-export const rolledBackVersion: string = PushyConstants.rolledBackVersion;
+// The platforms report an absent value differently (iOS nil, Android
+// false/null, Harmony false/''): normalize at the boundary.
+export const isFirstTime: boolean = !!PushyConstants.isFirstTime;
+export const rolledBackVersion: string = PushyConstants.rolledBackVersion || '';
 export const isRolledBack: boolean = !!rolledBackVersion;
 
 export const buildTime: string = PushyConstants.buildTime;
