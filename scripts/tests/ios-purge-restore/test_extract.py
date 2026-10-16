@@ -72,6 +72,10 @@ class ExtractionTests(unittest.TestCase):
         self.assertEqual(
             mutate('if (grandfathered && state == Record::State::kAbsent) {', 'grandfather-recorded'),
             'if (grandfathered) {')
+        self.assertEqual(
+            mutate('event.Set("reason", flowjson::Value::String("config_changed"));',
+                   'drop-config-changed'),
+            '(void)configGeneration;')
         for source in ('', 'activation = nil; activation = nil;'):
             with self.assertRaises(ValueError):
                 mutate(source, 'late-activation')

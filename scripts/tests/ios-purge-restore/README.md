@@ -105,9 +105,35 @@ injected, so the tests do not spend 12 seconds per case. They still assert that
 production requests exactly the 12-second budget minus the time already spent
 since process start.
 
+## Round adapter replay
+
+`round_replay_test.mm` is a second executable over the same extractor. It
+compiles the unchanged `RCTPushyOrchestrator` round adapter (`runOnce`,
+`perform:`, `download:`, `commit:`, `finishRound:`, `PushyWaitSeconds` and the
+globals they use, written to `round*.inc`) against a scripted engine: for each
+round in `cpp/update_flow_core/tests/round-engine-vectors.json` the host's
+`flowcore::StepRound` returns the vector's commands, and the IO they ask for
+(`PushyHttpRequest`, the install check, `+[RCTPushyInstaller fetch:...]`,
+`commitRoundWithGeneration:`, the monotonic clock) is faked from the vector's
+next event. It checks every event the adapter answers with (type, text,
+installed, ok, code, timedOut, reason, error, activated, now; ok and code as
+the engine reads them), the sticky crashHold/forceActivate flags, the arguments
+each command ran with, the start facts, the host result, the remembered
+unactivated hash and the breadcrumb. Every round except the protocol-error ones
+replays, crash hold, forceActivate, deadlines and timed-out downloads included
+(a timed-out attempt never settles; the fake clock already reads its
+deadline). Same idea as Harmony's `src/__tests__/harmonySyncRound.test.ts` and
+Android's `SyncRoundReplayTest`.
+
+```sh
+# One round:
+.tmp/ios-purge-restore-tests/baseline/round_replay_test \
+  cpp/update_flow_core/tests/round-engine-vectors.json "a reset during the download wins the commit"
+```
+
 ## Negative controls
 
-`VERIFY_REGRESSIONS=1` additionally compiles six generated-only mutants:
+`VERIFY_REGRESSIONS=1` additionally compiles seven generated-only mutants:
 
 - Remove the closed-window activation veto: `late_commit` must fail.
 - Return `NO` after timeout instead of re-resolving: `commit_before_signal` must fail.
@@ -119,6 +145,9 @@ since process start.
 - Activate from the round commit without the activation gate (both the
   out-of-lock verification and the under-lock re-check):
   `round_commit_verifies` must fail.
+
+- Report a commit lost to a config change without `reason: "config_changed"`
+  (round adapter): the config-change round of `round_replay_test` must fail.
 
 Each mutant must compile and fail its specific state assertion; unrelated
 compiler errors, crashes or deadlock-guard failures do not count as detection.
