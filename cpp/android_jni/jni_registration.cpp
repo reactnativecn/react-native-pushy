@@ -85,6 +85,15 @@ const std::vector<NativeClass>& NativeClasses() {
        {"2a1bf5df88996d40112f1dfad38382624822", "723ddefb84c2536f",
         reinterpret_cast<void*>(&pushy::jni_natives::ArchivePlanFreeSpaceProbe)},
    }},
+  {"3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c92b8896259343ee7c9ab",  // ResumePlan
+   {
+       {"2a1bf5df9c8e7950272c08", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c18189889e6a58791ff1c3adc857554c3216f289",
+        reinterpret_cast<void*>(&pushy::jni_natives::ResumePlanRequest)},
+       {"391bf5c2bd826e5c103a0fe9d9bd8368", "723edefda48a7e446d331df7d1fca379582e0ae6a5f7b294644e6305e7cda7f2a963463800ec938fae957d4f375cfccca4802b724a2911fbd5f4a06347350152f6d6ba9621783c17ebf1dbe2bc3a7c270bf1c5eeb29a76527d3cf8dbaf8d6726",
+        reinterpret_cast<void*>(&pushy::jni_natives::ResumeClassifyResponse)},
+       {"291ef0d4ad8a7a", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43d9d8ae9a68092f0113fd9887857c422602b9d595959c72462c45ebc5afb9d44b412006e2cefd",
+        reinterpret_cast<void*>(&pushy::jni_natives::ResumeSidecar)},
+   }},
   // </generated:natives>
   };
   return classes;

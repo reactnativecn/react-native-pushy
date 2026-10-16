@@ -1,6 +1,7 @@
 #import "RCTPushyDownloader.h"
 #import "RCTPushyCommon.h"
 #include "../../cpp/patch_core/archive_limits.h"
+#include "../../cpp/patch_core/resume_plan.h"
 
 // Cross-launch resumable download (NATIVE_CHECKUPDATE_DESIGN §11.4): a data
 // task streams the archive straight into savePath (a download task's
@@ -14,20 +15,31 @@ NSString *RCTPushyResumeSidecarPath(NSString *savePath) {
     return [savePath stringByAppendingString:@".resume"];
 }
 
-static NSDictionary *RCTPushyReadResumeMeta(NSString *savePath, NSString *url) {
-    NSData *data = [NSData dataWithContentsOfFile:RCTPushyResumeSidecarPath(savePath)];
-    if (data == nil) {
-        return nil;
+// The sidecar's text, "" when there is none or it cannot be one (larger than
+// a sidecar ever is): pushy::resume treats both as "no trusted partial".
+static NSString *RCTPushyReadSidecarText(NSString *savePath) {
+    NSString *path = RCTPushyResumeSidecarPath(savePath);
+    NSNumber *size = [[NSFileManager defaultManager] attributesOfItemAtPath:path
+                                                                      error:nil][NSFileSize];
+    if (size == nil || size.longLongValue > pushy::resume::kMaxSidecarBytes) {
+        return @"";
     }
-    id meta = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-    if (![meta isKindOfClass:[NSDictionary class]]) {
-        return nil;
-    }
-    // An archive whose sidecar names another URL is untrusted.
-    if (![url isEqualToString:meta[@"url"]]) {
-        return nil;
-    }
-    return meta;
+    NSString *text = [NSString stringWithContentsOfFile:path
+                                               encoding:NSUTF8StringEncoding
+                                                  error:nil];
+    return text ?: @"";
+}
+
+static std::string RCTPushyStd(NSString *value) {
+    const char *utf8 = value.UTF8String;
+    return utf8 == nullptr ? std::string() : std::string(utf8);
+}
+
+// A pushy::resume result as a dictionary; nil only if it did not parse.
+static NSDictionary *RCTPushyResumeDecision(const std::string &json) {
+    NSData *data = [NSData dataWithBytes:json.data() length:json.size()];
+    id value = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    return [value isKindOfClass:[NSDictionary class]] ? value : nil;
 }
 
 static void RCTPushyDeleteResumeSidecar(NSString *savePath) {
@@ -78,54 +90,6 @@ NSString *RCTPushyFreeSpaceShortfall(NSString *path, long long bytesToWrite) {
     return nil;
 }
 
-// "bytes <start>-<end>/<total>". Returns the total (0 when "*"), or -1 when
-// missing/malformed, the start does not match the local partial, or the
-// range and total contradict each other (end before start, or a numeric
-// total not beyond the end — RFC 9110 §14.4). A total of 0 would otherwise
-// pass as "unknown" and skip the final size check.
-static long long RCTPushyParseContentRange(NSString *header, long long expectedStart) {
-    if (![header hasPrefix:@"bytes "]) {
-        return -1;
-    }
-    NSString *range = [[header substringFromIndex:6]
-        stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-    NSRange slash = [range rangeOfString:@"/"];
-    NSRange dash = [range rangeOfString:@"-"];
-    if (slash.location == NSNotFound || dash.location == NSNotFound
-        || dash.location > slash.location) {
-        return -1;
-    }
-    NSCharacterSet *whitespace = [NSCharacterSet whitespaceCharacterSet];
-    NSString *startPart = [[range substringToIndex:dash.location]
-        stringByTrimmingCharactersInSet:whitespace];
-    NSString *endPart = [[range substringWithRange:
-        NSMakeRange(dash.location + 1, slash.location - dash.location - 1)]
-        stringByTrimmingCharactersInSet:whitespace];
-    NSString *totalPart = [[range substringFromIndex:slash.location + 1]
-        stringByTrimmingCharactersInSet:whitespace];
-    // longLongValue reads 0 for non-numeric text; require real digits.
-    NSCharacterSet *digits = [NSCharacterSet decimalDigitCharacterSet];
-    if (startPart.length == 0 || endPart.length == 0
-        || [startPart rangeOfCharacterFromSet:digits.invertedSet].location != NSNotFound
-        || [endPart rangeOfCharacterFromSet:digits.invertedSet].location != NSNotFound) {
-        return -1;
-    }
-    long long start = startPart.longLongValue;
-    long long end = endPart.longLongValue;
-    if (start != expectedStart || end < start) {
-        return -1;
-    }
-    if ([totalPart isEqualToString:@"*"]) {
-        return 0;
-    }
-    if (totalPart.length == 0
-        || [totalPart rangeOfCharacterFromSet:digits.invertedSet].location != NSNotFound) {
-        return -1;
-    }
-    long long total = totalPart.longLongValue;
-    return total > end ? total : -1;
-}
-
 @interface RCTPushyDownloader()<NSURLSessionDataDelegate>
 
 @property (nonatomic, strong) NSURLSession *session;
@@ -135,7 +99,11 @@ static long long RCTPushyParseContentRange(NSString *header, long long expectedS
 @property (copy) NSString *urlString;
 @property (nonatomic, assign) NSTimeInterval timeoutInterval;
 @property (nonatomic, strong) NSFileHandle *fileHandle;
-@property (nonatomic, strong) NSDictionary *resumeMeta;
+// The sidecar the planned request was based on ("" for a fresh request),
+// and this response's validators: pushy::resume builds the next sidecar.
+@property (nonatomic, copy) NSString *sidecarText;
+@property (nonatomic, copy) NSString *responseEtag;
+@property (nonatomic, copy) NSString *responseLastModified;
 @property (nonatomic, assign) long long resumeOffset;   // requested Range start
 @property (nonatomic, assign) long long baseOffset;     // granted by the response
 @property (nonatomic, assign) long long receivedBytes;  // streamed this session
@@ -191,45 +159,36 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
         return;
     }
 
-    NSFileManager *fileManager = [NSFileManager defaultManager];
-    self.resumeMeta = RCTPushyReadResumeMeta(self.savePath, self.urlString);
+    // What to request is the shared core's decision (pushy::resume).
+    NSString *sidecarText = self.retriedFromZero ? @"" : RCTPushyReadSidecarText(self.savePath);
+    long long partialSize = RCTPushyFileSize(self.savePath);
+    NSDictionary *plan = RCTPushyResumeDecision(pushy::resume::PlanRequestJson(
+        RCTPushyStd(sidecarText), RCTPushyStd(self.urlString), MAX(0LL, partialSize)));
+    NSString *action = plan[@"action"];
     self.resumeOffset = 0;
-    if (self.resumeMeta != nil) {
-        long long size = RCTPushyFileSize(self.savePath);
-        long long knownTotal = [self.resumeMeta[@"total"] longLongValue];
-        if (size > 0 && knownTotal > 0 && size == knownTotal) {
-            // Fully received in a previous attempt (the process died between
-            // download end and unzip): nothing left to transfer.
-            if (self.progressHandler) {
-                self.progressHandler(knownTotal, knownTotal);
-            }
-            [self completeWithError:nil];
-            return;
+    if ([action isEqualToString:@"complete"]) {
+        // Fully received in a previous attempt (the process died between
+        // download end and unzip): nothing left to transfer.
+        long long knownTotal = [plan[@"total"] longLongValue];
+        if (self.progressHandler) {
+            self.progressHandler(knownTotal, knownTotal);
         }
-        if (size > 0 && (knownTotal <= 0 || size < knownTotal)) {
-            self.resumeOffset = size;
-        }
+        [self completeWithError:nil];
+        return;
     }
-    if (self.resumeOffset == 0) {
-        [fileManager removeItemAtPath:self.savePath error:nil];
-        RCTPushyDeleteResumeSidecar(self.savePath);
-    }
-
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    if (self.resumeOffset > 0) {
-        // Only resume requests pin the encoding: Range offsets must address
-        // the same bytes that are on disk. Fresh downloads keep the system's
-        // transparent gzip handling, matching the pre-resume behaviour for
-        // servers that compress regardless.
-        [request setValue:@"identity" forHTTPHeaderField:@"Accept-Encoding"];
-        [request setValue:[NSString stringWithFormat:@"bytes=%lld-", self.resumeOffset]
-       forHTTPHeaderField:@"Range"];
-        NSString *validator = self.resumeMeta[@"etag"] ?: self.resumeMeta[@"lastModified"];
-        if (validator != nil) {
-            // With a validator the server falls back to a full 200 when the
-            // file changed instead of appending mismatched bytes.
-            [request setValue:validator forHTTPHeaderField:@"If-Range"];
+    if ([action isEqualToString:@"resume"]) {
+        self.resumeOffset = [plan[@"offset"] longLongValue];
+        self.sidecarText = sidecarText;
+        // Range, Accept-Encoding: identity and If-Range. Fresh downloads send
+        // none of them and keep the system's transparent gzip handling.
+        NSDictionary *headers = plan[@"headers"];
+        for (NSString *name in headers) {
+            [request setValue:headers[name] forHTTPHeaderField:name];
         }
+    } else {
+        self.sidecarText = @"";
+        RCTPushyDiscardArchive(self.savePath);
     }
 
     NSURLSessionConfiguration *sessionConfig = [NSURLSessionConfiguration defaultSessionConfiguration];
@@ -248,28 +207,15 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
     [task resume];
 }
 
-- (void)writeResumeMetaWithResponse:(NSHTTPURLResponse *)response total:(long long)total
+- (void)writeSidecarWithTotal:(long long)total
 {
-    NSMutableDictionary *meta = [NSMutableDictionary dictionary];
-    meta[@"url"] = self.urlString;
-    NSString *etag = response.allHeaderFields[@"ETag"] ?: self.resumeMeta[@"etag"];
-    NSString *lastModified =
-        response.allHeaderFields[@"Last-Modified"] ?: self.resumeMeta[@"lastModified"];
-    if (etag != nil) {
-        meta[@"etag"] = etag;
-    }
-    if (lastModified != nil) {
-        meta[@"lastModified"] = lastModified;
-    }
-    if (total > 0) {
-        meta[@"total"] = @(total);
-    }
-    NSData *data = [NSJSONSerialization dataWithJSONObject:meta options:0 error:nil];
-    if (data != nil) {
-        // Non-fatal on failure: without a sidecar the next attempt starts
-        // from zero.
-        [data writeToFile:RCTPushyResumeSidecarPath(self.savePath) atomically:YES];
-    }
+    std::string json = pushy::resume::SidecarJson(
+        RCTPushyStd(self.urlString), RCTPushyStd(self.responseEtag),
+        RCTPushyStd(self.responseLastModified), RCTPushyStd(self.sidecarText), total);
+    NSData *data = [NSData dataWithBytes:json.data() length:json.size()];
+    // Non-fatal on failure: without a sidecar the next attempt starts from
+    // zero.
+    [data writeToFile:RCTPushyResumeSidecarPath(self.savePath) atomically:YES];
 }
 
 - (void)closeFileHandle
@@ -321,7 +267,7 @@ completionHandler:(void (^)(NSString *path, NSError *error))completionHandler
 - (void)restartFromZero
 {
     self.retriedFromZero = YES;
-    self.resumeMeta = nil;
+    self.sidecarText = @"";
     self.resumeOffset = 0;
     self.baseOffset = 0;
     self.receivedBytes = 0;
@@ -382,13 +328,33 @@ didReceiveResponse:(NSURLResponse *)response
         [self completeWithError:self.fileError];
         return;
     }
-    if (statusCode == 416) {
-        long long knownTotal = [self.resumeMeta[@"total"] longLongValue];
+    // What to do with this response is the shared core's decision
+    // (pushy::resume). A non-HTTP response cannot happen for an http(s) URL;
+    // it would carry no status, so it is classified like a plain 200.
+    NSDictionary *headers = httpResponse.allHeaderFields;
+    NSDictionary *decision = RCTPushyResumeDecision(pushy::resume::ClassifyResponseJson(
+        httpResponse != nil ? (int)statusCode : 200, self.resumeOffset,
+        RCTPushyStd(headers[@"Content-Range"]), RCTPushyStd(headers[@"Content-Encoding"]),
+        response.expectedContentLength, RCTPushyStd(self.sidecarText),
+        RCTPushyStd(self.urlString), MAX(0LL, RCTPushyFileSize(self.savePath))));
+    NSString *action = decision[@"action"];
+    if ([action isEqualToString:@"complete"]) {
+        // 416 and the partial is actually the complete file.
+        long long knownTotal = [decision[@"total"] longLongValue];
         completionHandler(NSURLSessionResponseCancel);
-        if (knownTotal > 0 && RCTPushyFileSize(self.savePath) == knownTotal) {
-            // The partial is actually the complete file.
-            [self completeWithError:nil];
-        } else if (!self.retriedFromZero) {
+        if (self.progressHandler) {
+            self.progressHandler(knownTotal, knownTotal);
+        }
+        [self completeWithError:nil];
+        return;
+    }
+    if ([action isEqualToString:@"restart"]) {
+        // A stale 416, encoded range bytes or a malformed/mismatched
+        // Content-Range: the partial cannot be trusted. One clean retry from
+        // zero instead of failing terminally, which would keep the partial
+        // and hit the same wall on every attempt.
+        completionHandler(NSURLSessionResponseCancel);
+        if (!self.retriedFromZero) {
             [self restartFromZero];
         } else {
             [self failWithDescription:@"server rejected the download range" code:statusCode];
@@ -396,7 +362,8 @@ didReceiveResponse:(NSURLResponse *)response
         }
         return;
     }
-    if (httpResponse != nil && (statusCode < 200 || statusCode >= 300)) {
+    if (![action isEqualToString:@"write"]) {
+        // The partial and its sidecar stay: that is the resume state.
         [self failWithDescription:[NSString stringWithFormat:@"unexpected http status code %ld",
                                    (long)statusCode]
                              code:statusCode];
@@ -405,39 +372,17 @@ didReceiveResponse:(NSURLResponse *)response
         return;
     }
 
-    NSString *contentEncoding =
-        [httpResponse.allHeaderFields[@"Content-Encoding"] lowercaseString];
-    self.encodedBody =
-        contentEncoding.length > 0 && ![contentEncoding isEqualToString:@"identity"];
-
-    BOOL append = statusCode == 206 && self.resumeOffset > 0;
-    if (append && (self.encodedBody
-        || RCTPushyParseContentRange(httpResponse.allHeaderFields[@"Content-Range"],
-                                     self.resumeOffset) < 0)) {
-        // Encoded range bytes or a malformed/mismatched Content-Range: the
-        // appended bytes could not be trusted. Treat like a stale partial —
-        // one clean retry from zero — instead of failing terminally, which
-        // would keep the partial and hit the same wall on every attempt.
-        completionHandler(NSURLSessionResponseCancel);
-        if (!self.retriedFromZero) {
-            [self restartFromZero];
-        } else {
-            [self failWithDescription:@"untrusted resume response" code:-1];
-            [self completeWithError:self.fileError];
-        }
-        return;
-    }
-    self.baseOffset = append ? self.resumeOffset : 0;
+    BOOL append = [decision[@"append"] boolValue];
+    // NSURLSession delivers decoded bytes for an encoded body: the core then
+    // reports total 0 (the encoded lengths say nothing about the file).
+    self.encodedBody = [decision[@"encoded"] boolValue];
+    self.baseOffset = [decision[@"base"] longLongValue];
     self.contentLength = response.expectedContentLength;
-    if (append) {
-        self.expectedTotal = RCTPushyParseContentRange(
-            httpResponse.allHeaderFields[@"Content-Range"], self.resumeOffset);
-    } else if (self.encodedBody) {
-        // Decoded bytes are being written; the encoded lengths say nothing.
-        self.expectedTotal = 0;
-    } else {
-        self.expectedTotal = self.contentLength > 0 ? self.contentLength : 0;
-    }
+    self.expectedTotal = [decision[@"total"] longLongValue];
+    id etag = headers[@"ETag"];
+    id lastModified = headers[@"Last-Modified"];
+    self.responseEtag = [etag isKindOfClass:[NSString class]] ? etag : nil;
+    self.responseLastModified = [lastModified isKindOfClass:[NSString class]] ? lastModified : nil;
 
     // Caps from archive_limits.h, applied before the first body byte lands
     // (Android does the same): the announced size up front here, streamed
@@ -494,13 +439,13 @@ didReceiveResponse:(NSURLResponse *)response
             return;
         }
     }
-    if (self.encodedBody) {
+    if (![decision[@"persistSidecar"] boolValue]) {
         // No resume across an encoded transfer: on-disk bytes are decoded,
         // Range offsets would address the encoded representation.
         RCTPushyDeleteResumeSidecar(self.savePath);
-    } else if (httpResponse != nil) {
+    } else {
         // Persist before streaming so a mid-stream crash can resume.
-        [self writeResumeMetaWithResponse:httpResponse total:self.expectedTotal];
+        [self writeSidecarWithTotal:self.expectedTotal];
     }
     completionHandler(NSURLSessionResponseAllow);
 }
@@ -613,6 +558,12 @@ didCompleteWithError:(NSError *)error
                 self.expectedTotal, RCTPushyFileSize(self.savePath)] code:-1];
             finalError = self.fileError;
         }
+    }
+    if (finalError == nil && !self.encodedBody) {
+        // Refresh with the final size: a length unknown up front (chunked)
+        // left the sidecar without a total, so a process dying between
+        // download end and unzip would otherwise download it all again.
+        [self writeSidecarWithTotal:RCTPushyFileSize(self.savePath)];
     }
     // On failure the partial + sidecar stay on disk — that is the resume
     // state a later launch (or crash-rescue window) picks up — unless the

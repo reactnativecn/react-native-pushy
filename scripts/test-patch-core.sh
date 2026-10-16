@@ -62,6 +62,17 @@ c++ \
 "$BUILD_DIR/patch_core_test" "$ROOT_DIR/cpp/patch_core/tests/fixtures"
 "$BUILD_DIR/hbc_transform_test" "$ROOT_DIR/cpp/patch_core/tests/fixtures"
 
+# The resumable-download decisions every platform's downloader delegates to.
+c++ \
+  -std=c++17 \
+  $CORE_WARNINGS \
+  $SANITIZE_FLAGS \
+  "$ROOT_DIR/cpp/patch_core/tests/resume_plan_test.cpp" \
+  "$ROOT_DIR/cpp/patch_core/resume_plan.cpp" \
+  "$ROOT_DIR/cpp/update_flow_core/flow_json.cpp" \
+  -o "$BUILD_DIR/resume_plan_test"
+"$BUILD_DIR/resume_plan_test" "$ROOT_DIR/cpp/patch_core/tests/resume-plan-vectors.json"
+
 # Opt-in libFuzzer runs of the hbcTransform wire parser (untrusted __diff.json
 # metadata) and of the whole __diff.json parser: FUZZ=1 bun run test:patch-core.
 if cpp_test_fuzz_compiler; then

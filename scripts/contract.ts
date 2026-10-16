@@ -280,6 +280,9 @@ export const jniFunctions: Record<string, string> = {
   'InstallRecord.bundleSha256Of': 'InstallRecordBundleSha256',
   'ArchiveLimits.checkEntries': 'ArchiveCheckEntries',
   'ArchiveLimits.planFreeSpaceProbe': 'ArchivePlanFreeSpaceProbe',
+  'ResumePlan.planRequest': 'ResumePlanRequest',
+  'ResumePlan.classifyResponse': 'ResumeClassifyResponse',
+  'ResumePlan.sidecar': 'ResumeSidecar',
 };
 
 // NativePatchCore.ts binding -> the NAPI callback in pushy.cpp.
@@ -307,6 +310,9 @@ export const napiFunctions: Record<string, string> = {
   configsEquivalent: 'FlowConfigsEquivalent',
   runnableConfig: 'FlowRunnableConfig',
   normalizeConfiguration: 'FlowNormalizeConfiguration',
+  resumePlanRequest: 'ResumePlanRequest',
+  resumeClassifyResponse: 'ResumeClassifyResponse',
+  resumeSidecar: 'ResumeSidecar',
 };
 
 export type TextHost = 'cpp' | 'java' | 'arkts';

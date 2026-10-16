@@ -518,6 +518,14 @@ afterDownload)`：本地 silent 策略 或 响应标记 forceBoot 即激活。
   If-Range 验证器防混拼、最终长度对账、解压/patch 本身的结构校验;任何一
   层失败走"删两者重来",自愈。
 - **进度事件**:received 含续传偏移量,total 取 Content-Range 总长。
+- **完成后刷新 sidecar**:下载完整收齐(且未编码)后,用最终文件大小重写
+  sidecar。总长事先未知(chunked)时首次写入的 sidecar 没有 total,不刷新
+  的话"下载完、解压前死"的进程下次会整包重下。
+- **单一实现**:上述决策(读 sidecar 并校验、发不发 Range 与带哪些头、响应
+  判定、写什么 sidecar、Content-Range 解析)由 `cpp/patch_core/resume_plan.h`
+  一份实现,三端只做 IO(Android 经 JNI 的 `ResumePlan`、鸿蒙经 NAPI、iOS
+  直调),`cpp/patch_core/tests/resume-plan-vectors.json` 锁定行为。改规格只改
+  内核与向量。sidecar 一律以 64KB 为上限;Content-Range 的数字只接受纯数字。
 - **round-incomplete 标记**:runOnce 入口落盘 KV 标记、finally 清除。进程
   死于轮中 → 标记残留 → **下次启动编排器跳过 5s 延迟立即(异步)续传**。
   这不是阻塞、没有误判成本,是"上次没救完"最诚实的信号,让被截断的

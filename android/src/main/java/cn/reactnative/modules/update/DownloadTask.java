@@ -25,7 +25,6 @@ import okio.BufferedSink;
 import okio.BufferedSource;
 import okio.Okio;
 import org.json.JSONObject;
-import org.json.JSONTokener;
 
 class DownloadTask implements Runnable {
     // Bundle delta entry inside a patch archive, stored encoded.
@@ -124,52 +123,41 @@ class DownloadTask implements Runnable {
         }
     }
 
-    private JSONObject readResumeMeta(File sidecar, String url) {
+    // The sidecar's text, "" when there is none or it cannot be one (larger
+    // than a sidecar ever is, unreadable): ResumePlan treats both as "no
+    // trusted partial".
+    private static String readSidecarText(File sidecar) {
         if (!sidecar.isFile()) {
-            return null;
+            return "";
         }
         try {
-            JSONObject meta = (JSONObject) new JSONTokener(
-                UpdateFileUtils.readSmallUtf8(sidecar, MAX_SIDECAR_BYTES)).nextValue();
-            if (url.equals(meta.optString("url"))) {
-                return meta;
-            }
+            return UpdateFileUtils.readSmallUtf8(sidecar, MAX_SIDECAR_BYTES);
         } catch (Throwable e) {
-            // A corrupt sidecar simply means "cannot resume".
+            return "";
         }
-        return null;
     }
 
-    private void writeResumeMeta(
-        File sidecar, String url, Response response, JSONObject previousMeta, long total
-    ) {
+    private static void writeSidecarText(File sidecar, String text) {
         try {
-            JSONObject meta = new JSONObject();
-            meta.put("url", url);
-            String etag = response.header("ETag");
-            String lastModified = response.header("Last-Modified");
-            if (etag == null && previousMeta != null) {
-                etag = previousMeta.optString("etag", null);
-            }
-            if (lastModified == null && previousMeta != null) {
-                lastModified = previousMeta.optString("lastModified", null);
-            }
-            if (etag != null) {
-                meta.put("etag", etag);
-            }
-            if (lastModified != null) {
-                meta.put("lastModified", lastModified);
-            }
-            if (total > 0) {
-                meta.put("total", total);
-            }
             UpdateFileUtils.ensureParentDirectory(sidecar);
             try (java.io.FileOutputStream out = new java.io.FileOutputStream(sidecar)) {
-                out.write(meta.toString().getBytes(StandardCharsets.UTF_8));
+                out.write(text.getBytes(StandardCharsets.UTF_8));
             }
         } catch (Throwable e) {
             // Non-fatal: without a sidecar the next attempt starts from zero.
             Log.w(Texts.LOG_TAG, "Failed to persist resume sidecar: " + e);
+        }
+    }
+
+    // A ResumePlan result; null from the native core means memory ran out.
+    private static JSONObject resumeDecision(String json) throws IOException {
+        if (json == null) {
+            throw new IOException("resume plan failed");
+        }
+        try {
+            return new JSONObject(json);
+        } catch (org.json.JSONException e) {
+            throw new IOException("resume plan failed", e);
         }
     }
 
@@ -184,31 +172,35 @@ class DownloadTask implements Runnable {
         // Cross-launch resume (NATIVE_CHECKUPDATE_DESIGN §11.4): a brick gets
         // a few hundred milliseconds per launch plus a bounded crash-rescue
         // window, so every partial byte must survive process death and count.
-        long resumeOffset = 0;
-        JSONObject resumeMeta = readResumeMeta(sidecar, url);
-        if (resumeMeta != null && writePath.isFile() && writePath.length() > 0) {
-            long knownTotal = resumeMeta.optLong("total", 0);
-            long size = writePath.length();
-            if (knownTotal > 0 && size == knownTotal) {
-                // Fully received in a previous attempt (the process died
-                // between download end and unzip): nothing left to transfer.
-                downloadPhaseCompleted = true;
-                postProgress(knownTotal, knownTotal);
-                return;
-            }
-            if (knownTotal <= 0 || size < knownTotal) {
-                resumeOffset = size;
-            }
+        // What to request is the shared core's decision (ResumePlan).
+        String sidecarText = readSidecarText(sidecar);
+        JSONObject plan = resumeDecision(ResumePlan.planRequest(
+            sidecarText, url, writePath.isFile() ? writePath.length() : 0));
+        String action = plan.optString("action");
+        if ("complete".equals(action)) {
+            // Fully received in a previous attempt (the process died
+            // between download end and unzip): nothing left to transfer.
+            long total = plan.optLong("total");
+            downloadPhaseCompleted = true;
+            postProgress(total, total);
+            return;
         }
-        if (resumeOffset == 0) {
+        long resumeOffset = 0;
+        JSONObject headers = null;
+        if ("resume".equals(action)) {
+            resumeOffset = plan.optLong("offset");
+            headers = plan.optJSONObject("headers");
+        } else {
             discardPartial(writePath);
+            sidecarText = "";
         }
 
-        if (!transferArchive(url, writePath, sidecar, resumeMeta, resumeOffset)) {
-            // The server rejected the range for a partial that no longer
-            // matches (416): drop it and retry once from zero.
+        if (!transferArchive(url, writePath, sidecar, sidecarText, resumeOffset, headers)) {
+            // The partial no longer matches what the server serves (a stale
+            // 416, an untrusted range response): drop it and retry once from
+            // zero.
             discardPartial(writePath);
-            if (!transferArchive(url, writePath, sidecar, null, 0)) {
+            if (!transferArchive(url, writePath, sidecar, "", 0, null)) {
                 throw new IOException("Server rejected the download range for " + url);
             }
         }
@@ -225,32 +217,23 @@ class DownloadTask implements Runnable {
 
     /**
      * One HTTP transfer, appending from resumeOffset when the server honours
-     * the range. Returns false only for the retryable stale-partial case
-     * (416 with a size mismatch); throws on every other failure.
+     * the range. Returns false only when the partial must be discarded and the
+     * download retried from zero (ResumePlan's "restart"); throws on every
+     * other failure.
      */
     private boolean transferArchive(
-        String url, File writePath, File sidecar, JSONObject resumeMeta, long resumeOffset
+        String url, File writePath, File sidecar, String sidecarText, long resumeOffset,
+        JSONObject resumeHeaders
     ) throws IOException {
         Request.Builder builder = new Request.Builder().url(url);
-        if (resumeOffset > 0) {
-            // Only resume requests pin the encoding: Range offsets must
-            // address the same bytes that are on disk. Fresh downloads keep
-            // OkHttp's transparent gzip (it decompresses and strips the
-            // headers itself), matching the pre-resume behaviour for servers
-            // that compress regardless.
-            builder.header("Accept-Encoding", "identity");
-            builder.header("Range", "bytes=" + resumeOffset + "-");
-            String validator = null;
-            if (resumeMeta != null) {
-                validator = resumeMeta.optString("etag", null);
-                if (validator == null) {
-                    validator = resumeMeta.optString("lastModified", null);
-                }
-            }
-            if (validator != null) {
-                // With a validator the server falls back to a full 200 when
-                // the file changed instead of appending mismatched bytes.
-                builder.header("If-Range", validator);
+        if (resumeHeaders != null) {
+            // Range, Accept-Encoding: identity and If-Range (ResumePlan).
+            // Fresh downloads send none of them and keep OkHttp's
+            // transparent gzip, which decompresses and strips the headers.
+            java.util.Iterator<String> names = resumeHeaders.keys();
+            while (names.hasNext()) {
+                String name = names.next();
+                builder.header(name, resumeHeaders.optString(name));
             }
         }
 
@@ -261,53 +244,42 @@ class DownloadTask implements Runnable {
         params.attachCall(call);
         try (Response response = call.execute()) {
             HttpClients.rejectProtocolDowngrade(url, response);
-            if (response.code() == 416) {
-                long total = resumeMeta == null ? 0 : resumeMeta.optLong("total", 0);
-                if (total > 0 && writePath.length() == total) {
-                    // The partial is actually the complete file.
-                    postProgress(total, total);
-                    return true;
-                }
+            ResponseBody body = response.body();
+            long contentLength = body == null ? -1 : body.contentLength();
+            // The Content-Encoding header is visible only when the server
+            // encoded the body itself (OkHttp strips it when it transparently
+            // decompresses its own gzip).
+            JSONObject decision = resumeDecision(ResumePlan.classifyResponse(
+                response.code(),
+                resumeOffset,
+                response.header("Content-Range"),
+                response.header("Content-Encoding"),
+                contentLength,
+                sidecarText,
+                url,
+                writePath.isFile() ? writePath.length() : 0));
+            String action = decision.optString("action");
+            if ("complete".equals(action)) {
+                // The partial is actually the complete file.
+                long total = decision.optLong("total");
+                postProgress(total, total);
+                return true;
+            }
+            if ("restart".equals(action)) {
                 return false;
             }
-            if (!response.isSuccessful()) {
+            if (!"write".equals(action)) {
+                // The partial and its sidecar stay: that is the resume state.
                 throw new IOException("Server error: " + response.code() + " " + response.message());
             }
-
-            ResponseBody body = response.body();
             if (body == null) {
                 throw new IOException("Empty response body for " + url);
             }
 
-            String contentEncoding = response.header("Content-Encoding");
-            // Visible only when the server encoded the body itself (OkHttp
-            // strips the header when it transparently decompresses its own
-            // gzip). Byte offsets in an encoded representation do not match
-            // the decoded bytes on disk, so resume is off the table.
-            boolean encodedBody = contentEncoding != null
-                && !contentEncoding.equalsIgnoreCase("identity");
-            boolean append = response.code() == 206 && resumeOffset > 0;
-            if (append && encodedBody) {
-                // The server ignored Accept-Encoding: identity on a range
-                // request; the appended bytes could not be trusted.
-                return false;
-            }
-            long baseOffset = append ? resumeOffset : 0;
-            long contentLength = body.contentLength();
-            long totalAll;
-            if (append) {
-                totalAll = HttpUtils.parseContentRange(
-                    response.header("Content-Range"), resumeOffset);
-                if (totalAll < 0) {
-                    // Malformed or mismatched Content-Range: treat like a
-                    // stale partial (one clean retry from zero) instead of
-                    // failing — a throw would keep the partial and hit the
-                    // same wall on every future attempt.
-                    return false;
-                }
-            } else {
-                totalAll = contentLength > 0 ? contentLength : 0;
-            }
+            boolean append = decision.optBoolean("append");
+            long baseOffset = decision.optLong("base");
+            long totalAll = decision.optLong("total");
+            boolean encodedBody = decision.optBoolean("encoded");
             if (totalAll > ArchiveLimits.MAX_ARCHIVE_BYTES) {
                 throw new IOException("archive too large: " + totalAll + " bytes");
             }
@@ -319,12 +291,15 @@ class DownloadTask implements Runnable {
                 // writes must never leave a sidecar describing stale bytes).
                 discardPartial(writePath);
             }
-            if (encodedBody) {
+            String etag = response.header("ETag");
+            String lastModified = response.header("Last-Modified");
+            if (decision.optBoolean("persistSidecar")) {
+                // Persist before streaming so a mid-stream crash can resume.
+                writeSidecarText(sidecar,
+                    ResumePlan.sidecar(url, etag, lastModified, sidecarText, totalAll));
+            } else {
                 // No resume across an encoded transfer.
                 deleteResumeSidecar(writePath);
-            } else {
-                // Persist before streaming so a mid-stream crash can resume.
-                writeResumeMeta(sidecar, url, response, resumeMeta, totalAll);
             }
 
             long bytesRead;
@@ -400,6 +375,14 @@ class DownloadTask implements Runnable {
             if (totalAll > 0 && writePath.length() != totalAll) {
                 throw new IOException("Download incomplete: expected " + totalAll
                     + " bytes, got " + writePath.length());
+            }
+            if (!encodedBody) {
+                // Refresh with the final size: a length unknown up front
+                // (chunked) left the sidecar without a total, so a process
+                // dying between download end and unzip would otherwise
+                // download the whole archive again.
+                writeSidecarText(sidecar, ResumePlan.sidecar(
+                    url, etag, lastModified, sidecarText, writePath.length()));
             }
             streamedArchiveSha256 = UpdateFileUtils.toHex(digest.digest());
             // Final progress event, skipped when the loop already posted this
