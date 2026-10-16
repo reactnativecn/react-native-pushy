@@ -34,15 +34,19 @@ final class SyncCoordinator {
     // Version-info flag read by JS (metadata.ts), stored encoded.
     private static final String INFO_CRASH_HOLD = Texts.reveal("3905f5c2a6b96d56212a19");
 
+    // Shared with Harmony. The response cache lives in its own
+    // SharedPreferences file (UpdateContext.getNativeCheckCache).
+    // <generated:storage-keys> (scripts/contract.ts; bun scripts/generate-contract.ts)
+    // The persisted native check config (JS syncNativeConfig or the host).
     static final String KEY_CONFIG = "nativeConfig";
-    // Raw response cache for the JS side to reuse (§10.3), scoped to the
-    // exact logical request and native config that produced it. Stored in
-    // its own SharedPreferences file (UpdateContext.getNativeCheckCache).
+    // Raw response cache for the JS side to reuse (§10.3), scoped to the exact
+    // logical request and native config that produced it.
     static final String KEY_RESP_CACHE = "nativeCheckResp";
     // Set when a round starts, cleared when it ends (§11.4). Residue on the
-    // next launch means the previous process died mid-round (a crash rescue
-    // was truncated): that launch resumes immediately instead of waiting 5s.
+    // next launch means the previous process died mid-round: that launch
+    // resumes immediately instead of waiting 5s.
     static final String KEY_ROUND_INCOMPLETE = "nativeCheckIncomplete";
+    // </generated:storage-keys>
     // The check response (and a remote queryUrls list) is a small JSON
     // document; anything bigger is a broken or hijacked endpoint.
     private static final long MAX_QUERY_RESPONSE_BYTES = 1024 * 1024;

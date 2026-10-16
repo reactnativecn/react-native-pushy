@@ -31,9 +31,9 @@
 // This is the only implementation: Android (InstallRecord.java over JNI,
 // cpp/android_jni/install_record_jni.cpp), iOS (RCTPushyInstallRecord.mm)
 // and Harmony (InstallRecord.ts over NAPI, pushy.cpp) call it. The bundle
-// file name is the caller's, since it differs per platform. Constants a
-// host still mirrors are listed in scripts/check-constant-parity.js
-// (part of `bun lint`), which asserts they match.
+// file name is the caller's, since it differs per platform. The constants
+// (and the staging suffix the hosts build their unpack directory from) are
+// generated from scripts/contract.ts.
 
 // Keep the core internal to whichever binary links it (see podspec Core).
 #pragma GCC visibility push(hidden)
@@ -43,6 +43,7 @@ namespace install_record {
 
 using delta::Status;
 
+// <generated:constants> (scripts/contract.ts; bun scripts/generate-contract.ts)
 constexpr int kSchema = 1;
 constexpr const char* kFileName = ".pushy-complete";
 // Every name starting with this prefix, at any depth of a version directory,
@@ -52,6 +53,7 @@ constexpr const char* kReservedPrefix = ".pushy-";
 constexpr const char* kStagingSuffix = ".staging";
 // A record is a few hundred bytes; anything larger is not one.
 constexpr long long kMaxRecordBytes = 64 * 1024;
+// </generated:constants>
 
 // A record file's contents.
 struct Record {

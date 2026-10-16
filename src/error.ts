@@ -16,9 +16,6 @@ const UPDATE_ERROR_CODES = [
   // A 2xx check response that is not a check verdict (schema gate).
   'INVALID_RESPONSE',
   'CHECK_FAILED',
-  'DOWNLOAD_FAILED',
-  'SWITCH_VERSION_FAILED',
-  'MARK_SUCCESS_FAILED',
   'APK_INSTALL_PENDING',
   'APK_DOWNLOAD_FAILED',
   // A throw from a user-provided hook (e.g. beforeReload) — not an update
@@ -27,16 +24,21 @@ const UPDATE_ERROR_CODES = [
   // A second client/provider in the same process — a hard integration error;
   // the SDK is a process-level singleton.
   'SINGLETON_VIOLATION',
-  // Native codes (see cpp/patch_core/error_codes.h)
+  // Native codes (cpp/patch_core/error_codes.h)
+  // <generated:native-error-codes> (scripts/contract.ts; bun scripts/generate-contract.ts)
   'INVALID_OPTIONS',
+  'DOWNLOAD_FAILED',
   'PATCH_FAILED',
   'FILE_OPERATION_FAILED',
+  'SWITCH_VERSION_FAILED',
+  'MARK_SUCCESS_FAILED',
   'RESTART_FAILED',
   'RESET_FAILED',
   'INVALID_HASH_INFO',
   'UNSUPPORTED_PLATFORM',
   'APK_INSTALL_PERMISSION_REQUIRED',
   'APK_INSTALL_FAILED',
+  // </generated:native-error-codes>
 ] as const;
 
 /** A stable error code (see UPDATE_ERROR_CODES). */

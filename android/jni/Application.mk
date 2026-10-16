@@ -12,5 +12,7 @@ APP_CPPFLAGS += -std=c++17 -Oz -fexceptions -fno-rtti -fno-unwind-tables -fno-as
 APP_LDFLAGS += -Wl,--gc-sections -Wl,--exclude-libs,ALL
 APP_LDFLAGS += -Wl,--icf=all
 APP_BUILD_SCRIPT := Android.mk
-APP_ABI := armeabi-v7a arm64-v8a x86 x86_64
+# <generated:abis> (scripts/contract.ts; bun scripts/generate-contract.ts)
+APP_ABI := arm64-v8a armeabi-v7a x86 x86_64
+# </generated:abis>
 APP_STL := c++_static

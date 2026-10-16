@@ -40,7 +40,9 @@ export const DEFAULT_HEDGE_DELAY_MS = 250;
  * hostile) list would make every device fan out to all of its entries on
  * each failed check.
  */
+// <generated:query-budget> (scripts/contract.ts; bun scripts/generate-contract.ts)
 export const MAX_ENDPOINT_REQUESTS = 8;
+// </generated:query-budget>
 
 /**
  * Hedged race over the candidate endpoints: the first candidate starts

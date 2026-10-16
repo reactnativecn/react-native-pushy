@@ -25,10 +25,12 @@ COMMON_INCLUDES="
 # hpatch.c and the vendored HDiffPatch / lzma C sources are compiled with
 # -Wall -Wextra only (no -Werror).
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/cpp/hpatch/hpatch.c" -o "$BUILD_DIR/hpatch.o"
+# <generated:vendored-sources> (scripts/contract.ts; bun scripts/generate-contract.ts)
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c" -o "$BUILD_DIR/patch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/HDiffPatch/file_for_patch.c" -o "$BUILD_DIR/file_for_patch.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/lzma/C/LzmaDec.c" -o "$BUILD_DIR/LzmaDec.o"
 cc -Wall -Wextra $SANITIZE_FLAGS $COMMON_INCLUDES -c "$ROOT_DIR/android/jni/lzma/C/Lzma2Dec.c" -o "$BUILD_DIR/Lzma2Dec.o"
+# </generated:vendored-sources>
 
 # Every patch core source, picked up by directory like the platform builds
 # (tests/ is a subdirectory and stays out), plus the flow core's JSON parser

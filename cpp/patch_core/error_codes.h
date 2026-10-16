@@ -1,17 +1,14 @@
 #ifndef PUSHY_PATCH_CORE_ERROR_CODES_H_
 #define PUSHY_PATCH_CORE_ERROR_CODES_H_
 
-// Single source of truth for the stable, machine-readable error codes shared
-// by every platform. Native modules reject promises with one of these codes
-// so the JS layer (src/error.ts UpdateErrorCode) and user loggers can
-// aggregate errors across platforms and locales.
+// The stable, machine-readable error codes shared by every platform. Native
+// modules reject promises with one of these codes so the JS layer
+// (src/error.ts UpdateErrorCode) and user loggers can aggregate errors across
+// platforms and locales.
 //
-// Mirrors that cannot include this header MUST stay in sync by hand
-// (scripts/check-constant-parity.js, part of `bun lint`, asserts they do):
-//   - src/error.ts                      (UpdateErrorCode, JS layer)
-//   - android/.../ErrorCodes.java      (Java constants)
-//   - harmony/pushy/src/main/ets/ErrorCodes.ts
-// iOS (ios/RCTPushy/*.mm) includes this header directly.
+// Generated, like its copies in src/error.ts, android/.../ErrorCodes.java and
+// harmony/pushy/src/main/ets/ErrorCodes.ts, from scripts/contract.ts. iOS
+// (ios/RCTPushy/*.mm) includes this header directly.
 //
 // Human-readable messages are NOT part of this contract: they may differ per
 // platform and locale. Only the codes are stable.
@@ -24,12 +21,14 @@
 namespace pushy {
 namespace error_codes {
 
+// <generated:error-codes> (scripts/contract.ts; bun scripts/generate-contract.ts)
 // Method options missing or malformed (blank hash/url, wrong types).
 constexpr const char* kInvalidOptions = "INVALID_OPTIONS";
 // Native download failed (network error, bad HTTP status, truncated body).
 constexpr const char* kDownloadFailed = "DOWNLOAD_FAILED";
 // Unzip or hdiff patch application failed.
-inline const char* const kDeltaFailed = text::RevealStatic("0a36c0f286b44e640b1339dd");
+inline const char* const kDeltaFailed =
+    text::RevealStatic("0a36c0f286b44e640b1339dd");
 // Local file or state persistence operation failed.
 constexpr const char* kFileOperationFailed = "FILE_OPERATION_FAILED";
 // switchVersion / setNeedUpdate state transition failed.
@@ -52,6 +51,7 @@ constexpr const char* kApkInstallPermissionRequired =
     "APK_INSTALL_PERMISSION_REQUIRED";
 // PackageInstaller could not create, write, commit, or continue an APK session.
 constexpr const char* kApkInstallFailed = "APK_INSTALL_FAILED";
+// </generated:error-codes>
 
 }  // namespace error_codes
 }  // namespace pushy

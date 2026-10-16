@@ -78,10 +78,12 @@ const required = [
         'harmony/pushy.har',
         // Submodule sources hpatch.c decodes with (lint CI checks out
         // without submodules; the publish jobs check them out).
+        // <generated:vendored-sources> (scripts/contract.ts; bun scripts/generate-contract.ts)
         'android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c',
         'android/jni/HDiffPatch/file_for_patch.c',
         'android/jni/lzma/C/LzmaDec.c',
         'android/jni/lzma/C/Lzma2Dec.c',
+        // </generated:vendored-sources>
         // The submodules ship only these sources and headers, so their
         // licenses must ship with them.
         'android/jni/HDiffPatch/LICENSE',
@@ -89,7 +91,9 @@ const required = [
       ]
     : []),
 ];
+// <generated:abis> (scripts/contract.ts; bun scripts/generate-contract.ts)
 const requiredAbis = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'];
+// </generated:abis>
 
 const json = execFileSync(
   'npm',
@@ -150,10 +154,12 @@ function compilePackedSources() {
     execFileSync('tar', ['-xzf', path.join(dir, path.basename(tarball)), '-C', dir]);
     const root = path.join(dir, 'package');
     const sources = [
+      // <generated:vendored-compile> (scripts/contract.ts; bun scripts/generate-contract.ts)
       'android/jni/HDiffPatch/libHDiffPatch/HPatch/patch.c',
       'android/jni/HDiffPatch/file_for_patch.c',
       'android/jni/lzma/C/LzmaDec.c',
       'android/jni/lzma/C/Lzma2Dec.c',
+      // </generated:vendored-compile>
       ...fs
         .readdirSync(path.join(root, 'cpp/hpatch'))
         .filter((name) => name.endsWith('.c'))

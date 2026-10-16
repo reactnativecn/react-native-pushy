@@ -17,14 +17,19 @@ import { PushyError, getErrorMessage } from './ErrorCodes';
 // 鸿蒙的 debug 门控由触发点天然承担:dev 走 MetroJSBundleProvider,
 // PushyFileJSBundleProvider.getBundleUrl 不会被调用。
 const TAG = 'NativeSync';
+// 与 Android 共用的存储键。鸿蒙不做 crash-hold(errorManager 的同步回调驱动
+// 不了 ArkTS 异步网络 IO),续传 + 零延迟标记是收敛砖机的全部机制。
+// <generated:storage-keys> (scripts/contract.ts; bun scripts/generate-contract.ts)
+// The persisted native check config (JS syncNativeConfig or the host).
 export const KEY_CONFIG = 'nativeConfig';
-// 供 JS 侧复用的原始响应缓存(§10.3),同时记录请求与配置指纹以限定命中范围。
+// Raw response cache for the JS side to reuse (§10.3), scoped to the exact
+// logical request and native config that produced it.
 export const KEY_RESP_CACHE = 'nativeCheckResp';
-// 轮次开始落盘、结束清除(§11.4)。下次启动读到残留 = 上个进程死于轮中
-// (砖机的签名),该次启动跳过 5s 延迟立即续传。鸿蒙本版不做 crash-hold
-// (errorManager 的同步回调驱动不了 ArkTS 异步网络 IO),续传 + 零延迟
-// 标记是收敛砖机的全部机制。
+// Set when a round starts, cleared when it ends (§11.4). Residue on the
+// next launch means the previous process died mid-round: that launch
+// resumes immediately instead of waiting 5s.
 export const KEY_ROUND_INCOMPLETE = 'nativeCheckIncomplete';
+// </generated:storage-keys>
 const START_DELAY_MS = 5000;
 
 // 本次启动的事实,交给共享内核(cpp/update_flow_core/native_round.h)。

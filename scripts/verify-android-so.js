@@ -17,7 +17,9 @@ const path = require('path');
 const { findWording } = require('./check-binary-strings');
 
 const LIB_DIR = path.resolve(__dirname, '..', 'android', 'lib');
+// <generated:abis> (scripts/contract.ts; bun scripts/generate-contract.ts)
 const ABIS = ['arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'];
+// </generated:abis>
 
 // ELF e_machine per ABI, so a symbol-complete .so placed in the wrong ABI
 // directory (mixed-up artifacts) still fails verification.
