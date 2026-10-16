@@ -43,6 +43,11 @@ export type UpdateErrorListener = (
 export interface ReporterHost {
   readonly options: ClientOptions;
   getEffectivePackageVersion(): string;
+  /**
+   * The client's report: events raised here go through it, so a caller that
+   * replaces client.report sees them too.
+   */
+  report(event: ReportEvent): Promise<void>;
   /** The endpoint telemetry posts to: the last one that served a check. */
   telemetryEndpoint(): string | undefined;
 }
@@ -91,7 +96,7 @@ export class Reporter {
       return;
     }
     this.reportedInvalidUpdates.add(key);
-    this.report({
+    this.host.report({
       type: 'errorUpdate',
       message:
         reason === 'missingHash'
@@ -336,7 +341,7 @@ export class Reporter {
     }: { message?: string; data?: Record<string, string | number> } = {}
   ) => {
     this.emittedErrors.add(error);
-    this.report({
+    this.host.report({
       type,
       message,
       code: error.code,

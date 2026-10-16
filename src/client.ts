@@ -80,6 +80,7 @@ export class Pushy {
   private readonly reporter = new Reporter({
     options: this.options,
     getEffectivePackageVersion: () => this.getEffectivePackageVersion(),
+    report: (event) => this.report(event),
     telemetryEndpoint: () =>
       this.checker.lastWorkingEndpoint || this.options.server?.main?.[0],
   });
