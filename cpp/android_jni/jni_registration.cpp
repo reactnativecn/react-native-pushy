@@ -28,6 +28,7 @@ struct NativeClass {
 
 const std::vector<NativeClass>& NativeClasses() {
   static const std::vector<NativeClass> classes = {
+  // <generated:natives> (scripts/contract.ts; bun scripts/generate-contract.ts)
   {"3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c8ebc8e7e42342de4daa0",  // NativeCore
    {
        {"3d12e0e2bb9b784a302b19fdf2ba966b7c2216f2f7d4b6", "725edd",
@@ -84,6 +85,7 @@ const std::vector<NativeClass>& NativeClasses() {
        {"2a1bf5df88996d40112f1dfad38382624822", "723ddefb84c2536f",
         reinterpret_cast<void*>(&pushy::jni_natives::ArchivePlanFreeSpaceProbe)},
    }},
+  // </generated:natives>
   };
   return classes;
 }

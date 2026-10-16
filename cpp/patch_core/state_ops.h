@@ -15,12 +15,14 @@ namespace pushy {
 namespace state_ops {
 
 enum class StateOperation {
+  // <generated:state-operations> (scripts/contract.ts; bun scripts/generate-contract.ts)
   kSwitchVersion = 1,
   kMarkSuccess = 2,
   kRollback = 3,
   kClearFirstTime = 4,
   kClearRollbackMark = 5,
   kResolveLaunch = 6,
+  // </generated:state-operations>
 };
 
 }  // namespace state_ops

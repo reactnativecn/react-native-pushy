@@ -23,9 +23,9 @@
 //     and CheckExtractedDirectory after, over NAPI (pushy.cpp).
 // The constants a host still compares against itself (download caps, the
 // manifest cap, the free-space margin, the streamed-bytes backstop) are
-// mirrored in android/.../ArchiveLimits.java and
-// harmony/pushy/src/main/ets/ArchiveLimits.ts;
-// scripts/check-constant-parity.js (part of `bun lint`) asserts they match.
+// generated into android/.../ArchiveLimits.java and
+// harmony/pushy/src/main/ets/ArchiveLimits.ts from scripts/contract.ts, like
+// the values below.
 
 // Keep the core internal to whichever binary links it (see podspec Core).
 #pragma GCC visibility push(hidden)
@@ -35,6 +35,7 @@ namespace archive_limits {
 
 using delta::Status;
 
+// <generated:limits> (scripts/contract.ts; bun scripts/generate-contract.ts)
 // Downloaded archive (Content-Length up front, streamed bytes as backstop).
 constexpr long long kMaxArchiveBytes = 512LL * 1024 * 1024;
 // Sum of every entry's uncompressed size.
@@ -58,6 +59,7 @@ constexpr long long kFreeDiskMarginBytes = 64LL * 1024 * 1024;
 // probe reserving at least this many bytes ahead (a single larger chunk
 // reserves its own size), so no write can ever eat into the margin.
 constexpr long long kUnknownLengthFreeSpaceProbeBytes = 8LL * 1024 * 1024;
+// </generated:limits>
 
 // Whether any component of an archive path ('/' or '\\' separated) starts
 // with install_record::kReservedPrefix. Those names belong to the SDK (the

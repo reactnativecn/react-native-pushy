@@ -29,10 +29,9 @@ jobs:
         run: bun install --frozen-lockfile
 
       # `bun lint` ends with check-native-spec-parity.js (every
-      # src/NativePushy.ts method must be exported by all four native
-      # bindings, with the right sync/async kind on Harmony) and
-      # check-constant-parity.js (the C++ header constants must match their
-      # Java/ArkTS/JS mirrors).
+      # src/NativePushy.ts method must be implemented by all three native
+      # modules) and generate-contract.ts --check (every region generated from
+      # scripts/contract.ts and the calling-side declarations is current).
       - name: Run lint
         run: bun lint
 

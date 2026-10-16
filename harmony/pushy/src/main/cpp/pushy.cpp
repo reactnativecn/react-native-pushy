@@ -1443,6 +1443,7 @@ static napi_value FlowNormalizeConfiguration(napi_env env,
 }
 
 napi_value Init(napi_env env, napi_value exports) {
+  // <generated:exports> (scripts/contract.ts; bun scripts/generate-contract.ts)
   if (!ExportFunction(env, exports, "syncStateWithBinaryVersion", Guarded<SyncStateWithBinaryVersion>) ||
       !ExportFunction(env, exports, "runStateCore", Guarded<RunStateCore>) ||
       !ExportFunction(env, exports, "applyArchiveDelta", Guarded<ApplyArchiveDelta>) ||
@@ -1455,8 +1456,8 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "promoteStaging", Guarded<PromoteStaging>) ||
       !ExportFunction(env, exports, "checkActivation", Guarded<CheckActivation>) ||
       !ExportFunction(env, exports, "checkUncompressedSize", Guarded<CheckUncompressedSize>) ||
-      !ExportFunction(env, exports, "planFreeSpaceProbe", Guarded<PlanFreeSpaceProbe>) ||
       !ExportFunction(env, exports, "checkExtractedDirectory", Guarded<CheckExtractedDirectory>) ||
+      !ExportFunction(env, exports, "planFreeSpaceProbe", Guarded<PlanFreeSpaceProbe>) ||
       !ExportFunction(env, exports, "crc32", Guarded<Crc32>) ||
       !ExportFunction(env, exports, "getSupportedDiffVersion", Guarded<GetSupportedDiffVersion>) ||
       !ExportFunction(env, exports, "prepareRound", Guarded<FlowPrepareRound>) ||
@@ -1466,6 +1467,7 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "configsEquivalent", Guarded<FlowConfigsEquivalent>) ||
       !ExportFunction(env, exports, "runnableConfig", Guarded<FlowRunnableConfig>) ||
       !ExportFunction(env, exports, "normalizeConfiguration", Guarded<FlowNormalizeConfiguration>)) {
+  // </generated:exports>
     return nullptr;
   }
   return exports;

@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Guards the JS <-> native method contract against drift.
 //
-// src/NativePushy.ts is the single spec. Every method it declares must be
-// exposed by all four native bindings, and the Harmony C++ method table must
-// register Promise-returning methods as ASYNC (a Promise handed through a
-// SYNC registration reaches JS as an empty object and its rejection is lost).
-// A method missing on one platform is `undefined` on the JS side, and the JS
+// src/NativePushy.ts is the single spec. The tables derived from it — the
+// Harmony PUSHY_METHODS rows (Promise methods ASYNC) and the old-architecture
+// NativePushySpec — are generated (scripts/generate-contract.ts); what no
+// generator can write is each module's implementation, checked here: every
+// spec method must be implemented on Android, iOS and Harmony. A method
+// missing on one platform is `undefined` on the JS side, and the JS
 // feature-detects then treat the whole capability as "old native" and skip it
 // silently — exactly how the native cold-start check shipped dark on Harmony
 // for three releases (docs/NATIVE_CHECK_FOLLOWUPS.md, 2026-08-13).
@@ -22,7 +23,7 @@ const methodRe = /^\s{2}([a-zA-Z]+)\(([^)]*)\)\s*:\s*([^;]+);/gm;
 const methods = [];
 let m;
 while ((m = methodRe.exec(specBody)) !== null) {
-  methods.push({ name: m[1], returns: m[3].trim() });
+  methods.push({ name: m[1] });
 }
 if (methods.length < 10) {
   console.error('check-native-spec-parity: failed to parse src/NativePushy.ts');
@@ -33,28 +34,20 @@ if (methods.length < 10) {
 const plumbing = new Set(['addListener', 'removeListeners']);
 
 // One UpdateModule serves both Android architectures. The old bridge finds
-// its methods through @ReactMethod on UpdateModule itself; under the old
-// architecture it extends the hand-written NativePushySpec stand-in, which
-// must declare every method the codegen spec does.
+// its methods through @ReactMethod on UpdateModule itself.
 const androidModule = read(
   'android/src/main/java/cn/reactnative/modules/update/UpdateModule.java'
-);
-const oldarchSpec = read(
-  'android/src/oldarch/cn/reactnative/modules/update/NativePushySpec.java'
 );
 const ios = read('ios/RCTPushy/RCTPushy.mm');
 const harmonyCpp = read('harmony/pushy/src/main/cpp/PushyTurboModule.cpp');
 const harmonyTs = read('harmony/pushy/src/main/ets/PushyTurboModule.ts');
 
-// The Harmony method table: `X(name, argCount, SYNC|ASYNC)` rows of the
-// PUSHY_METHODS X-macro in PushyTurboModule.cpp.
+// The (generated) Harmony method table: `X(name, argCount, SYNC|ASYNC)` rows
+// of the PUSHY_METHODS X-macro in PushyTurboModule.cpp.
 const harmonyTable = new Map();
 const problems = [];
 const tableRe = /\bX\(\s*([A-Za-z]+)\s*,\s*(\d+)\s*,\s*(SYNC|ASYNC)\s*\)/g;
 while ((m = tableRe.exec(harmonyCpp)) !== null) {
-  if (harmonyTable.has(m[1])) {
-    problems.push(`harmony/cpp: ${m[1]} listed twice in PUSHY_METHODS`);
-  }
   harmonyTable.set(m[1], m[3]);
 }
 if (harmonyTable.size < 10) {
@@ -67,7 +60,7 @@ if (harmonyTable.size < 10) {
 
 const has = (source, re) => re.test(source);
 
-for (const { name, returns } of methods) {
+for (const { name } of methods) {
   if (plumbing.has(name)) {
     continue;
   }
@@ -77,10 +70,6 @@ for (const { name, returns } of methods) {
   if (!has(androidModule, javaRe)) {
     problems.push(`android: ${name} not exported with @ReactMethod`);
   }
-  const specRe = new RegExp(`public\\s+abstract\\s+\\S+\\s+${name}\\s*\\(`);
-  if (!has(oldarchSpec, specRe)) {
-    problems.push(`android/oldarch: ${name} missing from NativePushySpec`);
-  }
   if (
     !has(ios, new RegExp(`RCT_(EXPORT|REMAP)_METHOD\\(\\s*${name}\\b`)) &&
     !has(ios, new RegExp(`^-\\s*\\([^)]*\\)\\s*${name}\\b`, 'm'))
@@ -88,16 +77,6 @@ for (const { name, returns } of methods) {
     problems.push(`ios: ${name} not exported`);
   }
   const kind = harmonyTable.get(name);
-  if (!kind) {
-    problems.push(`harmony/cpp: ${name} not in the PUSHY_METHODS table`);
-  }
-  const isPromise = /^Promise</.test(returns);
-  if (isPromise && kind === 'SYNC') {
-    problems.push(
-      `harmony/cpp: ${name} returns ${returns} in the spec but is ` +
-        'registered SYNC in PUSHY_METHODS'
-    );
-  }
   const tsRe = new RegExp(`^\\s{2}(?:async\\s+)?${name}\\s*\\(`, 'm');
   if (!has(harmonyTs, tsRe)) {
     problems.push(`harmony/ets: ${name} not implemented`);
@@ -121,5 +100,5 @@ if (problems.length > 0) {
 }
 console.log(
   `check-native-spec-parity: ${methods.length} spec methods present on ` +
-    'android (old+new arch), ios and harmony'
+    'android, ios and harmony'
 );

@@ -5,11 +5,13 @@ package cn.reactnative.modules.update;
  * mean that the running React Native instance has been reloaded.
  */
 public final class BundlePreparationResult {
+    // <generated:statuses> (scripts/contract.ts; bun scripts/generate-contract.ts)
     public static final String SKIPPED = "skipped";
     public static final String NO_UPDATE = "noUpdate";
     public static final String DOWNLOADED = "downloaded";
     public static final String FAILED = "failed";
     public static final String CANCELLED = "cancelled";
+    // </generated:statuses>
 
     private final String status;
     private final String reason;

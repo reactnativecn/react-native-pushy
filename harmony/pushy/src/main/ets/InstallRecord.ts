@@ -10,8 +10,10 @@ import {
 // 实现):解压/打补丁全在 staging 目录里进行,最后写入记录,再一次 rename 成
 // 版本目录;激活前重新校验 bundle 摘要。这里只拼路径、把原生结果映射成
 // 稳定错误码。
-// STAGING_SUFFIX 镜像 kStagingSuffix(scripts/check-constant-parity.js 断言)。
+// STAGING_SUFFIX 即 kStagingSuffix,由 scripts/contract.ts 生成。
+// <generated:staging-suffix> (scripts/contract.ts; bun scripts/generate-contract.ts)
 export const STAGING_SUFFIX = '.staging';
+// </generated:staging-suffix>
 export const HARMONY_BUNDLE_FILE_NAME = 'bundle.harmony.js';
 
 export function stagingDirectoryFor(versionDir: string): string {

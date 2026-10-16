@@ -57,12 +57,14 @@ public class UpdateContext {
     private String bundleHash;
     private java.util.ArrayList<BundleHashListener> pendingBundleHashListeners =
         new java.util.ArrayList<>();
+    // <generated:state-operations> (scripts/contract.ts; bun scripts/generate-contract.ts)
     private static final int STATE_OP_SWITCH_VERSION = 1;
     private static final int STATE_OP_MARK_SUCCESS = 2;
     private static final int STATE_OP_ROLLBACK = 3;
-    // 4 (clear first time) exists in the state core but has no Android caller.
+    // 4 (ClearFirstTime) has no caller on this side.
     private static final int STATE_OP_CLEAR_ROLLBACK_MARK = 5;
     private static final int STATE_OP_RESOLVE_LAUNCH = 6;
+    // </generated:state-operations>
     static final String KEY_FIRST_LOAD_MARKED = "firstLoadMarked";
     // Bumped by resetToPackagedBundle. The cold-start check runs for minutes
     // and may already hold a decision when the app resets to the packaged

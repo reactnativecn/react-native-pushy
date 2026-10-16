@@ -14,9 +14,11 @@ namespace pushy {
 namespace archive_patch {
 
 enum class ArchivePatchType {
+  // <generated:archive-patch-types> (scripts/contract.ts; bun scripts/generate-contract.ts)
   kFull = 1,
   kPatchFromPackage = 2,
   kPatchFromPpk = 3,
+  // </generated:archive-patch-types>
 };
 
 enum class EntryAction {

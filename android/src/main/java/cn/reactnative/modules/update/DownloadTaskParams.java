@@ -8,9 +8,11 @@ import java.io.File;
 class DownloadTaskParams {
     static final int TASK_TYPE_CLEANUP          = 0; //Keep hash & originHash
 
-    static final int TASK_TYPE_PATCH_FULL       = 1;
-    static final int TASK_TYPE_PATCH_FROM_APK   = 2;
-    static final int TASK_TYPE_PATCH_FROM_PPK   = 3;
+    // <generated:archive-patch-types> (scripts/contract.ts; bun scripts/generate-contract.ts)
+    static final int TASK_TYPE_PATCH_FULL = 1;
+    static final int TASK_TYPE_PATCH_FROM_APK = 2;
+    static final int TASK_TYPE_PATCH_FROM_PPK = 3;
+    // </generated:archive-patch-types>
     static final int TASK_TYPE_PLAIN_DOWNLOAD   = 4;
 
     static final int DEFAULT_MAX_AGE_DAYS = 3;

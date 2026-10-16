@@ -32,10 +32,12 @@ file(GLOB CORE_SOURCES CONFIGURE_DEPENDS
 set(HDP_SOURCES
      ${CMAKE_CURRENT_SOURCE_DIR}/pushy.cpp
      ${CORE_SOURCES}
+     # <generated:vendored-sources> (scripts/contract.ts; bun scripts/generate-contract.ts)
      ${HDIFFPATCH_DIR}/libHDiffPatch/HPatch/patch.c
      ${HDIFFPATCH_DIR}/file_for_patch.c
      ${LZMA_DIR}/C/LzmaDec.c
      ${LZMA_DIR}/C/Lzma2Dec.c
+     # </generated:vendored-sources>
 )
 
 add_library(rnpushy SHARED

@@ -1,13 +1,19 @@
 import NativeCore from 'librnpushy.so';
 
+// <generated:state-operations> (scripts/contract.ts; bun scripts/generate-contract.ts)
 export const STATE_OP_SWITCH_VERSION = 1;
 export const STATE_OP_MARK_SUCCESS = 2;
 export const STATE_OP_ROLLBACK = 3;
+// 4 (ClearFirstTime) has no caller on this side.
 export const STATE_OP_CLEAR_ROLLBACK_MARK = 5;
 export const STATE_OP_RESOLVE_LAUNCH = 6;
+// </generated:state-operations>
 
+// <generated:archive-patch-types> (scripts/contract.ts; bun scripts/generate-contract.ts)
+export const ARCHIVE_PATCH_TYPE_FULL = 1;
 export const ARCHIVE_PATCH_TYPE_FROM_PACKAGE = 2;
 export const ARCHIVE_PATCH_TYPE_FROM_PPK = 3;
+// </generated:archive-patch-types>
 
 export interface StateCoreResult {
   packageVersion?: string;

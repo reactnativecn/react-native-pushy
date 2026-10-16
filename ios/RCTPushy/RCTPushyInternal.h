@@ -32,9 +32,11 @@
 #endif
 
 typedef NS_ENUM(NSInteger, PushyType) {
+    // <generated:archive-patch-types> (scripts/contract.ts; bun scripts/generate-contract.ts)
     PushyTypeFullDownload = 1,
     PushyTypePatchFromPackage = 2,
     PushyTypePatchFromPpk = 3,
+    // </generated:archive-patch-types>
 };
 
 #pragma mark - RCTPushyState.mm

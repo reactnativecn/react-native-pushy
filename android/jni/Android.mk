@@ -18,10 +18,12 @@ Shared_Files := \
 
 # HDiffPatch / lzma submodules: only the decoder sources hpatch.c uses.
 Hdp_Files := \
+# <generated:vendored-sources> (scripts/contract.ts; bun scripts/generate-contract.ts)
 	HDiffPatch/libHDiffPatch/HPatch/patch.c \
 	HDiffPatch/file_for_patch.c \
 	lzma/C/LzmaDec.c \
 	lzma/C/Lzma2Dec.c
+# </generated:vendored-sources>
 
 LOCAL_SRC_FILES := \
 	$(patsubst $(LOCAL_PATH)/%,%,$(Shared_Files)) \

@@ -17,26 +17,28 @@ using namespace rnoh;
 // unhandled ArkTS rejection, so JS would report e.g. setNeedUpdate as
 // successful while nothing was switched. scripts/check-native-spec-parity.js
 // enforces both rules against this table.
-#define PUSHY_METHODS(X)                 \
-  X(getConstants, 0, SYNC)               \
-  X(addListener, 1, SYNC)                \
-  X(removeListeners, 1, SYNC)            \
-  X(setLocalHashInfo, 2, ASYNC)          \
-  X(getLocalHashInfo, 1, ASYNC)          \
-  X(setUuid, 1, ASYNC)                   \
-  X(reloadUpdate, 1, ASYNC)              \
-  X(restartApp, 0, ASYNC)                \
-  X(setNeedUpdate, 1, ASYNC)             \
-  X(markSuccess, 0, ASYNC)               \
-  X(downloadPatchFromPpk, 1, ASYNC)      \
-  X(downloadPatchFromPackage, 1, ASYNC)  \
-  X(downloadFullUpdate, 1, ASYNC)        \
-  X(downloadAndInstallApk, 1, ASYNC)     \
-  X(syncNativeConfig, 1, ASYNC)          \
-  X(getNativeCheckCache, 0, ASYNC)       \
-  X(markJsCheckCompleted, 1, ASYNC)      \
-  X(getBundleHash, 0, ASYNC)             \
-  X(resetToPackagedBundle, 0, ASYNC)
+// <generated:pushy-methods> (scripts/contract.ts; bun scripts/generate-contract.ts)
+#define PUSHY_METHODS(X)                \
+  X(getConstants, 0, SYNC)              \
+  X(setLocalHashInfo, 2, ASYNC)         \
+  X(getLocalHashInfo, 1, ASYNC)         \
+  X(setUuid, 1, ASYNC)                  \
+  X(syncNativeConfig, 1, ASYNC)         \
+  X(getNativeCheckCache, 0, ASYNC)      \
+  X(markJsCheckCompleted, 1, ASYNC)     \
+  X(reloadUpdate, 1, ASYNC)             \
+  X(restartApp, 0, ASYNC)               \
+  X(setNeedUpdate, 1, ASYNC)            \
+  X(markSuccess, 0, ASYNC)              \
+  X(getBundleHash, 0, ASYNC)            \
+  X(resetToPackagedBundle, 0, ASYNC)    \
+  X(downloadPatchFromPpk, 1, ASYNC)     \
+  X(downloadPatchFromPackage, 1, ASYNC) \
+  X(downloadFullUpdate, 1, ASYNC)       \
+  X(downloadAndInstallApk, 1, ASYNC)    \
+  X(addListener, 1, SYNC)               \
+  X(removeListeners, 1, SYNC)
+// </generated:pushy-methods>
 
 // ArkTSTurboModule entry point per kind.
 #define PUSHY_INVOKE_SYNC call

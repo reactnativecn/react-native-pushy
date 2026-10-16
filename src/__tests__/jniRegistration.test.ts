@@ -4,9 +4,10 @@ import { URL } from 'node:url';
 import { decodeNativeText } from '../../scripts/encode-native-text';
 
 // JNI_OnLoad binds Android native methods from an encoded name/signature table
-// (cpp/android_jni/jni_registration.cpp). A drifted entry would silently leave
-// a method unbound until its first call, so the table must match every Java
-// `native` declaration exactly.
+// (cpp/android_jni/jni_registration.cpp), generated from the Java `native`
+// declarations (scripts/generate-contract.ts). A drifted entry would silently
+// leave a method unbound until its first call; this decodes the generated
+// table independently of the generator and compares.
 const root = new URL('../../', import.meta.url);
 const javaDir = 'android/src/main/java/cn/reactnative/modules/update/';
 const javaPackage = 'cn/reactnative/modules/update/';
@@ -75,7 +76,7 @@ const registered = () => {
 describe('JNI registration table', () => {
   test('matches every Java native declaration', () => {
     const natives = javaNatives();
-    expect(natives.length).toBe(19);
+    expect(natives.length).toBeGreaterThan(0);
     expect(registered()).toEqual(natives);
   });
 

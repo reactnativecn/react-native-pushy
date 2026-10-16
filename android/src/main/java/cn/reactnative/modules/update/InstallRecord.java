@@ -13,8 +13,10 @@ import java.io.IOException;
  * isInstalled / recordedBundleSha256, which only stat and read the record.
  */
 final class InstallRecord {
-    // Mirrors install_record.h kStagingSuffix (scripts/check-constant-parity.js).
+    // install_record.h kStagingSuffix, generated from scripts/contract.ts.
+    // <generated:staging-suffix> (scripts/contract.ts; bun scripts/generate-contract.ts)
     static final String STAGING_SUFFIX = ".staging";
+    // </generated:staging-suffix>
     /** The JS bundle inside a version directory. */
     static final String BUNDLE_FILE_NAME = "index.bundlejs";
 

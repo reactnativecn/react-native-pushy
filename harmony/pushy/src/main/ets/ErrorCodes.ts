@@ -1,5 +1,4 @@
-// ArkTS mirror of cpp/patch_core/error_codes.h — keep in sync by hand
-// (scripts/check-constant-parity.js asserts the values match).
+// The codes of cpp/patch_core/error_codes.h, generated from scripts/contract.ts.
 // 与 Android/iOS 共用的稳定错误码:JS 层(src/error.ts)按 code 聚合遥测,
 // 消息文案各平台可不同,只有码是契约。
 //
@@ -9,6 +8,7 @@
 
 import { revealText } from './Texts';
 
+// <generated:error-codes> (scripts/contract.ts; bun scripts/generate-contract.ts)
 export const ERROR_INVALID_OPTIONS = 'INVALID_OPTIONS';
 export const ERROR_DOWNLOAD_FAILED = 'DOWNLOAD_FAILED';
 export const ERROR_DELTA_FAILED = revealText('0a36c0f286b44e640b1339dd');
@@ -22,6 +22,7 @@ export const ERROR_UNSUPPORTED_PLATFORM = 'UNSUPPORTED_PLATFORM';
 export const ERROR_APK_INSTALL_PERMISSION_REQUIRED =
   'APK_INSTALL_PERMISSION_REQUIRED';
 export const ERROR_APK_INSTALL_FAILED = 'APK_INSTALL_FAILED';
+// </generated:error-codes>
 
 /**
  * 带稳定错误码的 Error:`code` 是属性,消息同时带 `[CODE] ` 前缀(桥丢属性时
