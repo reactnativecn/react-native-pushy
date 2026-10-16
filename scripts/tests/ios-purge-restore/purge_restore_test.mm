@@ -69,6 +69,8 @@ static Order order;
 static uint64_t requestGeneration;
 static BOOL roundCommitted, roundActivated;
 static BOOL resetResolved;
+// Signalled by the reset's (failing) cleanup stub below.
+static dispatch_semaphore_t cleanupRan;
 static int scheduleCount;
 static int64_t waitBudget;
 static NSTimeInterval processElapsed;
@@ -168,10 +170,14 @@ static void PushyRejectError(RCTPromiseRejectBlock reject, NSError *error) {
 // Filesystem cleanup is not under test. Keep the real declaration/return type;
 // the real reset body (including its asynchronous completion) still executes.
 namespace pushy { namespace delta {
+// The reset's best-effort delete fails here on purpose: the reset is complete
+// once the state is, so its promise must resolve regardless (a reset that
+// still waited for the delete would reject, failing the test's rejecter).
 Status CleanupOldEntries(const std::string&, const std::vector<std::string>&,
                          int max_age_days, std::time_t) {
     Expect(max_age_days == 0, "reset requests a full cleanup");
-    return {true, ""};
+    Signal(cleanupRan);
+    return {false, "injected cleanup failure"};
 }
 }}
 
@@ -346,6 +352,7 @@ static void SetUp(Order selected) {
     workerSettled = dispatch_semaphore_create(0);
     resetAttempted = dispatch_semaphore_create(0);
     resetFinished = dispatch_semaphore_create(0);
+    cleanupRan = dispatch_semaphore_create(0);
     roundCommitted = NO;
     roundActivated = YES;  // rejected commits must explicitly overwrite this
     resetResolved = NO;
@@ -475,6 +482,9 @@ static void ResetOrdering(Order selected) {
     Expect(Value(PushyHashInfoKey(@"B")) == nil, "reset must leave no version metadata");
     Expect(Value(keyNativeCheckCache) == nil, "reset must leave no response cache");
     Expect([Value(keyUuid) isEqual:@"installation-uuid"], "reset must preserve install identity");
+    // The failed delete ran after the promise had already resolved, and did
+    // not turn it into a rejection.
+    Await(cleanupRan, "reset still deletes the downloaded versions");
     Finish();
 }
 
