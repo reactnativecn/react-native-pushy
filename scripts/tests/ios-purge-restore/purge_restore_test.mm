@@ -19,6 +19,7 @@
 #include "cpp/patch_core/digest.h"
 #include "cpp/patch_core/install_record.h"
 #include "cpp/patch_core/native_texts.h"
+#include "cpp/patch_core/stored_items.h"
 #include "cpp/update_flow_core/native_config.h"
 #include "ios/RCTPushy/RCTPushyCommon.h"
 
@@ -86,6 +87,11 @@ static void MaybeThrow(void) {
         throw std::length_error("state too large");
     }
 }
+// Makes every write to that store throw, as a full disk or a sandbox denial
+// surfaces from the preferences daemon.
+static id failWritesOn = nil;
+// Makes that store's snapshot throw (the migration's first read).
+static id failSnapshotOn = nil;
 
 // In-memory collaborator, deliberately NOT an NSUserDefaults subclass: inherited
 // accessors could otherwise reach real preferences without ObserveWrite(). Only
@@ -116,7 +122,13 @@ static void ObserveWrite(void) {
     if (self) { _values = [NSMutableDictionary new]; }
     return self;
 }
-- (void)setObject:(id)value forKey:(NSString *)key { ObserveWrite(); _values[key] = value; }
+- (void)setObject:(id)value forKey:(NSString *)key {
+    ObserveWrite();
+    if (self == failWritesOn) {
+        [NSException raise:NSInternalInconsistencyException format:@"write failed"];
+    }
+    _values[key] = value;
+}
 - (void)removeObjectForKey:(NSString *)key { ObserveWrite(); [_values removeObjectForKey:key]; }
 - (id)objectForKey:(NSString *)key { MaybeThrow(); return _values[key]; }
 - (NSString *)stringForKey:(NSString *)key {
@@ -129,7 +141,12 @@ static void ObserveWrite(void) {
     id value = _values[key];
     return [value isKindOfClass:NSDictionary.class] ? value : nil;
 }
-- (NSDictionary<NSString *, id> *)dictionaryRepresentation { return [_values copy]; }
+- (NSDictionary<NSString *, id> *)dictionaryRepresentation {
+    if (self == failSnapshotOn) {
+        throw std::length_error("snapshot too large");
+    }
+    return [_values copy];
+}
 - (void)doesNotRecognizeSelector:(SEL)selector {
     // Fail even if product code catches Objective-C exceptions. Dynamic sends
     // must not fall through to a real defaults domain or turn into a passed test.
@@ -159,7 +176,9 @@ static void DefaultsWriteProbe(NSUserDefaults *defaults) {
 #endif
 
 static TestDefaults *testDefaults;
+static TestDefaults *testCacheDefaults;
 static NSUserDefaults *PushyDefaults(void) { return testDefaults; }
+static NSUserDefaults *PushyCacheDefaults(void) { return testCacheDefaults; }
 static NSTimeInterval PushyMonotonicNow(void) { return 100; }
 static NSError *PushyErrorWithCode(const char *code, NSString *message) {
     return [NSError errorWithDomain:@(code) code:1 userInfo:@{NSLocalizedDescriptionKey: message}];
@@ -362,6 +381,7 @@ static void SetUp(Order selected) {
     processElapsed = 0;
     networkPath = YES;
     testDefaults = [TestDefaults new];
+    testCacheDefaults = [TestDefaults new];
     engine = [RCTPushy new];
     root = [NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString];
     NSString *versionDir = [[RCTPushy downloadDir] stringByAppendingPathComponent:@"B"];
@@ -407,6 +427,12 @@ static id Value(NSString *key) {
     return value;
 }
 
+static id CacheValue(void) {
+    __block id value;
+    PushyWithStateLock(^{ value = [testCacheDefaults objectForKey:keyCheckCache]; });
+    return value;
+}
+
 static NSDictionary *Info(void) {
     NSString *json = Value(PushyHashInfoKey(@"B"));
     return json == nil ? nil : [NSJSONSerialization JSONObjectWithData:
@@ -420,7 +446,7 @@ static void ExpectPackaged(NSURL *url) {
     Expect(state.last_version.empty(), "packaged launch must have no stale last version");
     Expect(!state.first_time && state.first_time_ok, "packaged launch must not arm first load");
     Expect(state.rolled_back_version.empty(), "purge must not add a rollback mark");
-    Expect(Value(keyFirstLoadMarked) == nil, "packaged launch must not report isFirstTime");
+    Expect(Value(keyFirstLoadMarker) == nil, "packaged launch must not report isFirstTime");
     Expect(pushyLaunchVersion == nil, "packaged launch must not claim B ran");
 }
 
@@ -430,11 +456,11 @@ static void ExpectRestored(NSURL *url) {
     auto state = State();
     Expect(state.current_version == "B", "state must select the launched B");
     Expect(!state.first_time && !state.first_time_ok, "B first load must be consumed but not acknowledged");
-    Expect([Value(keyFirstLoadMarked) boolValue], "B launch must report isFirstTime");
+    Expect([Value(keyFirstLoadMarker) isEqual:@"1"], "B launch must report isFirstTime");
     Expect([pushyLaunchVersion isEqualToString:@"B"], "running bundle identity must be B");
     Expect([Info()[@"purgeRestore"] boolValue], "in-window activation must record purgeRestore");
     Expect([Info()[@"forceBootRescue"] boolValue], "other metadata must survive the commit");
-    Expect(Value(keyNativeCheckCache) != nil, "successful round must cache its response");
+    Expect(CacheValue() != nil, "successful round must cache its response");
 }
 
 static void Finish(void) {
@@ -456,7 +482,7 @@ static void LateCommit(void) {
     Await(signalAttempted, "late round reached its done signal");
     Expect(roundCommitted && !roundActivated, "late round may persist its response but must not activate");
     ExpectPackaged(url);
-    Expect(Value(keyNativeCheckCache) != nil, "late response remains available to JS");
+    Expect(CacheValue() != nil, "late response remains available to JS");
     Expect(Info() != nil && Info()[@"purgeRestore"] == nil, "non-activation must not claim purgeRestore");
     Finish();
 }
@@ -481,7 +507,7 @@ static void ResetOrdering(Order selected) {
     }
     ExpectPackaged(url);
     Expect(Value(PushyHashInfoKey(@"B")) == nil, "reset must leave no version metadata");
-    Expect(Value(keyNativeCheckCache) == nil, "reset must leave no response cache");
+    Expect(CacheValue() == nil, "reset must leave no response cache");
     Expect([Value(keyUuid) isEqual:@"installation-uuid"], "reset must preserve install identity");
     // The failed delete ran after the promise had already resolved, and did
     // not turn it into a rejection.
@@ -735,7 +761,7 @@ static void RoundCommitVerifies(void) {
            "verification failures are SWITCH_VERSION_FAILED");
     Expect(State().current_version == "A", "state must keep the previous version");
     Expect(Info() == nil, "a rejected commit writes no version info");
-    Expect(Value(keyNativeCheckCache) == nil, "a rejected commit writes no response cache");
+    Expect(CacheValue() == nil, "a rejected commit writes no response cache");
 
     // The intact bundle passes the same gate.
     Expect([@"B" writeToFile:bundle atomically:YES encoding:NSUTF8StringEncoding error:NULL],
@@ -756,7 +782,6 @@ static void RoundCommitVerifies(void) {
 static void BinaryUpgradeClearsVersionKeys(void) {
     SetUp(Order::ResetFirst);
     NSString *hashInfoKey = PushyHashInfoKey(@"B");
-    NSString *breadcrumb = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY";
     PushyWithStateLock(^{
         pushy::state::State state;
         state.package_version = "0.9";  // the previous binary
@@ -764,9 +789,9 @@ static void BinaryUpgradeClearsVersionKeys(void) {
         state.current_version = "B";
         PushyApplyStateToDefaults(testDefaults, state);
         [testDefaults setObject:@"{\"name\":\"B\"}" forKey:hashInfoKey];
-        [testDefaults setObject:@YES forKey:keyFirstLoadMarked];
-        [testDefaults setObject:@"{}" forKey:keyNativeCheckCache];
-        [testDefaults setObject:@YES forKey:breadcrumb];
+        PushyWriteMarker(testDefaults, keyFirstLoadMarker, YES);
+        [testCacheDefaults setObject:@"{}" forKey:keyCheckCache];
+        PushyWriteMarker(testDefaults, keyRoundBreadcrumb, YES);
     });
     NSString *rolledBack = nil;
     NSString *purged = nil;
@@ -774,11 +799,11 @@ static void BinaryUpgradeClearsVersionKeys(void) {
     Expect(State().package_version == "1.0", "the state takes the new binary identity");
     Expect(State().current_version.empty(), "the old binary's version is not launched");
     Expect(Value(hashInfoKey) == nil, "an upgrade drops the old versions' info");
-    Expect(Value(keyFirstLoadMarked) == nil, "an upgrade drops the first-load marker");
-    Expect(Value(keyNativeCheckCache) == nil, "an upgrade drops the response cache");
-    Expect([Value(KeyPackageUpdatedMarked()) boolValue], "an upgrade is reported to getConstants");
+    Expect(Value(keyFirstLoadMarker) == nil, "an upgrade drops the first-load marker");
+    Expect(CacheValue() == nil, "an upgrade drops the response cache");
+    Expect([Value(keyBinaryUpgradedMarker) isEqual:@"1"], "an upgrade is reported to getConstants");
     Expect([Value(keyUuid) isEqual:@"installation-uuid"], "an upgrade keeps the install identity");
-    Expect([Value(breadcrumb) boolValue], "an upgrade keeps the round breadcrumb");
+    Expect([Value(keyRoundBreadcrumb) isEqual:@"1"], "an upgrade keeps the round breadcrumb");
     Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
 }
 
@@ -821,6 +846,164 @@ static void CppExceptionBoundary(void) {
     Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
 }
 
+// <repo>/<path>, located from this source file
+// (<repo>/scripts/tests/ios-purge-restore/).
+static NSString *RepoFile(NSString *path) {
+    NSString *repo = [[[[@__FILE__ stringByDeletingLastPathComponent]
+        stringByDeletingLastPathComponent] stringByDeletingLastPathComponent]
+        stringByDeletingLastPathComponent];
+    return [repo stringByAppendingPathComponent:path];
+}
+
+static TestDefaults *DefaultsWith(NSDictionary *values) {
+    TestDefaults *defaults = [TestDefaults new];
+    PushyWithStateLock(^{
+        for (NSString *key in values) {
+            [defaults setObject:values[key] forKey:key];
+        }
+    });
+    return defaults;
+}
+
+static NSString *Migrate(TestDefaults *state, TestDefaults *legacy) {
+    __block NSString *result = nil;
+    PushyWithStateLock(^{ result = PushyMigrateStores(state, legacy); });
+    return result;
+}
+
+static NSDictionary *Contents(TestDefaults *defaults) {
+    __block NSDictionary *contents = nil;
+    PushyWithStateLock(^{ contents = [defaults dictionaryRepresentation]; });
+    return contents;
+}
+
+// The iOS cases of the shared vectors (cpp/patch_core/tests/
+// stored-items-vectors.json) through the real PushyMigrateStores and the
+// real core: the snapshot conversion (NSNumber booleans, the legacy info
+// dictionary), the order of the writes and the stores afterwards.
+static void StoredItemsVectors(void) {
+    NSData *data = [NSData dataWithContentsOfFile:RepoFile(
+        @"cpp/patch_core/tests/stored-items-vectors.json")];
+    Expect(data != nil, "stored-items-vectors.json is readable");
+    NSDictionary *file = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    int replayed = 0;
+    for (NSDictionary *vector in file[@"cases"]) {
+        if (![vector[@"layout"] isEqual:@"ios"]) {
+            continue;
+        }
+        std::string name = std::string("vector \"") + [vector[@"name"] UTF8String] + "\"";
+        TestDefaults *legacy = DefaultsWith(vector[@"legacy"]);
+        TestDefaults *state = DefaultsWith(vector[@"current"]);
+        NSString *result = Migrate(state, legacy);
+        Expect([result isEqualToString:[vector[@"plan"][@"migrated"] boolValue] ? @"migrated" : @"current"],
+               (name + ": result").c_str());
+        Expect([Contents(state) isEqual:vector[@"after"][@"current"]], (name + ": state store").c_str());
+        Expect([Contents(legacy) isEqual:vector[@"after"][@"legacy"]], (name + ": legacy store").c_str());
+        Expect([Migrate(state, legacy) isEqualToString:@"current"], (name + ": done means done").c_str());
+        ++replayed;
+    }
+    Expect(replayed >= 3, "the vectors carry iOS cases");
+    std::printf("[PASS] stored_items_vectors: %d shared vectors\n", replayed);
+}
+
+// What an installed SDK up to 10.61 left in standardUserDefaults: version B
+// running, its info, the launch markers, the install's own items, and keys
+// of the host app.
+static NSMutableDictionary *LegacyLayout(NSString *packageVersion, NSString *buildTime) {
+    return [@{
+        @"REACTNATIVECN_PUSHY_PACKAGEVERSION": packageVersion,
+        @"REACTNATIVECN_PUSHY_BUILDTIME": buildTime,
+        @"REACTNATIVECN_PUSHY_INFO_KEY": @{@"currentVersion": @"B", @"isFirstTime": @NO,
+                                           @"isFirstLoadOK": @YES},
+        @"REACTNATIVECN_PUSHY_HASH_B": @"{\"name\":\"B\"}",
+        @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY": @YES,
+        @"REACTNATIVECN_PUSHY_UUID": @"legacy-uuid",
+        @"REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY": @"{\"appKey\":\"k\"}",
+        @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY": @YES,
+        @"REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY": @"{}",
+        @"packageVersion": @"host-owned",
+        @"hostSetting": @"host-owned",
+    } mutableCopy];
+}
+
+static void ExpectInstallItemsCarried(TestDefaults *legacy) {
+    Expect([Value(keyUuid) isEqual:@"legacy-uuid"], "migration must keep the install's uuid");
+    Expect([Value(keyNativeConfig) isEqual:@"{\"appKey\":\"k\"}"], "migration keeps the native config");
+    Expect([Value(keyRoundBreadcrumb) isEqual:@"1"], "migration keeps the round breadcrumb");
+    Expect([Value(keySchemaVersion) isEqual:@"1"], "migration writes the schema");
+    Expect([Contents(legacy) isEqual:(@{@"packageVersion": @"host-owned", @"hostSetting": @"host-owned"})],
+           "migration deletes every legacy key and only those");
+}
+
+// The first launch of a binary with the new layout: the legacy identity is
+// carried, so the upgrade is detected the usual way and drops the old
+// binary's version; the install's own items survive it.
+static void LegacyMigrationUpgrade(void) {
+    SetUp(Order::CloseFirst);
+    testDefaults = [TestDefaults new];
+    TestDefaults *legacy = DefaultsWith(LegacyLayout(@"0.9", @"100"));
+    Expect([Migrate(testDefaults, legacy) isEqualToString:@"migrated"], "the legacy layout is migrated");
+    ExpectInstallItemsCarried(legacy);
+    NSString *rolledBack = nil;
+    NSString *purged = nil;
+    NSURL *url = [RCTPushy resolveLaunchBundleURL:&rolledBack purgedVersion:&purged];
+    Expect(url == nil, "the new binary launches its packaged bundle");
+    Expect(State().package_version == "1.0" && State().build_time == "123",
+           "the state takes the new binary identity");
+    Expect([Value(keyBinaryUpgradedMarker) isEqual:@"1"], "the upgrade is reported to getConstants");
+    Expect([Value(keyUuid) isEqual:@"legacy-uuid"], "the upgrade keeps the uuid");
+    Expect([Value(keyRoundBreadcrumb) isEqual:@"1"], "the upgrade keeps the breadcrumb");
+    Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
+}
+
+// Same identity (a debug build, whose buildTime is always "0"): no upgrade,
+// and the old version is not carried either — the packaged bundle runs.
+static void LegacyMigrationSameBinary(void) {
+    SetUp(Order::CloseFirst);
+    testDefaults = [TestDefaults new];
+    TestDefaults *legacy = DefaultsWith(LegacyLayout(@"1.0", @"123"));
+    Expect([Migrate(testDefaults, legacy) isEqualToString:@"migrated"], "the legacy layout is migrated");
+    ExpectInstallItemsCarried(legacy);
+    NSString *rolledBack = nil;
+    NSString *purged = nil;
+    NSURL *url = [RCTPushy resolveLaunchBundleURL:&rolledBack purgedVersion:&purged];
+    Expect(url == nil, "the old version's state is not carried");
+    Expect(Value(keyBinaryUpgradedMarker) == nil, "the same binary is no upgrade");
+    Expect(Value(PushyHashInfoKey(@"B")) == nil, "no version info is carried");
+    Expect(Value(keyFirstLoadMarker) == nil, "no launch marker is carried");
+    Expect([[NSFileManager defaultManager] removeItemAtPath:root error:NULL], "remove fixture files");
+}
+
+// A write that fails leaves the legacy keys in place (they are deleted only
+// after every write), so the next launch migrates the same uuid.
+static void LegacyMigrationWriteFailure(void) {
+    TestDefaults *state = [TestDefaults new];
+    TestDefaults *legacy = DefaultsWith(LegacyLayout(@"0.9", @"100"));
+    failWritesOn = state;
+    NSString *result = Migrate(state, legacy);
+    failWritesOn = nil;
+    Expect([result isEqualToString:@"fallback"], "a failed write falls back");
+    Expect(Contents(state).count == 0, "nothing landed");
+    Expect([Migrate(state, legacy) isEqualToString:@"migrated"], "the next launch migrates");
+    Expect([[state stringForKey:keyUuid] isEqual:@"legacy-uuid"],
+           "a failed migration must keep the uuid for the next launch");
+}
+
+// The core cannot run (its snapshot throws): a fresh store that still carries
+// the uuid, and no schema, so the next launch migrates the rest.
+static void LegacyMigrationReadFailure(void) {
+    TestDefaults *state = [TestDefaults new];
+    TestDefaults *legacy = DefaultsWith(LegacyLayout(@"0.9", @"100"));
+    failSnapshotOn = legacy;
+    NSString *result = Migrate(state, legacy);
+    failSnapshotOn = nil;
+    Expect([result isEqualToString:@"fallback"], "an unreadable legacy store falls back");
+    Expect([Contents(state) isEqual:@{keyUuid: @"legacy-uuid"}], "the fallback carries the uuid alone");
+    Expect([Migrate(state, legacy) isEqualToString:@"migrated"], "the next launch migrates");
+    Expect([[state stringForKey:keyNativeConfig] isEqual:@"{\"appKey\":\"k\"}"],
+           "the next launch carries the rest");
+}
+
 int main(int argc, char **argv) {
     @autoreleasepool {
         // These intentional failures run in separate processes. Erasing the
@@ -856,6 +1039,11 @@ int main(int argc, char **argv) {
             {"round_commit_verifies", RoundCommitVerifies},
             {"binary_upgrade_clears_version_keys", BinaryUpgradeClearsVersionKeys},
             {"cpp_exception_boundary", CppExceptionBoundary},
+            {"stored_items_vectors", StoredItemsVectors},
+            {"legacy_migration_upgrade", LegacyMigrationUpgrade},
+            {"legacy_migration_same_binary", LegacyMigrationSameBinary},
+            {"legacy_migration_write_failure", LegacyMigrationWriteFailure},
+            {"legacy_migration_read_failure", LegacyMigrationReadFailure},
         };
         int ran = 0;
         for (const auto &test : cases) {

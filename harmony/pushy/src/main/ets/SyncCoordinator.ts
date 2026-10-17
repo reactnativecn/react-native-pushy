@@ -7,6 +7,12 @@ import { BundlePreparationRound, bundlePreparationResult } from './BundlePrepara
 import type { BundlePreparationResult } from './BundlePreparationResult';
 import { monotonicNowMs } from './MonotonicClock';
 import { PushyError, getErrorMessage } from './ErrorCodes';
+import {
+  BOOLEAN_TRUE,
+  KEY_NATIVE_CONFIG,
+  KEY_ROUND_BREADCRUMB,
+  KEY_UUID,
+} from './StoreSchema';
 
 // 原生冷启动检测(NATIVE_CHECKUPDATE_DESIGN §10):每进程一次,getBundleUrl
 // 后延迟数秒运行,完全不依赖 app bundle——坏热更把 JS 砸挂后,下次启动仍能
@@ -17,19 +23,8 @@ import { PushyError, getErrorMessage } from './ErrorCodes';
 // 鸿蒙的 debug 门控由触发点天然承担:dev 走 MetroJSBundleProvider,
 // PushyFileJSBundleProvider.getBundleUrl 不会被调用。
 const TAG = 'NativeSync';
-// 与 Android 共用的存储键。鸿蒙不做 crash-hold(errorManager 的同步回调驱动
-// 不了 ArkTS 异步网络 IO),续传 + 零延迟标记是收敛砖机的全部机制。
-// <generated:storage-keys> (scripts/contract.ts; bun scripts/generate-contract.ts)
-// The persisted native check config (JS syncNativeConfig or the host).
-export const KEY_CONFIG = 'nativeConfig';
-// Raw response cache for the JS side to reuse (§10.3), scoped to the exact
-// logical request and native config that produced it.
-export const KEY_RESP_CACHE = 'nativeCheckResp';
-// Set when a round starts, cleared when it ends (§11.4). Residue on the
-// next launch means the previous process died mid-round: that launch
-// resumes immediately instead of waiting 5s.
-export const KEY_ROUND_INCOMPLETE = 'nativeCheckIncomplete';
-// </generated:storage-keys>
+// 鸿蒙不做 crash-hold(errorManager 的同步回调驱动不了 ArkTS 异步网络 IO),
+// 续传 + 零延迟标记(KEY_ROUND_BREADCRUMB)是收敛砖机的全部机制。
 const START_DELAY_MS = 5000;
 
 // 本次启动的事实,交给共享内核(cpp/update_flow_core/native_round.h)。
@@ -133,7 +128,7 @@ interface RunnableVerdict {
 }
 
 function readNativeConfig(context: UpdateContext): ConfigRead {
-  const json = context.getKv(KEY_CONFIG);
+  const json = context.getKv(KEY_NATIVE_CONFIG);
   const verdict = JSON.parse(NativePatchCore.runnableConfig(json)) as RunnableVerdict;
   if (verdict.status !== undefined) {
     return {
@@ -222,7 +217,7 @@ export function scheduleNativeSync(
   scheduledRollback = launchRolledBackVersion;
   // 结果本来就是"下次启动生效",延迟几秒让开冷启动关键路径(§7 R5)——
   // 除非上个进程死于轮中(残留标记),那时每一秒启动时间都要用来续传。
-  const delayMs = context.getKv(KEY_ROUND_INCOMPLETE) ? 0 : START_DELAY_MS;
+  const delayMs = context.getKv(KEY_ROUND_BREADCRUMB) ? 0 : START_DELAY_MS;
   setTimeout(() => {
     if (hasJsRound(context)) {
       logger.info(
@@ -249,7 +244,7 @@ async function runOnce(
   roundGeneration = resetGeneration;
   roundConfigGeneration = configGeneration;
   roundResult = bundlePreparationResult('failed', 'check_failed');
-  const configJson = context.getKv(KEY_CONFIG);
+  const configJson = context.getKv(KEY_NATIVE_CONFIG);
   roundConfigJson = configJson;
 
   let event: RoundEvent = {
@@ -276,11 +271,11 @@ async function runOnce(
           marked = true;
           logger.info(
             TAG,
-            `round started (resume=${!!context.getKv(KEY_ROUND_INCOMPLETE)})`,
+            `round started (resume=${!!context.getKv(KEY_ROUND_BREADCRUMB)})`,
           );
           // 面包屑只是"下次零延迟"的优化:落盘失败不能阻止救援轮次本身。
           try {
-            await context.setKv(KEY_ROUND_INCOMPLETE, '1');
+            await context.setKv(KEY_ROUND_BREADCRUMB, BOOLEAN_TRUE);
           } catch (e) {
             logger.warn(TAG, `cannot persist round marker: ${getErrorMessage(e)}`);
           }
@@ -295,7 +290,7 @@ async function runOnce(
   } finally {
     if (marked) {
       try {
-        await context.removeKv(KEY_ROUND_INCOMPLETE);
+        await context.removeKv(KEY_ROUND_BREADCRUMB);
       } catch (e) {
         // 残留标记只意味着下次启动少等 5 秒。
         logger.warn(TAG, `cannot clear round marker: ${getErrorMessage(e)}`);
@@ -345,7 +340,7 @@ async function launchEnv(
     packageVersion: context.getPackageVersion(),
     // 与 JS 常量同形(无版本时为 ''),JS 才能复用这次请求的响应缓存。
     currentVersion: context.getCurrentVersion(),
-    uuid: context.getKv('uuid') ?? '',
+    uuid: context.getKv(KEY_UUID) ?? '',
     // getConstants consumes the persisted rollback marker during startup; use
     // the launch-path snapshot captured before that happens.
     rolledBackVersion: launchRolledBackVersion,

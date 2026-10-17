@@ -23,10 +23,10 @@ public class UpdateContext {
     private final Context context;
     private final File rootDir;
     private final Executor executor;
+    // The state store and the cache store (StoreSchema): the response cache
+    // is a whole server response, and keeping it in sp would make every small
+    // state commit rewrite it.
     private final SharedPreferences sp;
-    // The native check's raw response cache (SyncCoordinator.KEY_RESP_CACHE)
-    // lives in its own file: it is a whole server response, and keeping it in
-    // sp made every small state commit rewrite it.
     private final SharedPreferences checkCacheSp;
     // Our own PackageInfo, looked up once: every getPackageInfo call is a
     // Binder IPC, and the constructor, the bundle-hash cache and the native
@@ -65,7 +65,6 @@ public class UpdateContext {
     private static final int STATE_OP_CLEAR_ROLLBACK_MARK = 5;
     private static final int STATE_OP_RESOLVE_LAUNCH = 6;
     // </generated:state-operations>
-    static final String KEY_FIRST_LOAD_MARKED = "firstLoadMarked";
     // Bumped by resetToPackagedBundle. The cold-start check runs for minutes
     // and may already hold a decision when the app resets to the packaged
     // bundle; the orchestrator samples this counter and abandons activation
@@ -118,9 +117,19 @@ public class UpdateContext {
             throw new IllegalStateException("Failed to create storage root dir: " + rootDir);
         }
 
-        this.sp = this.context.getSharedPreferences(Texts.PREFERENCES_NAME, Context.MODE_PRIVATE);
+        this.sp = this.context.getSharedPreferences(StoreSchema.STATE_STORE, Context.MODE_PRIVATE);
         this.checkCacheSp = this.context.getSharedPreferences(
-            Texts.PREFERENCES_NAME + "_check", Context.MODE_PRIVATE);
+            StoreSchema.CACHE_STORE, Context.MODE_PRIVATE);
+        // Before anything reads the state store (the one-time move out of the
+        // legacy files; a no-op once done).
+        StoreMigration.Result migration = StoreMigration.run(
+            sp,
+            this.context.getSharedPreferences(Texts.PREFERENCES_NAME, Context.MODE_PRIVATE),
+            this.context.getSharedPreferences(Texts.PREFERENCES_NAME + "_check", Context.MODE_PRIVATE),
+            StoreMigration.NATIVE);
+        if (migration != StoreMigration.Result.CURRENT) {
+            Log.i(TAG, "State store migration: " + migration);
+        }
         this.packageInfo = lookupPackageInfo(this.context);
         this.reactInstanceManager = pendingReactInstanceManager;
 
@@ -140,23 +149,8 @@ public class UpdateContext {
             applyState(editor, nextState);
             persistEditor(editor, "sync state with binary version");
             clearNativeCheckCache();
-        } else {
-            migrateNativeCheckCache();
         }
         startBundleHashComputation();
-    }
-
-    // One-time move of the response cache out of the main state file.
-    private void migrateNativeCheckCache() {
-        String legacy = sp.getString(SyncCoordinator.KEY_RESP_CACHE, null);
-        if (legacy == null) {
-            return;
-        }
-        if (checkCacheSp.edit().putString(SyncCoordinator.KEY_RESP_CACHE, legacy).commit()) {
-            SharedPreferences.Editor editor = sp.edit();
-            editor.remove(SyncCoordinator.KEY_RESP_CACHE);
-            persistEditor(editor, "migrate check cache");
-        }
     }
 
     public String getRootDir() {
@@ -190,8 +184,6 @@ public class UpdateContext {
     // bundleHash cache: "<packageVersion>|<lastUpdateTime>|<sha256hex>". The
     // key identifies the installed binary; every (re)install changes
     // lastUpdateTime, so the hash is recomputed once per install.
-    private static final String KEY_BUNDLE_HASH_CACHE = "bundleHashCache";
-
     public interface BundleHashListener {
         void onBundleHash(String hash);
     }
@@ -283,14 +275,14 @@ public class UpdateContext {
 
     private String loadOrHashBundledAsset() {
         String cachePrefix = getPackageVersion() + "|" + getPackageLastUpdateTime() + "|";
-        String cached = sp.getString(KEY_BUNDLE_HASH_CACHE, null);
+        String cached = StoreSchema.readString(sp, StoreSchema.KEY_BUNDLE_HASH_CACHE);
         if (cached != null && cached.startsWith(cachePrefix)) {
             return cached.substring(cachePrefix.length());
         }
         String hash = sha256OfBundledAsset("index.android.bundle");
         if (!hash.isEmpty()) {
             SharedPreferences.Editor editor = sp.edit();
-            editor.putString(KEY_BUNDLE_HASH_CACHE, cachePrefix + hash);
+            editor.putString(StoreSchema.KEY_BUNDLE_HASH_CACHE, cachePrefix + hash);
             persistEditor(editor, "cache bundle hash");
         }
         return hash;
@@ -415,27 +407,7 @@ public class UpdateContext {
     }
 
     private StateCoreResult getStateSnapshot() {
-        StateCoreResult state = new StateCoreResult();
-        state.packageVersion = sp.getString("packageVersion", null);
-        state.buildTime = sp.getString("buildTime", null);
-        state.currentVersion = sp.getString("currentVersion", null);
-        state.lastVersion = sp.getString("lastVersion", null);
-        state.firstTime = sp.getBoolean("firstTime", false);
-        state.firstTimeOk = sp.getBoolean("firstTimeOk", true);
-        state.rolledBackVersion = sp.getString("rolledBackVersion", null);
-        return state;
-    }
-
-    private static void putNullableString(
-        SharedPreferences.Editor editor,
-        String key,
-        String value
-    ) {
-        if (value == null) {
-            editor.remove(key);
-        } else {
-            editor.putString(key, value);
-        }
+        return StoreSchema.readState(sp);
     }
 
     // Not editor.clear(): that also wiped the uuid (re-bucketing every gray
@@ -448,13 +420,7 @@ public class UpdateContext {
     }
 
     private void applyState(SharedPreferences.Editor editor, StateCoreResult state) {
-        putNullableString(editor, "packageVersion", state.packageVersion);
-        putNullableString(editor, "buildTime", state.buildTime);
-        putNullableString(editor, "currentVersion", state.currentVersion);
-        putNullableString(editor, "lastVersion", state.lastVersion);
-        editor.putBoolean("firstTime", state.firstTime);
-        editor.putBoolean("firstTimeOk", state.firstTimeOk);
-        putNullableString(editor, "rolledBackVersion", state.rolledBackVersion);
+        StoreSchema.writeState(editor, state);
     }
 
     /**
@@ -543,8 +509,9 @@ public class UpdateContext {
         persistEditorOrThrow(editor, "set key " + key);
     }
 
+    @Nullable
     public String getKv(String key) {
-        return sp.getString(key, null);
+        return StoreSchema.readString(sp, key);
     }
 
     void removeKv(String key) {
@@ -554,7 +521,7 @@ public class UpdateContext {
     }
 
     public String getCurrentVersion() {
-        return sp.getString("currentVersion", null);
+        return StoreSchema.readString(sp, StoreSchema.KEY_CURRENT_VERSION);
     }
 
     /** The one-shot launch markers getConstants reports, consumed together. */
@@ -578,13 +545,13 @@ public class UpdateContext {
     LaunchMarkers consumeLaunchMarkers() {
         LaunchMarkers markers;
         synchronized (commitLock) {
-            boolean isFirstLoadMarked = sp.getBoolean(KEY_FIRST_LOAD_MARKED, false);
+            boolean isFirstLoadMarked = StoreSchema.readMarker(sp, StoreSchema.KEY_FIRST_LOAD_MARKER);
             String rolledBackVersion = rolledBackVersion();
             markers = new LaunchMarkers(isFirstLoadMarked, rolledBackVersion);
             if (isFirstLoadMarked || rolledBackVersion != null) {
                 SharedPreferences.Editor editor = sp.edit();
                 if (isFirstLoadMarked) {
-                    editor.remove(KEY_FIRST_LOAD_MARKED);
+                    StoreSchema.writeMarker(editor, StoreSchema.KEY_FIRST_LOAD_MARKER, false);
                 }
                 if (rolledBackVersion != null) {
                     applyState(editor, runStateOp(STATE_OP_CLEAR_ROLLBACK_MARK, null));
@@ -604,7 +571,7 @@ public class UpdateContext {
     }
 
     public String rolledBackVersion() {
-        return sp.getString("rolledBackVersion", null);
+        return StoreSchema.readString(sp, StoreSchema.KEY_ROLLED_BACK_VERSION);
     }
 
     public void markSuccess() {
@@ -616,7 +583,7 @@ public class UpdateContext {
             SharedPreferences.Editor editor = sp.edit();
             applyState(editor, nextState);
             if (nextState.staleVersionToDelete != null) {
-                editor.remove("hash_" + nextState.staleVersionToDelete);
+                editor.remove(StoreSchema.KEY_HASH_INFO + nextState.staleVersionToDelete);
             }
             persistEditorOrThrow(editor, "mark success");
         }
@@ -731,7 +698,7 @@ public class UpdateContext {
                     SharedPreferences.Editor editor = sp.edit();
                     applyState(editor, launchState);
                     if (launchState.consumedFirstTime) {
-                        editor.putBoolean(KEY_FIRST_LOAD_MARKED, true);
+                        StoreSchema.writeMarker(editor, StoreSchema.KEY_FIRST_LOAD_MARKER, true);
                     }
                     persistEditor(editor, "resolve launch");
                 }
@@ -789,7 +756,7 @@ public class UpdateContext {
             // re-sending the same config with another key order or trailing
             // slashes must not cancel an in-flight round or drop its cache.
             boolean changed = !FlowBridge.configsEquivalent(
-                config, sp.getString(SyncCoordinator.KEY_CONFIG, null));
+                config, StoreSchema.readString(sp, StoreSchema.KEY_NATIVE_CONFIG));
             SharedPreferences.Editor editor = sp.edit();
             if (changed) {
                 // Also invalidate on a failed persistence attempt: an older
@@ -804,11 +771,10 @@ public class UpdateContext {
             }
             // A native-only first launch needs a stable gray-release identity
             // before JS initializes. Never replace an existing installation ID.
-            String uuid = sp.getString("uuid", null);
-            if (uuid == null || uuid.isEmpty()) {
-                editor.putString("uuid", java.util.UUID.randomUUID().toString());
+            if (StoreSchema.readString(sp, StoreSchema.KEY_UUID) == null) {
+                editor.putString(StoreSchema.KEY_UUID, java.util.UUID.randomUUID().toString());
             }
-            editor.putString(SyncCoordinator.KEY_CONFIG, config);
+            editor.putString(StoreSchema.KEY_NATIVE_CONFIG, config);
             // Persist even an equal value: a previous commit may have updated
             // SharedPreferences memory but failed to write its file.
             persistEditorOrThrow(editor, "persist configuration");
@@ -864,14 +830,14 @@ public class UpdateContext {
             }
             SharedPreferences.Editor editor = sp.edit();
             if (hash != null && hashInfoJson != null) {
-                editor.putString("hash_" + hash, hashInfoJson);
+                editor.putString(StoreSchema.KEY_HASH_INFO + hash, hashInfoJson);
             }
             if (switching) {
                 applyState(editor, computeSwitchState(hash));
             }
             // The round is over once its result lands: clear the
             // interrupted-round breadcrumb in the same commit.
-            editor.remove(SyncCoordinator.KEY_ROUND_INCOMPLETE);
+            editor.remove(StoreSchema.KEY_ROUND_BREADCRUMB);
             persistEditorOrThrow(editor, "commit sync result");
             if (switching) {
                 ignoreRollback = false;
@@ -880,7 +846,7 @@ public class UpdateContext {
             // describes, still under commitLock so a reset cannot interleave.
             if (responseCacheJson != null
                 && !checkCacheSp.edit()
-                    .putString(SyncCoordinator.KEY_RESP_CACHE, responseCacheJson).commit()) {
+                    .putString(StoreSchema.KEY_CHECK_CACHE, responseCacheJson).commit()) {
                 Log.w(TAG, "Failed to persist native sync response cache");
             }
             return true;
@@ -910,14 +876,14 @@ public class UpdateContext {
     /** Raw native check response for JS (§10.3); null when absent. */
     @Nullable
     String getNativeCheckCache() {
-        return checkCacheSp.getString(SyncCoordinator.KEY_RESP_CACHE, null);
+        return StoreSchema.readString(checkCacheSp, StoreSchema.KEY_CHECK_CACHE);
     }
 
     private boolean clearNativeCheckCache() {
-        if (!checkCacheSp.contains(SyncCoordinator.KEY_RESP_CACHE)) {
+        if (!checkCacheSp.contains(StoreSchema.KEY_CHECK_CACHE)) {
             return true;
         }
-        if (!checkCacheSp.edit().remove(SyncCoordinator.KEY_RESP_CACHE).commit()) {
+        if (!checkCacheSp.edit().remove(StoreSchema.KEY_CHECK_CACHE).commit()) {
             Log.e(TAG, "Failed to clear native sync response cache");
             return false;
         }
@@ -970,8 +936,8 @@ public class UpdateContext {
             final String[] keepNames;
             synchronized (commitLock) {
                 keepNames = CleanupKeepNames.select(
-                    sp.getString("currentVersion", null),
-                    sp.getString("lastVersion", null),
+                    StoreSchema.readString(sp, StoreSchema.KEY_CURRENT_VERSION),
+                    StoreSchema.readString(sp, StoreSchema.KEY_LAST_VERSION),
                     launchVersion
                 );
             }

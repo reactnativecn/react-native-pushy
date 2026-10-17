@@ -76,6 +76,11 @@ class ExtractionTests(unittest.TestCase):
             mutate('event.Set("reason", flowjson::Value::String("config_changed"));',
                    'drop-config-changed'),
             '(void)configGeneration;')
+        self.assertIn('kSchemaVersionKey', mutate(
+            '[state setObject:PushyFromStdString(put.second) forKey:PushyFromStdString(put.first)];',
+            'skip-carry'))
+        self.assertTrue(mutate('for (const auto &put : plan.puts) {', 'remove-first')
+                        .startswith('for (const std::string &key : plan.removes)'))
         for source in ('', 'activation = nil; activation = nil;'):
             with self.assertRaises(ValueError):
                 mutate(source, 'late-activation')

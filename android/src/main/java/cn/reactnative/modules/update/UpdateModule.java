@@ -49,7 +49,7 @@ public class UpdateModule extends NativePushySpec {
 
         String currentVersion = updateContext.getCurrentVersion();
         constants.put("currentVersion", currentVersion);
-        constants.put("currentVersionInfo", updateContext.getKv("hash_" + currentVersion));
+        constants.put("currentVersionInfo", updateContext.getKv(StoreSchema.KEY_HASH_INFO + currentVersion));
         // Served from the value cached at launch resolution (no file read on
         // the JS thread) when currentVersion is the launched version.
         constants.put("currentBundleSha256", updateContext.currentBundleSha256(currentVersion));
@@ -62,7 +62,7 @@ public class UpdateModule extends NativePushySpec {
         constants.put("isFirstTime", markers.isFirstTime);
         constants.put("rolledBackVersion", markers.rolledBackVersion);
 
-        constants.put("uuid", updateContext.getKv("uuid"));
+        constants.put("uuid", updateContext.getKv(StoreSchema.KEY_UUID));
         int supportedDiffVersion = 0;
         try {
             supportedDiffVersion = NativeCore.supportedDiffVersion();
@@ -363,7 +363,7 @@ public class UpdateModule extends NativePushySpec {
             return;
         }
         StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.FILE_OPERATION_FAILED, "setUuid", () -> {
-            updateContext.setKv("uuid", uuid);
+            updateContext.setKv(StoreSchema.KEY_UUID, uuid);
             promise.resolve(true);
         });
     }
@@ -381,7 +381,7 @@ public class UpdateModule extends NativePushySpec {
         // A state write that did not reach disk (SharedPreferences commit
         // false) is FILE_OPERATION_FAILED, distinct from malformed input.
         StateSerialRunner.run(STATE_SERIAL, promise, ErrorCodes.FILE_OPERATION_FAILED, "setLocalHashInfo", () -> {
-            updateContext.setKv("hash_" + hash, info);
+            updateContext.setKv(StoreSchema.KEY_HASH_INFO + hash, info);
             promise.resolve(true);
         });
     }
@@ -392,7 +392,7 @@ public class UpdateModule extends NativePushySpec {
         if (requireNonEmpty(hash, "hash", promise) == null) {
             return;
         }
-        String value = updateContext.getKv("hash_" + hash);
+        String value = updateContext.getKv(StoreSchema.KEY_HASH_INFO + hash);
         if (value == null || value.isEmpty()) {
             // No record (iOS resolves nil the same way): JS treats it as {}.
             // Only a record that exists and is not a JSON object is invalid.

@@ -9,6 +9,7 @@ import org.junit.Test;
 
 public class VersionScopedKeysTest {
     private static final List<String> STORED = Arrays.asList(
+        "schemaVersion",
         "uuid",
         "nativeConfig",
         "bundleHashCache",
@@ -18,14 +19,14 @@ public class VersionScopedKeysTest {
         "hash_def",
         "firstLoadMarked",
         "nativeCheckIncomplete",
-        "nativeCheckResp",
         null
     );
 
     // The round breadcrumb survives both: it only decides whether the next
-    // launch resumes the round without the start delay.
+    // launch resumes the round without the start delay. The response cache
+    // lives in the cache store, which both events clear as a whole.
     private static final HashSet<String> VERSION_KEYS = new HashSet<>(Arrays.asList(
-        "hash_abc", "hash_def", "firstLoadMarked", "nativeCheckResp"));
+        "hash_abc", "hash_def", "firstLoadMarked"));
 
     @Test
     public void resetDropsVersionKeysAndKeepsInstallKeys() {
@@ -39,9 +40,9 @@ public class VersionScopedKeysTest {
 
     @Test
     public void keyNamesMatchTheirOwners() {
-        assertEquals("firstLoadMarked", UpdateContext.KEY_FIRST_LOAD_MARKED);
-        assertEquals("nativeCheckIncomplete", SyncCoordinator.KEY_ROUND_INCOMPLETE);
-        assertEquals("nativeCheckResp", SyncCoordinator.KEY_RESP_CACHE);
-        assertEquals("nativeConfig", SyncCoordinator.KEY_CONFIG);
+        assertEquals("firstLoadMarked", StoreSchema.KEY_FIRST_LOAD_MARKER);
+        assertEquals("nativeCheckIncomplete", StoreSchema.KEY_ROUND_BREADCRUMB);
+        assertEquals("nativeCheckResp", StoreSchema.KEY_CHECK_CACHE);
+        assertEquals("nativeConfig", StoreSchema.KEY_NATIVE_CONFIG);
     }
 }

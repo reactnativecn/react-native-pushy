@@ -8,7 +8,7 @@ import {
   createPushyError,
   PushyError,
 } from '../../harmony/pushy/src/main/ets/ErrorCodes';
-import { evalHarmonyModule } from './nativeSources';
+import { evalHarmonyModule, harmonyStoreSchema } from './nativeSources';
 
 // The Harmony adapter of the shared round engine (SyncCoordinator.runOnce),
 // evaluated from source against the rounds in
@@ -133,6 +133,7 @@ async function replay(round: Round) {
     'SyncCoordinator.ts',
     'httpRequest = fakeHttp;\n({ run: runOnce, result: () => roundResult });',
     {
+      ...harmonyStoreSchema(),
       BundlePreparationRound,
       bundlePreparationResult,
       PushyError,

@@ -70,7 +70,8 @@ static NSString *PushyReadBuildTime(void) {
                 // as every platform does (scripts/contract.ts storedItems).
                 PushyRemoveKeys(defaults, PushyKeysClearedOnUpgrade(),
                                 PushyKeyPrefixesClearedOnUpgrade());
-                [defaults setObject:@(YES) forKey:KeyPackageUpdatedMarked()];
+                [PushyCacheDefaults() removeObjectForKey:keyCheckCache];
+                PushyWriteMarker(defaults, keyBinaryUpgradedMarker, YES);
                 state = sync.state;
                 PushyApplyStateToDefaults(defaults, state);
             }
@@ -97,7 +98,7 @@ static NSString *PushyReadBuildTime(void) {
                 if (decision.consumed_first_time) {
                     // bundleURL may be called many times, ignore rollbacks before process restarted again.
                     ignoreRollback = true;
-                    [defaults setObject:@(YES) forKey:keyFirstLoadMarked];
+                    PushyWriteMarker(defaults, keyFirstLoadMarker, YES);
                 }
 
                 NSString *loadVersion = PushyFromStdString(decision.load_version);
@@ -127,7 +128,7 @@ static NSString *PushyReadBuildTime(void) {
                             // The first load being consumed never happens: the
                             // packaged bundle must not report isFirstTime.
                             ignoreRollback = false;
-                            [defaults removeObjectForKey:keyFirstLoadMarked];
+                            PushyWriteMarker(defaults, keyFirstLoadMarker, NO);
                         }
                         break;
 #else

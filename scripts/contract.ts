@@ -212,31 +212,6 @@ export const archivePatchTypes = [
   },
 ];
 
-// Storage keys the Android and Harmony orchestrators share (iOS uses its own
-// REACTNATIVECN_PUSHY_* names).
-export const syncStorageKeys = [
-  {
-    name: 'Config',
-    value: 'nativeConfig',
-    doc: 'The persisted native check config (JS syncNativeConfig or the host).',
-  },
-  {
-    name: 'RespCache',
-    value: 'nativeCheckResp',
-    doc:
-      'Raw response cache for the JS side to reuse (§10.3), scoped to the exact\n' +
-      'logical request and native config that produced it.',
-  },
-  {
-    name: 'RoundIncomplete',
-    value: 'nativeCheckIncomplete',
-    doc:
-      'Set when a round starts, cleared when it ends (§11.4). Residue on the\n' +
-      'next launch means the previous process died mid-round: that launch\n' +
-      'resumes immediately instead of waiting 5s.',
-  },
-];
-
 // The host-facing result of a native round (prepareBundle).
 export const roundStatuses = [
   { name: 'Skipped', value: 'skipped' },
@@ -283,6 +258,7 @@ export const jniFunctions: Record<string, string> = {
   'ResumePlan.planRequest': 'ResumePlanRequest',
   'ResumePlan.classifyResponse': 'ResumeClassifyResponse',
   'ResumePlan.sidecar': 'ResumeSidecar',
+  'StoreMigration.migrateStoredItems': 'StoredItemsMigrate',
 };
 
 // NativePatchCore.ts binding -> the NAPI callback in pushy.cpp.
@@ -313,6 +289,7 @@ export const napiFunctions: Record<string, string> = {
   resumePlanRequest: 'ResumePlanRequest',
   resumeClassifyResponse: 'ResumeClassifyResponse',
   resumeSidecar: 'ResumeSidecar',
+  migrateStoredItems: 'MigrateStoredItems',
 };
 
 export type TextHost = 'cpp' | 'java' | 'arkts';
@@ -376,11 +353,6 @@ export const nativeTexts: NativeText[] = [
     values: { java: '.apk.patch', arkts: '.app.patch' },
     doc: 'Archive suffix of a patch against the installed package.',
   },
-  {
-    name: 'PackageUpdatedMarkedKey',
-    value: 'REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY',
-    hosts: ['cpp'],
-  },
   { name: 'LogTag', value: 'react-native-update', hosts: ['cpp', 'java'] },
   { name: 'LibraryName', value: 'rnpushy', hosts: ['java'] },
   {
@@ -421,85 +393,228 @@ export const servicePresets = {
   },
 };
 
+
+// --- Persisted layout (schema 1) --------------------------------------------
+//
+// Every platform keeps the same keys, with the same value encoding, in two
+// key-value stores of its own (Android SharedPreferences files, iOS
+// NSUserDefaults suites, Harmony preferences). The generator turns this into
+// each platform's key table and its State <-> store mapping; the one-time
+// move out of the layouts SDKs up to 10.61 wrote is the shared
+// cpp/patch_core/stored_items.h (vectors: stored-items-vectors.json).
+//
+// Every value is a string. A boolean is "1" or "0"; a marker is "1" while set
+// and absent otherwise; an empty string is never stored (writing one removes
+// the key), so absent and empty read the same.
+
+export type Platform = 'android' | 'ios' | 'harmony';
+
+export const storeSchema = {
+  version: 1,
+  versionKey: 'schemaVersion',
+  /** The main store: the state fields and every item without `store`. */
+  stateStore: 'pushy_state',
+  /**
+   * Whole server responses: kept apart so the small state commits do not
+   * rewrite them (every platform rewrites a store's whole file).
+   */
+  cacheStore: 'pushy_cache',
+  booleans: { true: '1', false: '0' },
+};
+
+export interface StateField {
+  /** The key, and the field's name in Java/ArkTS (C++ uses its snake_case). */
+  name: string;
+  type: 'string' | 'boolean';
+  /** What an absent boolean reads as. */
+  fallback?: boolean;
+}
+
+// pushy::state::State (cpp/patch_core/state_core.h), which the shared state
+// core rewrites as a whole.
+export const stateFields: StateField[] = [
+  { name: 'packageVersion', type: 'string' },
+  { name: 'buildTime', type: 'string' },
+  { name: 'currentVersion', type: 'string' },
+  { name: 'lastVersion', type: 'string' },
+  { name: 'firstTime', type: 'boolean', fallback: false },
+  { name: 'firstTimeOk', type: 'boolean', fallback: true },
+  { name: 'rolledBackVersion', type: 'string' },
+];
+
 export type Lifecycle = 'reset' | 'binaryUpgrade';
 
 export interface StoredItem {
   name: string;
   doc: string;
+  key: string;
   /** The key is a prefix (one entry per version). */
   prefix?: boolean;
+  /** Kept in the cache store instead of the state store. */
+  cache?: boolean;
+  /** A flag: "1" while set, absent otherwise (any legacy value counts as set). */
+  marker?: boolean;
   /** The events that delete it; everything else survives both. */
   clearedOn: Lifecycle[];
-  /** The key (or prefix) as an expression in each platform's own code. */
-  keys: { objc?: string; java?: string; arkts?: string };
+  /** The platforms that use it (all when absent). */
+  platforms?: Platform[];
 }
 
-// The persisted items next to the state fields (which the shared state core
-// rewrites itself) and what a reset to the packaged bundle or a binary
-// upgrade does to them, the same on every platform. The physical keys stay
-// as each platform has always stored them (no format migration).
+// The persisted items next to the state fields and what a reset to the
+// packaged bundle or a binary upgrade does to them, the same on every
+// platform.
 export const storedItems: StoredItem[] = [
   {
     name: 'HashInfo',
+    key: 'hash_',
     prefix: true,
     doc: 'Per-version info: name, description, metaInfo and the rescue flags.',
     clearedOn: ['reset', 'binaryUpgrade'],
-    keys: { objc: 'keyHashInfo', java: 'HASH_INFO_PREFIX', arkts: 'HASH_INFO_PREFIX' },
   },
   {
     name: 'FirstLoadMarker',
+    key: 'firstLoadMarked',
+    marker: true,
     doc: 'Set when a launch consumes first_time; getConstants reports and clears it.',
     clearedOn: ['reset', 'binaryUpgrade'],
-    keys: {
-      objc: 'keyFirstLoadMarked',
-      java: 'UpdateContext.KEY_FIRST_LOAD_MARKED',
-      arkts: 'FIRST_LOAD_MARKED_KEY',
-    },
   },
   {
-    name: 'PackageUpdatedMarker',
-    doc: 'iOS: set by a binary upgrade, consumed by getConstants (old version cleanup).',
+    name: 'BinaryUpgradedMarker',
+    key: 'binaryUpgraded',
+    marker: true,
+    doc: 'Set by a binary upgrade, consumed by getConstants (old version cleanup).',
     clearedOn: ['reset'],
-    keys: { objc: 'KeyPackageUpdatedMarked()' },
+    platforms: ['ios'],
   },
   {
     name: 'CheckCache',
+    key: 'nativeCheckResp',
+    cache: true,
     doc:
-      "The native round's response cache: it describes versions the event just\n" +
-      'removed (Android: its legacy location here; its own file is cleared too).',
+      "The native round's raw response for the JS side to reuse (§10.3), scoped\n" +
+      'to the exact logical request and native config that produced it. It\n' +
+      'describes versions a reset or an upgrade removes.',
     clearedOn: ['reset', 'binaryUpgrade'],
-    keys: {
-      objc: 'keyNativeCheckCache',
-      java: 'SyncCoordinator.KEY_RESP_CACHE',
-      arkts: 'KEY_RESP_CACHE',
-    },
   },
   {
     name: 'RoundBreadcrumb',
-    doc: 'Only decides whether the next launch resumes the round without the 5s delay.',
+    key: 'nativeCheckIncomplete',
+    marker: true,
+    doc:
+      'Set when a round starts, cleared when it ends (§11.4). Residue on the\n' +
+      'next launch means the previous process died mid-round: that launch\n' +
+      'resumes immediately instead of waiting 5s.',
     clearedOn: [],
-    keys: {
-      objc: 'keyNativeCheckIncomplete',
-      java: 'SyncCoordinator.KEY_ROUND_INCOMPLETE',
-      arkts: 'KEY_ROUND_INCOMPLETE',
-    },
   },
   {
     name: 'Uuid',
+    key: 'uuid',
     doc: 'Identifies the install for gray-release bucketing: must never change.',
     clearedOn: [],
-    keys: {},
   },
   {
     name: 'NativeConfig',
-    doc: 'The host or JS config the cold-start round and crash hold run from.',
+    key: 'nativeConfig',
+    doc:
+      'The persisted native check config (JS syncNativeConfig or the host) the\n' +
+      'cold-start round and the crash hold run from.',
     clearedOn: [],
-    keys: {},
   },
   {
     name: 'BundleHashCache',
-    doc: 'Keyed by the binary identity, so it invalidates itself on upgrade.',
+    key: 'bundleHashCache',
+    doc:
+      '"<binary identity>|<sha256>" of the embedded bundle: keyed by the binary,\n' +
+      'so it invalidates itself on upgrade.',
     clearedOn: [],
-    keys: {},
   },
 ];
+
+export interface LegacyLayout {
+  platform: Platform;
+  /** Crosses JNI/NAPI as this number. */
+  id: number;
+  doc: string;
+  /**
+   * What the migration carries over: new key <- legacy key. Only what a
+   * binary upgrade keeps (the uuid, the native config, the breadcrumb, the
+   * bundle hash cache) and the binary identity that upgrade is detected
+   * from: the new layout only ships in a new binary, whose first launch
+   * resets every other state field anyway (SyncBinaryVersion).
+   */
+  carried: Record<string, string>;
+  /** Legacy keys deleted without carrying them, every one an SDK ever wrote. */
+  dropped: string[];
+  droppedPrefixes: string[];
+}
+
+const androidLegacy = {
+  carried: {
+    uuid: 'uuid',
+    nativeConfig: 'nativeConfig',
+    nativeCheckIncomplete: 'nativeCheckIncomplete',
+    bundleHashCache: 'bundleHashCache',
+    packageVersion: 'packageVersion',
+    buildTime: 'buildTime',
+  },
+  dropped: [
+    'currentVersion',
+    'lastVersion',
+    'firstTime',
+    'firstTimeOk',
+    'rolledBackVersion',
+    'firstLoadMarked',
+    'nativeCheckResp',
+    'rolledBack',
+    'shouldRollback',
+    'blockUntil',
+    'blockReason',
+  ],
+  droppedPrefixes: ['hash_'],
+};
+
+// The layouts SDKs up to 10.61 wrote.
+export const legacyLayouts: LegacyLayout[] = [
+  {
+    platform: 'android',
+    id: 1,
+    doc:
+      'SharedPreferences Texts.PREFERENCES_NAME, and its "_check" file for the\n' +
+      'response cache; native booleans.',
+    ...androidLegacy,
+  },
+  {
+    platform: 'ios',
+    id: 2,
+    doc:
+      'standardUserDefaults, shared with the host app: only these keys are\n' +
+      "ours (the unprefixed packageVersion/buildTime that SDKs before 10.5x\n" +
+      'wrote are left alone, they may be the host\'s).',
+    carried: {
+      uuid: 'REACTNATIVECN_PUSHY_UUID',
+      nativeConfig: 'REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY',
+      nativeCheckIncomplete: 'REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY',
+      bundleHashCache: 'REACTNATIVECN_PUSHY_BUNDLEHASH_KEY',
+      packageVersion: 'REACTNATIVECN_PUSHY_PACKAGEVERSION',
+      buildTime: 'REACTNATIVECN_PUSHY_BUILDTIME',
+    },
+    dropped: [
+      'REACTNATIVECN_PUSHY_INFO_KEY',
+      'REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY',
+      'REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY',
+      'REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY',
+      'REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY',
+      'REACTNATIVECN_PUSHY_BLOCKUPDATE',
+      'REACTNATIVECN_PUSHY_BUNDLEHASH_IDENTITY',
+      'REACTNATIVECN_PUSHY_BUNDLEHASH_VALUE',
+    ],
+    droppedPrefixes: ['REACTNATIVECN_PUSHY_HASH_'],
+  },
+  {
+    platform: 'harmony',
+    id: 3,
+    doc: 'preferences Texts.PREFERENCES_NAME; booleans native or "true".',
+    ...androidLegacy,
+  },
+];
+

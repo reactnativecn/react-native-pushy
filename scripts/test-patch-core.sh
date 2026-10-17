@@ -73,6 +73,17 @@ c++ \
   -o "$BUILD_DIR/resume_plan_test"
 "$BUILD_DIR/resume_plan_test" "$ROOT_DIR/cpp/patch_core/tests/resume-plan-vectors.json"
 
+# The persisted-layout migration every platform's store delegates to.
+c++ \
+  -std=c++17 \
+  $CORE_WARNINGS \
+  $SANITIZE_FLAGS \
+  "$ROOT_DIR/cpp/patch_core/tests/stored_items_test.cpp" \
+  "$ROOT_DIR/cpp/patch_core/stored_items.cpp" \
+  "$ROOT_DIR/cpp/update_flow_core/flow_json.cpp" \
+  -o "$BUILD_DIR/stored_items_test"
+"$BUILD_DIR/stored_items_test" "$ROOT_DIR/cpp/patch_core/tests/stored-items-vectors.json"
+
 # Opt-in libFuzzer runs of the hbcTransform wire parser (untrusted __diff.json
 # metadata) and of the whole __diff.json parser: FUZZ=1 bun run test:patch-core.
 if cpp_test_fuzz_compiler; then

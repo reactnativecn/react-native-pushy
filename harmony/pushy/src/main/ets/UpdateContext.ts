@@ -12,12 +12,26 @@ import { DownloadTaskParams } from './DownloadTaskParams';
 import { bundleManager } from '@kit.AbilityKit';
 import { util } from '@kit.ArkTS';
 import logger from './Logger';
+import { recordJsRound, scheduleNativeSync } from './SyncCoordinator';
 import {
-  KEY_CONFIG,
-  KEY_RESP_CACHE,
-  recordJsRound,
-  scheduleNativeSync,
-} from './SyncCoordinator';
+  CACHE_STORE,
+  KEY_BUNDLE_HASH_CACHE,
+  KEY_CHECK_CACHE,
+  KEY_CURRENT_VERSION,
+  KEY_FIRST_LOAD_MARKER,
+  KEY_HASH_INFO,
+  KEY_LAST_VERSION,
+  KEY_NATIVE_CONFIG,
+  KEY_UUID,
+  MigrationStore,
+  migrateStore,
+  readMarker,
+  readState,
+  STATE_STORE,
+  StoreAccess,
+  writeMarker,
+  writeState,
+} from './StoreSchema';
 import NativePatchCore, {
   STATE_OP_CLEAR_ROLLBACK_MARK,
   STATE_OP_MARK_SUCCESS,
@@ -56,27 +70,23 @@ function nativeConfigsEquivalent(a: string | undefined, b: string | undefined): 
   return NativePatchCore.configsEquivalent(a, b);
 }
 
-// Per-version info key prefix and the first-load marker key.
-const HASH_INFO_PREFIX = 'hash_';
-const FIRST_LOAD_MARKED_KEY = 'firstLoadMarked';
-
 interface ClearedKeys {
   keys: string[];
   prefixes: string[];
 }
 
 // <generated:lifecycle> (scripts/contract.ts; bun scripts/generate-contract.ts)
-// What a reset to the packaged bundle and a binary upgrade delete besides
-// the state fields (scripts/contract.ts storedItems; every other item survives
-// both: the uuid, the native config, the round breadcrumb, the bundle hash
-// cache).
+// What a reset to the packaged bundle and a binary upgrade delete from the
+// state store besides the state fields (scripts/contract.ts storedItems;
+// the cache store is cleared on both, every other item survives both: the
+// uuid, the native config, the round breadcrumb, the bundle hash cache).
 const RESET_CLEARED: ClearedKeys = {
-  keys: [FIRST_LOAD_MARKED_KEY, KEY_RESP_CACHE],
-  prefixes: [HASH_INFO_PREFIX],
+  keys: [KEY_FIRST_LOAD_MARKER],
+  prefixes: [KEY_HASH_INFO],
 };
 const UPGRADE_CLEARED: ClearedKeys = {
-  keys: [FIRST_LOAD_MARKED_KEY, KEY_RESP_CACHE],
-  prefixes: [HASH_INFO_PREFIX],
+  keys: [KEY_FIRST_LOAD_MARKER],
+  prefixes: [KEY_HASH_INFO],
 };
 // </generated:lifecycle>
 
@@ -89,7 +99,11 @@ interface PersistOptions {
 export class UpdateContext {
   private context: common.UIAbilityContext;
   private rootDir: string;
+  // The state store and the cache store (StoreSchema): the response cache is
+  // a whole server response, and keeping it with the state would make every
+  // small state flush rewrite it.
   private preferences!: preferences.Preferences;
+  private cachePreferences!: preferences.Preferences;
   // 宿主传入的调试标志(RNOH isDebugModeEnabled)。debug 下 markSuccess 空转、
   // 不算内嵌 bundle 摘要,与 Android 的 debug 库对齐。HAR 自身没有构建期
   // DEBUG 信号(hvigor 不为 HAR 生成 BuildProfile),所以只看宿主。
@@ -144,6 +158,7 @@ export class UpdateContext {
       logger.error(TAG, `Failed to create root directory: ${getErrorMessage(e)}`);
     }
     this.initPreferences();
+    this.migrateLegacyStore();
     this.trace('ctor');
     this.syncStateWithBinaryVersion(
       this.getPackageVersion(),
@@ -164,8 +179,8 @@ export class UpdateContext {
         ` cv=${snap.currentVersion} lv=${snap.lastVersion}` +
         ` ft=${snap.firstTime} fto=${snap.firstTimeOk}` +
         ` rb=${snap.rolledBackVersion}` +
-        ` flm=${this.readString(FIRST_LOAD_MARKED_KEY)}` +
-        ` uuidSet=${!!this.readString('uuid')}`,
+        ` flm=${this.readString(KEY_FIRST_LOAD_MARKER)}` +
+        ` uuidSet=${!!this.readString(KEY_UUID)}`,
     );
   }
 
@@ -177,7 +192,10 @@ export class UpdateContext {
   private initPreferences() {
     try {
       this.preferences = preferences.getPreferencesSync(this.context, {
-        name: PREFERENCES_NAME,
+        name: STATE_STORE,
+      });
+      this.cachePreferences = preferences.getPreferencesSync(this.context, {
+        name: CACHE_STORE,
       });
     } catch (e) {
       // Fail fast: a missing preferences store means no state can be persisted,
@@ -189,8 +207,53 @@ export class UpdateContext {
     }
   }
 
-  private optionalPreferencesApi(): OptionalPreferencesApi {
-    return this.preferences as unknown as OptionalPreferencesApi;
+  /**
+   * 一次性把旧布局(PREFERENCES_NAME)迁入状态存储,在任何读取之前执行;完成后
+   * 为空操作。puts 立即写入内存(之后的读取都能看到),旧键在状态存储落盘成功后
+   * 才删除;失败时按全新安装启动,但保住 uuid(见 StoreSchema.migrateStore)。
+   */
+  private migrateLegacyStore(): void {
+    let legacy: preferences.Preferences;
+    try {
+      legacy = preferences.getPreferencesSync(this.context, {
+        name: PREFERENCES_NAME,
+      });
+    } catch (e) {
+      // 读不到旧存储就当作全新安装。
+      logger.error(TAG, `Failed to open the legacy store: ${getErrorMessage(e)}`);
+      return;
+    }
+    const state = this.migrationStore(this.preferences, 'state store');
+    migrateStore(
+      state,
+      this.migrationStore(legacy, 'legacy store'),
+      NativePatchCore.migrateStoredItems,
+    ).then(result => {
+      if (result !== 'current') {
+        logger.info(TAG, `state store migration: ${result}`);
+      }
+    });
+  }
+
+  private migrationStore(
+    store: preferences.Preferences,
+    name: string,
+  ): MigrationStore {
+    return {
+      snapshot: () => store.getAllSync() as Record<string, Object>,
+      put: (key: string, value: string) => store.putSync(key, value),
+      remove: (key: string) => store.deleteSync(key),
+      flush: () => this.flushStore(store, `migrate ${name}`),
+    };
+  }
+
+  /** 状态存储的文本视图(StoreSchema 的读写映射)。 */
+  private stateAccess(): StoreAccess {
+    return {
+      read: (key: string) => this.readString(key),
+      write: (key: string, value: string) => this.preferences.putSync(key, value),
+      remove: (key: string) => this.preferences.deleteSync(key),
+    };
   }
 
   private getBundleFlags(): bundleManager.BundleFlag {
@@ -267,30 +330,6 @@ export class UpdateContext {
     return '';
   }
 
-  private readBoolean(key: string, defaultValue: boolean): boolean {
-    const value = this.preferences.getSync(key, defaultValue) as
-      | string
-      | boolean
-      | number
-      | null
-      | undefined;
-    if (typeof value === 'boolean') {
-      return value;
-    }
-    if (typeof value === 'string') {
-      if (value === 'true') {
-        return true;
-      }
-      if (value === 'false') {
-        return false;
-      }
-    }
-    if (typeof value === 'number') {
-      return value !== 0;
-    }
-    return defaultValue;
-  }
-
   // >0 while a multi-write commit is open: putSync/deleteSync still apply in
   // memory, the single flush happens when the outermost batch closes. The
   // cold-start round's three writes (hash info, activation, response cache)
@@ -322,7 +361,12 @@ export class UpdateContext {
     if (this.flushBatchDepth > 0) {
       return Promise.resolve();
     }
-    const api = this.optionalPreferencesApi();
+    return this.flushStore(this.preferences, reason);
+  }
+
+  /** 落盘一个存储(见 flushPreferences),不受批次影响。 */
+  private flushStore(store: preferences.Preferences, reason: string): Promise<void> {
+    const api = store as unknown as OptionalPreferencesApi;
     if (typeof api.flushSync === 'function') {
       try {
         api.flushSync();
@@ -336,7 +380,7 @@ export class UpdateContext {
         // fall through to the async flush rather than failing outright
       }
     }
-    return this.preferences.flush().then(
+    return store.flush().then(
       () => undefined,
       (error: Object) => {
         logger.error(
@@ -354,48 +398,26 @@ export class UpdateContext {
     });
   }
 
-  private putNullableString(key: string, value?: string): void {
-    if (value) {
-      this.preferences.putSync(key, value);
-      return;
-    }
-    this.preferences.deleteSync(key);
-  }
-
   private getBundlePath(hash: string): string {
     return `${this.rootDir}/${hash}/${HARMONY_BUNDLE_FILE_NAME}`;
   }
 
   private getStateSnapshot(): StateCoreResult {
-    return {
-      packageVersion: this.readString('packageVersion'),
-      buildTime: this.readString('buildTime'),
-      currentVersion: this.readString('currentVersion'),
-      lastVersion: this.readString('lastVersion'),
-      firstTime: this.readBoolean('firstTime', false),
-      firstTimeOk: this.readBoolean('firstTimeOk', true),
-      rolledBackVersion: this.readString('rolledBackVersion'),
-    };
+    return readState(this.stateAccess());
   }
 
   private applyState(state: StateCoreResult): void {
-    this.putNullableString('packageVersion', state.packageVersion);
-    this.putNullableString('buildTime', state.buildTime);
-    this.putNullableString('currentVersion', state.currentVersion);
-    this.putNullableString('lastVersion', state.lastVersion);
-    this.preferences.putSync('firstTime', !!state.firstTime);
-    this.preferences.putSync('firstTimeOk', state.firstTimeOk !== false);
-    this.putNullableString('rolledBackVersion', state.rolledBackVersion);
+    writeState(this.stateAccess(), state);
   }
 
   /** 内存写入(不落盘):状态字段 + 可选的陈旧 hash / 首载标记 / 清理。 */
   private writeState(state: StateCoreResult, options: PersistOptions): void {
     this.applyState(state);
     if (options.removeStaleHash && state.staleVersionToDelete) {
-      this.preferences.deleteSync(`hash_${state.staleVersionToDelete}`);
+      this.preferences.deleteSync(`${KEY_HASH_INFO}${state.staleVersionToDelete}`);
     }
     if (options.markFirstLoadMarker) {
-      this.preferences.putSync(FIRST_LOAD_MARKED_KEY, 'true');
+      writeMarker(this.stateAccess(), KEY_FIRST_LOAD_MARKER, true);
     }
     if (options.cleanUp) {
       this.cleanUp();
@@ -570,6 +592,22 @@ export class UpdateContext {
     this.removeKeys(UPGRADE_CLEARED, 'binary upgrade');
     this.writeState(nextState, {});
     this.flushInBackground('sync binary version');
+    this.clearCheckCache('binary upgrade').catch(() => {
+      // 已在 flushStore 里记录。
+    });
+  }
+
+  /** 原生轮次的原始响应缓存(§10.3);没有时为 ''。 */
+  public getNativeCheckCache(): string {
+    const value = this.cachePreferences.getSync(KEY_CHECK_CACHE, '');
+    return typeof value === 'string' ? value : '';
+  }
+
+  // 删除响应缓存:它描述的版本刚被 reset / 升级 / 配置更换作废。内存里立即
+  // 生效,返回落盘的 promise。
+  private clearCheckCache(reason: string): Promise<void> {
+    this.cachePreferences.deleteSync(KEY_CHECK_CACHE);
+    return this.flushStore(this.cachePreferences, `clear check cache (${reason})`);
   }
 
   private static nativeConfigGeneration: number = 0;
@@ -580,7 +618,7 @@ export class UpdateContext {
 
   /** 与持久化的配置是否等价(C1)。 */
   public isStoredNativeConfig(config: string | undefined): boolean {
-    return nativeConfigsEquivalent(config, this.getKv(KEY_CONFIG));
+    return nativeConfigsEquivalent(config, this.getKv(KEY_NATIVE_CONFIG));
   }
 
   /**
@@ -589,18 +627,22 @@ export class UpdateContext {
    * response cache and generations stay as they are.
    */
   public setNativeConfig(config: string): Promise<void> {
-    if (!this.getKv('uuid')) {
-      this.preferences.putSync('uuid', util.generateRandomUUID());
+    if (!this.getKv(KEY_UUID)) {
+      this.preferences.putSync(KEY_UUID, util.generateRandomUUID());
     }
-    const current = this.getKv(KEY_CONFIG);
+    const current = this.getKv(KEY_NATIVE_CONFIG);
     // Byte-identical is trivially no change, even for a value C1 cannot parse.
     if (!current || (current !== config && !nativeConfigsEquivalent(current, config))) {
       // Also guards A -> B -> A replacements and late download commits.
       UpdateContext.resetGeneration += 1;
       UpdateContext.nativeConfigGeneration += 1;
-      this.preferences.putSync(KEY_CONFIG, config);
-      this.preferences.deleteSync(KEY_RESP_CACHE);
+      this.preferences.putSync(KEY_NATIVE_CONFIG, config);
       recordJsRound('');
+      // Flush even an equal value so a retry after a storage error can succeed.
+      return Promise.all([
+        this.flushPreferences('persist configuration'),
+        this.clearCheckCache('configuration'),
+      ]).then(() => undefined);
     }
     // Flush even an equal value so a retry after a storage error can succeed.
     return this.flushPreferences('persist configuration');
@@ -679,8 +721,9 @@ export class UpdateContext {
     } finally {
       flushed = this.endFlushBatch('reset to packaged bundle');
     }
+    const cacheCleared = this.clearCheckCache('reset');
     UpdateContext.ignoreRollback = false;
-    await flushed;
+    await Promise.all([flushed, cacheCleared]);
 
     // maxAgeDays=0：删除下载目录内容，仅保留当前运行版本的目录（残留目录由
     // 下次常规清理回收）。挂到串行任务链尾，避免与在飞的解压/打补丁并发。
@@ -732,18 +775,23 @@ export class UpdateContext {
     let flushed: Promise<void> = Promise.resolve();
     try {
       if (hash && hashInfoJson) {
-        this.preferences.putSync(`hash_${hash}`, hashInfoJson);
+        this.preferences.putSync(`${KEY_HASH_INFO}${hash}`, hashInfoJson);
       }
       if (shouldSwitch) {
         this.applySwitch(hash);
-      }
-      if (responseCacheJson) {
-        this.preferences.putSync(KEY_RESP_CACHE, responseCacheJson);
       }
     } finally {
       flushed = this.endFlushBatch('commit sync result');
     }
     await flushed;
+    // Advisory cache in its own store, written after the state it describes
+    // (as on Android): a lost write only costs JS a request.
+    if (responseCacheJson) {
+      this.cachePreferences.putSync(KEY_CHECK_CACHE, responseCacheJson);
+      this.flushStore(this.cachePreferences, 'commit sync cache').catch(() => {
+        // 已在 flushStore 里记录。
+      });
+    }
     return true;
   }
 
@@ -835,8 +883,8 @@ export class UpdateContext {
     await verifyInstallForActivation(
       `${this.rootDir}/${safeHash}`,
       safeHash,
-      this.readString('currentVersion') === safeHash ||
-        this.readString('lastVersion') === safeHash,
+      this.readString(KEY_CURRENT_VERSION) === safeHash ||
+        this.readString(KEY_LAST_VERSION) === safeHash,
     );
   }
 
@@ -871,10 +919,10 @@ export class UpdateContext {
   }
 
   public consumeFirstLoadMarker(): boolean {
-    const marked = this.readString(FIRST_LOAD_MARKED_KEY) === 'true';
+    const marked = readMarker(this.stateAccess(), KEY_FIRST_LOAD_MARKER);
     this.trace(`consumeFirstLoadMarker:marked=${marked}`);
     if (marked) {
-      this.preferences.deleteSync(FIRST_LOAD_MARKED_KEY);
+      writeMarker(this.stateAccess(), KEY_FIRST_LOAD_MARKER, false);
       this.flushInBackground('clear first load marker');
     }
     return marked;
@@ -999,9 +1047,8 @@ export class UpdateContext {
     return UpdateContext.isUsingBundleUrl;
   }
 
-  // bundleHash 缓存:"<packageVersion>|<updateTime>|<sha256hex>"。键标识当前
-  // 安装的二进制,每次(覆盖)安装 updateTime 都会变,每个安装只算一次。
-  private static readonly KEY_BUNDLE_HASH_CACHE = 'bundleHashCache';
+  // bundleHash 缓存(KEY_BUNDLE_HASH_CACHE):"<packageVersion>|<updateTime>|<sha256hex>"。
+  // 键标识当前安装的二进制,每次(覆盖)安装 updateTime 都会变,每个安装只算一次。
 
   private getBundleModifiedTime(): number {
     try {
@@ -1033,7 +1080,7 @@ export class UpdateContext {
       return Promise.resolve('');
     }
     const cachePrefix = `${this.getPackageVersion()}|${this.getBundleModifiedTime()}|`;
-    const cached = this.readString(UpdateContext.KEY_BUNDLE_HASH_CACHE);
+    const cached = this.readString(KEY_BUNDLE_HASH_CACHE);
     if (cached.startsWith(cachePrefix)) {
       return Promise.resolve(cached.slice(cachePrefix.length));
     }
@@ -1075,7 +1122,7 @@ export class UpdateContext {
     }
     if (hash) {
       this.preferences.putSync(
-        UpdateContext.KEY_BUNDLE_HASH_CACHE,
+        KEY_BUNDLE_HASH_CACHE,
         cachePrefix + hash,
       );
       // 缓存落盘失败不影响返回值(下次重算即可)。

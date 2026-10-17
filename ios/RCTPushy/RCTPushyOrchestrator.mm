@@ -11,13 +11,12 @@
 #include <sys/time.h>
 #endif
 
-// Raw JSON persisted by JS (syncNativeConfig) or the host (configure) for the
-// native round; parsed on read (PushyLoadRunnableConfig). Absent = no round.
-static NSString *const keyNativeConfig = @"REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY";
-// Set when a native check round starts, cleared when it ends (§11.4). Residue
+// keyNativeConfig: the raw JSON persisted by JS (syncNativeConfig) or the
+// host (configure) for the native round, parsed on read
+// (PushyLoadRunnableConfig); absent = no round. keyRoundBreadcrumb: residue
 // on the next launch means the previous process died mid-round (a crash
-// rescue was truncated): that launch resumes immediately instead of waiting.
-static NSString *const keyNativeCheckIncomplete = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY";
+// rescue was truncated), so that launch resumes immediately instead of
+// waiting. Both in RCTPushyState.mm (scripts/contract.ts storedItems).
 
 // The crash-hold version-info flag read by JS, stored encoded
 // (cpp/patch_core/native_texts.h) so it does not appear as a plain binary
@@ -324,7 +323,7 @@ static BOOL PushyConfigsEquivalent(NSString *a, NSString *b) {
 // otherwise *rejection is the host-facing result (skipped:
 // not_configured/disabled, failed: invalid_config).
 static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
-    NSString *text = [PushyDefaults() stringForKey:keyNativeConfig];
+    NSString *text = PushyReadString(PushyDefaults(), keyNativeConfig);
     if (json != NULL) {
         *json = [text copy];
     }
@@ -341,10 +340,10 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
 + (void)persistConfiguration:(NSString *)config {
     PushyWithStateLock(^{
         NSUserDefaults *defaults = PushyDefaults();
-        if ([defaults stringForKey:keyUuid].length == 0) {
+        if (PushyReadString(defaults, keyUuid) == nil) {
             [defaults setObject:[NSUUID UUID].UUIDString forKey:keyUuid];
         }
-        if (PushyConfigsEquivalent([defaults stringForKey:keyNativeConfig], config)) {
+        if (PushyConfigsEquivalent(PushyReadString(defaults, keyNativeConfig), config)) {
             // The same config in another serialization (key order, trailing
             // slashes, defaulted keys). Not a change: the stored text, the
             // response cache and any in-flight round all stay valid.
@@ -355,8 +354,8 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
         // commitRoundWithGeneration next to the reset generation), and the
         // cached response and JS-completed marker belong to the old one.
         pushyNativeConfigGeneration.fetch_add(1);
-        [defaults setObject:config forKey:keyNativeConfig];
-        [defaults removeObjectForKey:keyNativeCheckCache];
+        PushyWriteString(defaults, keyNativeConfig, config);
+        [PushyCacheDefaults() removeObjectForKey:keyCheckCache];
         [self recordJsRound:nil];
     });
     if (pushySyncReady.load() && [self hasRunnableConfig]) {
@@ -401,7 +400,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
         [RCTPushyOrchestrator prepareProcess:launchRolledBackVersion];
         NSUserDefaults *defaults = PushyDefaults();
         int64_t delaySeconds =
-            [defaults objectForKey:keyNativeCheckIncomplete] != nil ? 0 : 5;
+            PushyReadMarker(defaults, keyRoundBreadcrumb) ? 0 : 5;
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delaySeconds * NSEC_PER_SEC),
                        dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{ PushyGuard(@"native sync", ^{
             if ([RCTPushyOrchestrator hasJsRound]) {
@@ -522,7 +521,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     }
     NSString *cancellation = PushyFromStdString(flowcore::HostCancellation(
         PushyToStdString(configJson), PushyToStdString(pushyHostRoundConfig),
-        PushyToStdString([PushyDefaults() stringForKey:keyNativeConfig]),
+        PushyToStdString(PushyReadString(PushyDefaults(), keyNativeConfig)),
         pushyHostRoundConfigGeneration, pushyNativeConfigGeneration.load(),
         pushyHostRoundGeneration, pushyResetGeneration.load()));
     if (cancellation != nil) {
@@ -550,7 +549,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     if (jsConfig == nil) {
         return NO;
     }
-    return PushyConfigsEquivalent([PushyDefaults() stringForKey:keyNativeConfig], jsConfig);
+    return PushyConfigsEquivalent(PushyReadString(PushyDefaults(), keyNativeConfig), jsConfig);
 }
 
 // Runs the process's single round on the calling thread if nobody has
@@ -628,7 +627,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     }
     NSDictionary *hashInfoEntry = nil;
     NSDictionary *parsed =
-        PushyJsonDictionary([PushyDefaults() stringForKey:PushyHashInfoKey(hash)], NULL);
+        PushyJsonDictionary(PushyReadString(PushyDefaults(), PushyHashInfoKey(hash)), NULL);
     if (parsed != nil) {
         NSMutableDictionary *merged = [parsed mutableCopy];
         merged[PushyInfoCrashHold()] = @YES;
@@ -668,7 +667,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     pushyHostRoundConfigGeneration = configGeneration;
     pushyHostRoundResult = PushyHostResult(@"failed", @"check_failed");
     NSUserDefaults *defaults = PushyDefaults();
-    NSString *configJson = [defaults stringForKey:keyNativeConfig];
+    NSString *configJson = PushyReadString(defaults, keyNativeConfig);
     pushyHostRoundConfig = configJson;
 
     flowjson::Value event = flowjson::Value::Object();
@@ -691,7 +690,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
             for (const flowjson::Value &command : step.Get("commands").elements()) {
                 const std::string &type = command.Get("type").AsString();
                 if (type == "markIncomplete") {
-                    [defaults setObject:@YES forKey:keyNativeCheckIncomplete];
+                    PushyWriteMarker(defaults, keyRoundBreadcrumb, YES);
                     marked = YES;
                 } else if (type == "finish") {
                     [self finishRound:command
@@ -708,7 +707,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
         }
     } @finally {
         if (marked) {
-            [defaults removeObjectForKey:keyNativeCheckIncomplete];
+            PushyWriteMarker(defaults, keyRoundBreadcrumb, NO);
         }
     }
 }
@@ -764,7 +763,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
     };
     put("packageVersion", [RCTPushy packageVersion]);
     put("currentVersion", currentVersion);
-    put("uuid", [PushyDefaults() stringForKey:keyUuid]);
+    put("uuid", PushyReadString(PushyDefaults(), keyUuid));
     put("rolledBackVersion", launchRolledBackVersion);
     put("buildTime", [RCTPushy buildTime]);
     put("os", [NSString stringWithFormat:@"%@ %@", PushyOsName, PushyOsVersion()]);
@@ -953,7 +952,7 @@ static BOOL PushyLoadRunnableConfig(NSString **json, NSDictionary **rejection) {
             activated = YES;
         }
         if (cache != nil) {
-            [defaults setObject:cache forKey:keyNativeCheckCache];
+            [PushyCacheDefaults() setObject:cache forKey:keyCheckCache];
         }
         committed = YES;
     });

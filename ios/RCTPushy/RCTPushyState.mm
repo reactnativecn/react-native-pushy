@@ -6,57 +6,74 @@
 #include <exception>
 #include "../../cpp/patch_core/digest.h"
 #include "../../cpp/patch_core/native_texts.h"
+#include "../../cpp/patch_core/stored_items.h"
 
 #import <React/RCTConvert.h>
 #import <os/lock.h>
 
-PUSHY_HIDDEN NSString *const keyPushyInfo = @"REACTNATIVECN_PUSHY_INFO_KEY";
-// Binary identity (SyncBinaryVersion input). Prefixed like every other key:
-// the unprefixed names collided with generic host-app/SDK defaults, and a
-// foreign value there made every launch look like a rebuilt binary and wipe
-// the installed update.
-static NSString *const paramPackageVersion = @"REACTNATIVECN_PUSHY_PACKAGEVERSION";
-static NSString *const paramBuildTime = @"REACTNATIVECN_PUSHY_BUILDTIME";
-// The unprefixed names earlier SDKs wrote. Read only as a fallback until the
-// first state write migrates them (PushyStateFromDefaults /
-// PushyApplyStateToDefaults).
-static NSString *const legacyParamPackageVersion = @"packageVersion";
-static NSString *const legacyParamBuildTime = @"buildTime";
-static NSString *const paramLastVersion = @"lastVersion";
-PUSHY_HIDDEN NSString *const paramCurrentVersion = @"currentVersion";
-static NSString *const paramIsFirstTime = @"isFirstTime";
-static NSString *const paramIsFirstLoadOk = @"isFirstLoadOK";
-PUSHY_HIDDEN NSString *const keyUuid = @"REACTNATIVECN_PUSHY_UUID";
-PUSHY_HIDDEN NSString *const keyHashInfo = @"REACTNATIVECN_PUSHY_HASH_";
-PUSHY_HIDDEN NSString *const keyFirstLoadMarked = @"REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY";
-PUSHY_HIDDEN NSString *const keyRolledBackMarked = @"REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY";
-// Encoded constants (native_texts.h) are decoded on first use, not by
-// static initializers at image load.
-PUSHY_HIDDEN NSString *KeyPackageUpdatedMarked(void) {
-    static NSString *value = PushyFromStdString(pushy::texts::PackageUpdatedMarkedKey());
-    return value;
-}
-// bundleHash cache: "<cacheKey>|<sha256hex>" where cacheKey identifies the
-// installed binary (packageVersion + embedded bundle size + mtime). Recomputed
-// only when the key changes, i.e. once per install.
-static NSString *const keyBundleHashCache = @"REACTNATIVECN_PUSHY_BUNDLEHASH_KEY";
-// Raw response cache written by the native cold-start check for the JS side
-// to reuse (§10.3), scoped to the request and config that produced it.
-PUSHY_HIDDEN NSString *const keyNativeCheckCache = @"REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY";
+// The persisted layout every platform shares (scripts/contract.ts
+// storeSchema): two NSUserDefaults suites of our own. Not
+// standardUserDefaults: the host app shares that namespace, so a host key
+// could collide with ours (the unprefixed packageVersion/buildTime once did,
+// and wiped installed versions), and a host that clears its defaults domain
+// (a common "log out" reset) would take the uuid and the update state along.
+// <generated:store-schema> (scripts/contract.ts; bun scripts/generate-contract.ts)
+static NSString *const PushyStateStoreName = @"pushy_state";
+static NSString *const PushyCacheStoreName = @"pushy_cache";
+// A boolean is stored as one of these; anything else (absent) reads as the
+// field's fallback.
+static NSString *const PushyBooleanTrue = @"1";
+static NSString *const PushyBooleanFalse = @"0";
+// Carried by hand when the migration itself cannot run.
+static NSString *const legacyKeyUuid = @"REACTNATIVECN_PUSHY_UUID";
+// Every legacy key starts with it: only those are snapshotted (the host app
+// shares that store).
+static NSString *const legacyKeyPrefix = @"REACTNATIVECN_PUSHY_";
+PUSHY_HIDDEN NSString *const keySchemaVersion = @"schemaVersion";
+PUSHY_HIDDEN NSString *const keyPackageVersion = @"packageVersion";
+PUSHY_HIDDEN NSString *const keyBuildTime = @"buildTime";
+PUSHY_HIDDEN NSString *const keyCurrentVersion = @"currentVersion";
+PUSHY_HIDDEN NSString *const keyLastVersion = @"lastVersion";
+PUSHY_HIDDEN NSString *const keyFirstTime = @"firstTime";
+PUSHY_HIDDEN NSString *const keyFirstTimeOk = @"firstTimeOk";
+PUSHY_HIDDEN NSString *const keyRolledBackVersion = @"rolledBackVersion";
+// Per-version info: name, description, metaInfo and the rescue flags.
+PUSHY_HIDDEN NSString *const keyHashInfo = @"hash_";
+// Set when a launch consumes first_time; getConstants reports and clears it.
+PUSHY_HIDDEN NSString *const keyFirstLoadMarker = @"firstLoadMarked";
+// Set by a binary upgrade, consumed by getConstants (old version cleanup).
+PUSHY_HIDDEN NSString *const keyBinaryUpgradedMarker = @"binaryUpgraded";
+// The native round's raw response for the JS side to reuse (§10.3), scoped
+// to the exact logical request and native config that produced it. It
+// describes versions a reset or an upgrade removes.
+PUSHY_HIDDEN NSString *const keyCheckCache = @"nativeCheckResp";
+// Set when a round starts, cleared when it ends (§11.4). Residue on the
+// next launch means the previous process died mid-round: that launch
+// resumes immediately instead of waiting 5s.
+PUSHY_HIDDEN NSString *const keyRoundBreadcrumb = @"nativeCheckIncomplete";
+// Identifies the install for gray-release bucketing: must never change.
+PUSHY_HIDDEN NSString *const keyUuid = @"uuid";
+// The persisted native check config (JS syncNativeConfig or the host) the
+// cold-start round and the crash hold run from.
+PUSHY_HIDDEN NSString *const keyNativeConfig = @"nativeConfig";
+// "<binary identity>|<sha256>" of the embedded bundle: keyed by the binary,
+// so it invalidates itself on upgrade.
+PUSHY_HIDDEN NSString *const keyBundleHashCache = @"bundleHashCache";
+// </generated:store-schema>
 
 // <generated:lifecycle> (scripts/contract.ts; bun scripts/generate-contract.ts)
-// What a reset to the packaged bundle and a binary upgrade delete besides
-// the state fields (scripts/contract.ts storedItems; every other item survives
-// both: the uuid, the native config, the round breadcrumb, the bundle hash
-// cache).
+// What a reset to the packaged bundle and a binary upgrade delete from the
+// state store besides the state fields (scripts/contract.ts storedItems;
+// the cache store is cleared on both, every other item survives both: the
+// uuid, the native config, the round breadcrumb, the bundle hash cache).
 PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOnReset(void) {
-    return @[keyFirstLoadMarked, KeyPackageUpdatedMarked(), keyNativeCheckCache];
+    return @[keyFirstLoadMarker, keyBinaryUpgradedMarker];
 }
 PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOnReset(void) {
     return @[keyHashInfo];
 }
 PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOnUpgrade(void) {
-    return @[keyFirstLoadMarked, keyNativeCheckCache];
+    return @[keyFirstLoadMarker];
 }
 PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOnUpgrade(void) {
     return @[keyHashInfo];
@@ -160,10 +177,6 @@ PUSHY_HIDDEN std::string PushyToStdString(NSString *value) {
     return std::string([value UTF8String]);
 }
 
-PUSHY_HIDDEN NSUserDefaults *PushyDefaults(void) {
-    return [NSUserDefaults standardUserDefaults];
-}
-
 PUSHY_HIDDEN NSString *PushyFromStdString(const std::string &value) {
     if (value.empty()) {
         return nil;
@@ -171,12 +184,130 @@ PUSHY_HIDDEN NSString *PushyFromStdString(const std::string &value) {
     return [NSString stringWithUTF8String:value.c_str()];
 }
 
-static void PushySetNullableString(NSUserDefaults *defaults, NSString *key, NSString *value) {
-    if (value != nil) {
+PUSHY_HIDDEN NSString *PushyReadString(NSUserDefaults *defaults, NSString *key) {
+    NSString *value = [defaults stringForKey:key];
+    return value.length > 0 ? value : nil;
+}
+
+PUSHY_HIDDEN void PushyWriteString(NSUserDefaults *defaults, NSString *key, NSString *value) {
+    if (value.length > 0) {
         [defaults setObject:value forKey:key];
     } else {
         [defaults removeObjectForKey:key];
     }
+}
+
+PUSHY_HIDDEN BOOL PushyReadBool(NSUserDefaults *defaults, NSString *key, BOOL fallback) {
+    NSString *value = [defaults stringForKey:key];
+    if ([value isEqualToString:PushyBooleanTrue]) {
+        return YES;
+    }
+    if ([value isEqualToString:PushyBooleanFalse]) {
+        return NO;
+    }
+    return fallback;
+}
+
+PUSHY_HIDDEN void PushyWriteBool(NSUserDefaults *defaults, NSString *key, BOOL value) {
+    [defaults setObject:value ? PushyBooleanTrue : PushyBooleanFalse forKey:key];
+}
+
+PUSHY_HIDDEN BOOL PushyReadMarker(NSUserDefaults *defaults, NSString *key) {
+    return PushyReadBool(defaults, key, NO);
+}
+
+PUSHY_HIDDEN void PushyWriteMarker(NSUserDefaults *defaults, NSString *key, BOOL set) {
+    if (set) {
+        [defaults setObject:PushyBooleanTrue forKey:key];
+    } else {
+        [defaults removeObjectForKey:key];
+    }
+}
+
+// A stored value as the migration core reads it: text as is, a number or a
+// boolean as its text ("1" for YES, like the layout's own booleans), anything
+// else (the legacy info dictionary) as "" — a key to delete, never a value.
+static std::string PushyDefaultsText(id value) {
+    if ([value isKindOfClass:[NSString class]]) {
+        return PushyToStdString(value);
+    }
+    if ([value isKindOfClass:[NSNumber class]]) {
+        return PushyToStdString([(NSNumber *)value stringValue]);
+    }
+    return std::string();
+}
+
+// The one-time move from the legacy layout (SDKs up to 10.61:
+// standardUserDefaults, REACTNATIVECN_PUSHY_* keys) into the state suite, by
+// the shared core's plan (cpp/patch_core/stored_items.h). The puts end with
+// the schema, so a process killed between two of them migrates again on its
+// next launch (the core never overwrites what the suite already holds); the
+// legacy keys are deleted only after every put. A write reaches cfprefsd
+// before setObject:forKey: returns, so dying here loses nothing already put.
+// Never throws: a failure leaves a fresh suite (as a new install) that still
+// carries the install's uuid, and writes no schema, so the next launch tries
+// again.
+PUSHY_HIDDEN NSString *PushyMigrateStores(NSUserDefaults *state, NSUserDefaults *legacy) {
+    @try {
+        pushy::stored::Entries legacyItems;
+        NSDictionary<NSString *, id> *legacyAll = [legacy dictionaryRepresentation];
+        for (NSString *key in legacyAll) {
+            // The host app shares that store: only our prefix is looked at.
+            if ([key hasPrefix:legacyKeyPrefix]) {
+                legacyItems.emplace_back(PushyToStdString(key), PushyDefaultsText(legacyAll[key]));
+            }
+        }
+        pushy::stored::Entries currentItems;
+        NSDictionary<NSString *, id> *currentAll = [state dictionaryRepresentation];
+        for (NSString *key in currentAll) {
+            currentItems.emplace_back(PushyToStdString(key), PushyDefaultsText(currentAll[key]));
+        }
+        pushy::stored::MigrationPlan plan = pushy::stored::MigrateStoredItems(
+            pushy::stored::kLegacyIos, legacyItems, currentItems);
+        if (!plan.valid) {
+            [NSException raise:NSInternalInconsistencyException format:@"no migration plan"];
+        }
+        for (const auto &put : plan.puts) {
+            [state setObject:PushyFromStdString(put.second) forKey:PushyFromStdString(put.first)];
+        }
+        for (const std::string &key : plan.removes) {
+            [legacy removeObjectForKey:PushyFromStdString(key)];
+        }
+        return plan.migrated ? @"migrated" : @"current";
+    } @catch (...) {
+        NSLog(@"RCTPushy -- state store migration failed: %@",
+              PushyCaughtReason(@"unknown exception"));
+    }
+    PushyGuard(@"uuid carry", ^{
+        NSString *uuid = [legacy stringForKey:legacyKeyUuid];
+        if (PushyReadString(state, keyUuid) == nil && uuid.length > 0) {
+            [state setObject:uuid forKey:keyUuid];
+        }
+    });
+    return @"fallback";
+}
+
+PUSHY_HIDDEN NSUserDefaults *PushyDefaults(void) {
+    static NSUserDefaults *defaults;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        defaults = [[NSUserDefaults alloc] initWithSuiteName:PushyStateStoreName];
+        // Before anything reads the suite; a no-op once done.
+        NSString *migration = PushyMigrateStores(defaults, [NSUserDefaults standardUserDefaults]);
+        if (![migration isEqualToString:@"current"]) {
+            NSLog(@"RCTPushy -- state store migration: %@", migration);
+        }
+    });
+    return defaults;
+}
+
+PUSHY_HIDDEN NSUserDefaults *PushyCacheDefaults(void) {
+    static NSUserDefaults *defaults;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        defaults = [[NSUserDefaults alloc] initWithSuiteName:PushyCacheStoreName];
+    });
+    return defaults;
 }
 
 PUSHY_HIDDEN NSString *PushyHashInfoKey(NSString *hash) {
@@ -247,60 +378,30 @@ PUSHY_HIDDEN NSString *PushyJsonString(id object) {
     return data == nil ? nil : [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
 }
 
-// Binary identity under the prefixed key, or — until the first state write
-// migrates it — the value an earlier SDK left under the unprefixed one, so an
-// installed update survives the SDK upgrade instead of reading as a rebuilt
-// binary.
-static NSString *PushyBinaryIdentityValue(NSUserDefaults *defaults, NSString *key, NSString *legacyKey) {
-    return [defaults stringForKey:key] ?: [defaults stringForKey:legacyKey];
-}
-
 PUSHY_HIDDEN pushy::state::State PushyStateFromDefaults(NSUserDefaults *defaults) {
     pushy::state::State state;
-    state.package_version = PushyToStdString(
-        PushyBinaryIdentityValue(defaults, paramPackageVersion, legacyParamPackageVersion));
-    state.build_time = PushyToStdString(
-        PushyBinaryIdentityValue(defaults, paramBuildTime, legacyParamBuildTime));
-    NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
-    if (pushyInfo != nil) {
-        state.current_version = PushyToStdString(pushyInfo[paramCurrentVersion]);
-        state.last_version = PushyToStdString(pushyInfo[paramLastVersion]);
-        state.first_time = [pushyInfo[paramIsFirstTime] boolValue];
-        id firstLoadOk = pushyInfo[paramIsFirstLoadOk];
-        state.first_time_ok = firstLoadOk == nil ? true : [firstLoadOk boolValue];
-    }
-    state.rolled_back_version = PushyToStdString([defaults stringForKey:keyRolledBackMarked]);
+    // <generated:read-state> (scripts/contract.ts; bun scripts/generate-contract.ts)
+    state.package_version = PushyToStdString(PushyReadString(defaults, keyPackageVersion));
+    state.build_time = PushyToStdString(PushyReadString(defaults, keyBuildTime));
+    state.current_version = PushyToStdString(PushyReadString(defaults, keyCurrentVersion));
+    state.last_version = PushyToStdString(PushyReadString(defaults, keyLastVersion));
+    state.first_time = PushyReadBool(defaults, keyFirstTime, false);
+    state.first_time_ok = PushyReadBool(defaults, keyFirstTimeOk, true);
+    state.rolled_back_version = PushyToStdString(PushyReadString(defaults, keyRolledBackVersion));
+    // </generated:read-state>
     return state;
 }
 
 PUSHY_HIDDEN void PushyApplyStateToDefaults(NSUserDefaults *defaults, const pushy::state::State &state) {
-    PushySetNullableString(defaults, paramPackageVersion, PushyFromStdString(state.package_version));
-    PushySetNullableString(defaults, paramBuildTime, PushyFromStdString(state.build_time));
-    // One-time migration: once the prefixed keys hold the identity, the
-    // legacy ones are retired so a host-app write there is never read again.
-    [defaults removeObjectForKey:legacyParamPackageVersion];
-    [defaults removeObjectForKey:legacyParamBuildTime];
-
-    BOOL hasPushyInfo = !state.current_version.empty() || !state.last_version.empty() || state.first_time || !state.first_time_ok;
-    if (hasPushyInfo) {
-        NSMutableDictionary *newInfo = [[NSMutableDictionary alloc] init];
-        if (!state.current_version.empty()) {
-            newInfo[paramCurrentVersion] = PushyFromStdString(state.current_version);
-        }
-        if (!state.last_version.empty()) {
-            newInfo[paramLastVersion] = PushyFromStdString(state.last_version);
-        }
-        newInfo[paramIsFirstTime] = @(state.first_time);
-        newInfo[paramIsFirstLoadOk] = @(state.first_time_ok);
-        [defaults setObject:newInfo forKey:keyPushyInfo];
-    } else {
-        [defaults removeObjectForKey:keyPushyInfo];
-    }
-
-    PushySetNullableString(
-        defaults,
-        keyRolledBackMarked,
-        PushyFromStdString(state.rolled_back_version));
+    // <generated:write-state> (scripts/contract.ts; bun scripts/generate-contract.ts)
+    PushyWriteString(defaults, keyPackageVersion, PushyFromStdString(state.package_version));
+    PushyWriteString(defaults, keyBuildTime, PushyFromStdString(state.build_time));
+    PushyWriteString(defaults, keyCurrentVersion, PushyFromStdString(state.current_version));
+    PushyWriteString(defaults, keyLastVersion, PushyFromStdString(state.last_version));
+    PushyWriteBool(defaults, keyFirstTime, state.first_time);
+    PushyWriteBool(defaults, keyFirstTimeOk, state.first_time_ok);
+    PushyWriteString(defaults, keyRolledBackVersion, PushyFromStdString(state.rolled_back_version));
+    // </generated:write-state>
 }
 
 // Version switch without acquiring the state lock: the caller must already
@@ -319,7 +420,7 @@ PUSHY_HIDDEN void PushySwitchVersionLocked(NSString *hash) {
 }
 
 static NSString *PushyCachedBundleHash(NSUserDefaults *defaults, NSString *cachedPrefix) {
-    NSString *cached = [defaults stringForKey:keyBundleHashCache];
+    NSString *cached = PushyReadString(defaults, keyBundleHashCache);
     if ([cached hasPrefix:cachedPrefix]) {
         return [cached substringFromIndex:cachedPrefix.length];
     }

@@ -24,6 +24,7 @@
 #include "resume_plan.h"
 #include "state_core.h"
 #include "state_ops.h"
+#include "stored_items.h"
 
 namespace {
 
@@ -1496,6 +1497,26 @@ static napi_value ResumeSidecar(napi_env env, napi_callback_info info) {
                                                    static_cast<long long>(total)));
 }
 
+// migrateStoredItems(legacyLayout, legacy[], current[]) -> plan JSON
+// (cpp/patch_core/stored_items.h); the flat [key, value, ...] arrays are the
+// two stores' snapshots.
+static napi_value MigrateStoredItems(napi_env env, napi_callback_info info) {
+  napi_value args[3] = {nullptr, nullptr, nullptr};
+  size_t argc = 3;
+  if (!GetArgCount(env, info, &argc, args) || argc < 3) {
+    ThrowError(env, "migrateStoredItems: wrong number of arguments");
+    return nullptr;
+  }
+  int32_t layout = 0;
+  std::vector<std::string> legacy;
+  std::vector<std::string> current;
+  if (!GetInt32(env, args[0], &layout) || !GetStringArray(env, args[1], &legacy) ||
+      !GetStringArray(env, args[2], &current)) {
+    return nullptr;
+  }
+  return NewString(env, pushy::stored::MigrateStoredItemsJson(layout, legacy, current));
+}
+
 napi_value Init(napi_env env, napi_value exports) {
   // <generated:exports> (scripts/contract.ts; bun scripts/generate-contract.ts)
   if (!ExportFunction(env, exports, "syncStateWithBinaryVersion", Guarded<SyncStateWithBinaryVersion>) ||
@@ -1523,7 +1544,8 @@ napi_value Init(napi_env env, napi_value exports) {
       !ExportFunction(env, exports, "normalizeConfiguration", Guarded<FlowNormalizeConfiguration>) ||
       !ExportFunction(env, exports, "resumePlanRequest", Guarded<ResumePlanRequest>) ||
       !ExportFunction(env, exports, "resumeClassifyResponse", Guarded<ResumeClassifyResponse>) ||
-      !ExportFunction(env, exports, "resumeSidecar", Guarded<ResumeSidecar>)) {
+      !ExportFunction(env, exports, "resumeSidecar", Guarded<ResumeSidecar>) ||
+      !ExportFunction(env, exports, "migrateStoredItems", Guarded<MigrateStoredItems>)) {
   // </generated:exports>
     return nullptr;
   }

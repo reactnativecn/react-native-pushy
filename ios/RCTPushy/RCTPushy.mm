@@ -177,34 +177,38 @@ RCT_EXPORT_MODULE(RCTPushy);
         ret[@"downloadRootDir"] = [RCTPushy downloadDir];
         ret[@"packageVersion"] = [RCTPushy packageVersion];
         ret[@"buildTime"] = [RCTPushy buildTime];
-        ret[@"rolledBackVersion"] = [defaults objectForKey:keyRolledBackMarked];
-        ret[@"isFirstTime"] = [defaults objectForKey:keyFirstLoadMarked];
-        ret[@"uuid"] = [defaults objectForKey:keyUuid];
+        pushy::state::State state = PushyStateFromDefaults(defaults);
+        NSString *rolledBackVersion = PushyFromStdString(state.rolled_back_version);
+        BOOL isFirstTime = PushyReadMarker(defaults, keyFirstLoadMarker);
+        ret[@"rolledBackVersion"] = rolledBackVersion;
+        if (isFirstTime) {
+            ret[@"isFirstTime"] = @YES;
+        }
+        ret[@"uuid"] = PushyReadString(defaults, keyUuid);
         ret[@"isUsingBundleUrl"] = @(pushyIsUsingBundleUrl.load());
         // 原生 patch 内核可消费的 diff 轨道版本(2 = hdiffv2 轨道),
         // JS 随 checkUpdate 以 diffV 上报,服务端按能力门控下发
         ret[@"supportedDiffVersion"] = @(pushy::hbc::kSupportedDiffVersion);
-        NSDictionary *pushyInfo = [defaults dictionaryForKey:keyPushyInfo];
-        NSString *currentVersion = [pushyInfo objectForKey:paramCurrentVersion];
+        NSString *currentVersion = PushyFromStdString(state.current_version);
         ret[@"currentVersion"] = currentVersion;
         if (currentVersion != nil) {
-            ret[@"currentVersionInfo"] = [defaults objectForKey:PushyHashInfoKey(currentVersion)];
+            ret[@"currentVersionInfo"] = PushyReadString(defaults, PushyHashInfoKey(currentVersion));
             // bundleSha256 from the install record, for crash-report attribution.
             ret[@"currentBundleSha256"] = PushyIsSafePathComponent(currentVersion)
                 ? PushyRecordedBundleSha256(PushyVersionDir(currentVersion)) : @"";
         }
 
-        if (ret[@"isFirstTime"]) {
-            [defaults removeObjectForKey:keyFirstLoadMarked];
+        if (isFirstTime) {
+            PushyWriteMarker(defaults, keyFirstLoadMarker, NO);
         }
 
-        if (ret[@"rolledBackVersion"] != nil) {
-            [defaults removeObjectForKey:keyRolledBackMarked];
+        if (rolledBackVersion != nil) {
+            PushyApplyStateToDefaults(defaults, pushy::state::ClearRollbackMark(state));
             [RCTPushyInstaller clearInvalidFiles];
         }
 
-        if ([[defaults objectForKey:KeyPackageUpdatedMarked()] boolValue]) {
-            [defaults removeObjectForKey:KeyPackageUpdatedMarked()];
+        if (PushyReadMarker(defaults, keyBinaryUpgradedMarker)) {
+            PushyWriteMarker(defaults, keyBinaryUpgradedMarker, NO);
             [RCTPushyInstaller clearInvalidFiles];
         }
     }); });
@@ -220,8 +224,7 @@ RCT_EXPORT_METHOD(setUuid:(NSString *)uuid  resolver:(RCTPromiseResolveBlock)res
         return;
     }
 
-    NSUserDefaults *defaults = PushyDefaults();
-    [defaults setObject:uuid forKey:keyUuid];
+    PushyWriteString(PushyDefaults(), keyUuid, uuid);
     resolve(@true);
 }
 
@@ -255,7 +258,7 @@ RCT_EXPORT_METHOD(syncNativeConfig:(NSString *)config
 RCT_EXPORT_METHOD(getNativeCheckCache:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    resolve([PushyDefaults() stringForKey:keyNativeCheckCache] ?: @"");
+    resolve(PushyReadString(PushyCacheDefaults(), keyCheckCache) ?: @"");
 }
 
 RCT_EXPORT_METHOD(markJsCheckCompleted:(NSString *)config
@@ -281,7 +284,7 @@ RCT_EXPORT_METHOD(setLocalHashInfo:(NSString *)hash
 
     NSError *error = nil;
     if (PushyJsonDictionary(value, &error) != nil) {
-        [PushyDefaults() setObject:value forKey:PushyHashInfoKey(hash)];
+        PushyWriteString(PushyDefaults(), PushyHashInfoKey(hash), value);
         resolve(@true);
     } else {
         PushyRejectError(reject, PushyErrorWithCode(
@@ -297,7 +300,7 @@ RCT_EXPORT_METHOD(getLocalHashInfo:(NSString *)hash
 {
     
     NSUserDefaults *defaults = PushyDefaults();
-    resolve([defaults stringForKey:PushyHashInfoKey(hash)]);
+    resolve(PushyReadString(defaults, PushyHashInfoKey(hash)));
 }
 
 RCT_EXPORT_METHOD(downloadFullUpdate:(NSDictionary *)options
@@ -450,6 +453,7 @@ RCT_EXPORT_METHOD(resetToPackagedBundle:(RCTPromiseResolveBlock)resolve
             // removed), the same on every platform (scripts/contract.ts).
             PushyRemoveKeys(defaults, PushyKeysClearedOnReset(),
                             PushyKeyPrefixesClearedOnReset());
+            [PushyCacheDefaults() removeObjectForKey:keyCheckCache];
             ignoreRollback = false;
         });
     } @catch (...) {
