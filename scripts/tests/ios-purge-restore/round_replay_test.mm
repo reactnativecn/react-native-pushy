@@ -452,7 +452,7 @@ static void Replay(const Value &steps) {
     Expect(downloaded && !activated ? [pushyUnactivatedHash isEqualToString:hash]
                                     : pushyUnactivatedHash == nil, "unactivated hash");
     // However the round ends, the breadcrumb does not survive it.
-    Expect([testDefaults objectForKey:keyNativeCheckIncomplete] == nil, "breadcrumb survived");
+    Expect([testDefaults objectForKey:keyRoundBreadcrumb] == nil, "breadcrumb survived");
 }
 
 int main(int argc, const char **argv) {

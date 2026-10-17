@@ -6,7 +6,11 @@ import {
   bundlePreparationResult,
 } from '../../harmony/pushy/src/main/ets/BundlePreparationResult';
 import { STATUS_NONE } from '../../harmony/pushy/src/main/ets/Texts';
-import { evalHarmonyModule, harmonyConfigBindings } from './nativeSources';
+import {
+  evalHarmonyModule,
+  harmonyConfigBindings,
+  harmonyStoreSchema,
+} from './nativeSources';
 
 // Evaluate the actual Harmony orchestrator in an isolated VM per test. Only
 // platform imports, HTTP, download IO and the round engine are substituted
@@ -189,6 +193,7 @@ function harness() {
     'SyncCoordinator.ts',
     'httpRequest = mockCheck;\n({ check: prepareBundleNative, schedule: scheduleNativeSync });',
     {
+      ...harmonyStoreSchema(),
       BundlePreparationRound,
       bundlePreparationResult,
       logger: { info() {}, warn() {}, error() {} },

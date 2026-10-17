@@ -9,7 +9,8 @@ import { device } from 'detox';
 // 就会确信 pdiff 可用而实际 hpatch 源校验失败,比 buildTime 启发式更糟。
 //
 // 无需 app 配合:JS 层(core.ts)在模块加载时预取 getBundleHash,原生算完后
-// 缓存进 NSUserDefaults / SharedPreferences;宿主机直读缓存末段,与 Node 侧
+// 缓存进状态存储(三端同名的 pushy_state:iOS 独立 suite、Android
+// SharedPreferences 文件,见 docs/STORED_STATE_LAYOUT.md);宿主机直读缓存末段,与 Node 侧
 // 对包内 bundle 算的 sha256 比对。
 //
 // Android 有独立的验证价值:它的哈希实现(MessageDigest)与被哈希字节的来源
@@ -23,8 +24,10 @@ const ANDROID_APK_PATH = path.resolve(
   __dirname,
   '../android/app/build/outputs/apk/release/app-release.apk'
 );
-const IOS_DEFAULTS_KEY = 'REACTNATIVECN_PUSHY_BUNDLEHASH_KEY';
-const ANDROID_PREFS_KEY = 'bundleHashCache';
+// scripts/contract.ts storeSchema: the state store and the cache's key, the
+// same on every platform.
+const STATE_STORE = 'pushy_state';
+const BUNDLE_HASH_KEY = 'bundleHashCache';
 const POLL_TIMEOUT_MS = 60000;
 const POLL_INTERVAL_MS = 1000;
 
@@ -52,7 +55,7 @@ function readIosCachedBundleHash(
       .toString()
       .trim();
     const raw = execSync(
-      `plutil -extract ${IOS_DEFAULTS_KEY} raw -o - "${container}/Library/Preferences/${bundleId}.plist"`,
+      `plutil -extract ${BUNDLE_HASH_KEY} raw -o - "${container}/Library/Preferences/${STATE_STORE}.plist"`,
       { stdio: ['ignore', 'pipe', 'ignore'] }
     )
       .toString()
@@ -86,7 +89,7 @@ function readAndroidCachedBundleHash(
     }
     adbRooted = true;
   }
-  const prefsPath = `/data/data/${packageName}/shared_prefs/update.xml`;
+  const prefsPath = `/data/data/${packageName}/shared_prefs/${STATE_STORE}.xml`;
   for (const cmd of [
     `adb -s ${adbName} shell cat ${prefsPath}`,
     `adb -s ${adbName} shell su 0 cat ${prefsPath}`,
@@ -96,7 +99,7 @@ function readAndroidCachedBundleHash(
         stdio: ['ignore', 'pipe', 'ignore'],
       }).toString();
       const match = xml.match(
-        new RegExp(`name="${ANDROID_PREFS_KEY}"[^>]*>([^<]+)<`)
+        new RegExp(`name="${BUNDLE_HASH_KEY}"[^>]*>([^<]+)<`)
       );
       if (match) {
         return extractHash(match[1]);

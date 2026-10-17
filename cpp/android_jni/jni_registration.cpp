@@ -94,6 +94,11 @@ const std::vector<NativeClass>& NativeClasses() {
        {"291ef0d4ad8a7a", "723bfed0b88a274923311bb6e5a7826444205fcdf4daae943d432d07e18c93a9887e5a3655c7c2a4949e3355371df78299937648503c43d9d8ae9a68092f0113fd9887857c422602b9d595959c72462c45ebc5afb9d44b412006e2cefd",
         reinterpret_cast<void*>(&pushy::jni_natives::ResumeSidecar)},
    }},
+  {"3919bbc3ab8a6b512c3e08f0c0b6df60452311edfbc8f780624b2d1de38c93a99565511c07ecdaa496967357",  // StoreMigration
+   {
+       {"371ef3c3af9f6d7636300efcd29a84684734", "723ecffda48a7e446d331df7d1fca379582e0ae6a5e0949f73592d46eac2aebad544402307e5cffecbb376582012bfc1ab89630e6d2f0afcdca8d7",
+        reinterpret_cast<void*>(&pushy::jni_natives::StoredItemsMigrate)},
+   }},
   // </generated:natives>
   };
   return classes;

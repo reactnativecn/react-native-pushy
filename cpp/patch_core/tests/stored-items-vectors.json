@@ -1,0 +1,653 @@
+{
+  "doc": [
+    "cpp/patch_core/stored_items.h MigrateStoredItems, and the hosts that apply its plan.",
+    "layout: the legacy layout (android 1, ios 2, harmony 3; a number is passed as is).",
+    "legacy values are typed as the legacy store held them: a boolean reads as \"1\"/\"0\",",
+    "a number as its text, anything else (a dictionary, an array) as \"\" (a key to delete,",
+    "never a value to carry). plan null: no plan (unknown layout). after: both stores once",
+    "the puts and then the removes are applied; re-planning there is a no-op."
+  ],
+  "cases": [
+    {
+      "name": "android: an installed SDK moves its install items and drops its version state",
+      "layout": "android",
+      "legacy": {
+        "uuid": "install-uuid",
+        "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+        "bundleHashCache": "1.0|1700|abc",
+        "packageVersion": "1.0",
+        "buildTime": "28000000",
+        "currentVersion": "v2",
+        "lastVersion": "v1",
+        "firstTime": false,
+        "firstTimeOk": true,
+        "rolledBackVersion": "v0",
+        "firstLoadMarked": true,
+        "nativeCheckIncomplete": "1",
+        "nativeCheckResp": "{\"ts\":1,\"body\":\"{}\"}",
+        "hash_v1": "{\"name\":\"v1\"}",
+        "hash_v2": "{\"name\":\"v2\"}",
+        "blockUntil": 0,
+        "blockReason": "x"
+      },
+      "current": {},
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": true,
+        "puts": [
+          [
+            "uuid",
+            "install-uuid"
+          ],
+          [
+            "nativeConfig",
+            "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}"
+          ],
+          [
+            "nativeCheckIncomplete",
+            "1"
+          ],
+          [
+            "bundleHashCache",
+            "1.0|1700|abc"
+          ],
+          [
+            "packageVersion",
+            "1.0"
+          ],
+          [
+            "buildTime",
+            "28000000"
+          ],
+          [
+            "schemaVersion",
+            "1"
+          ]
+        ],
+        "removes": [
+          "blockReason",
+          "blockUntil",
+          "buildTime",
+          "bundleHashCache",
+          "currentVersion",
+          "firstLoadMarked",
+          "firstTime",
+          "firstTimeOk",
+          "hash_v1",
+          "hash_v2",
+          "lastVersion",
+          "nativeCheckIncomplete",
+          "nativeCheckResp",
+          "nativeConfig",
+          "packageVersion",
+          "rolledBackVersion",
+          "uuid"
+        ]
+      },
+      "after": {
+        "legacy": {},
+        "current": {
+          "uuid": "install-uuid",
+          "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+          "nativeCheckIncomplete": "1",
+          "bundleHashCache": "1.0|1700|abc",
+          "packageVersion": "1.0",
+          "buildTime": "28000000",
+          "schemaVersion": "1"
+        }
+      }
+    },
+    {
+      "name": "android: a fresh install only writes the schema",
+      "layout": "android",
+      "legacy": {},
+      "current": {},
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": true,
+        "puts": [
+          [
+            "schemaVersion",
+            "1"
+          ]
+        ],
+        "removes": []
+      },
+      "after": {
+        "legacy": {},
+        "current": {
+          "schemaVersion": "1"
+        }
+      }
+    },
+    {
+      "name": "android: keys the legacy layout never wrote are not ours to delete",
+      "layout": "android",
+      "legacy": {
+        "uuid": "install-uuid",
+        "hostSetting": "kept",
+        "hash": "not a prefix match"
+      },
+      "current": {},
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": true,
+        "puts": [
+          [
+            "uuid",
+            "install-uuid"
+          ],
+          [
+            "schemaVersion",
+            "1"
+          ]
+        ],
+        "removes": [
+          "uuid"
+        ]
+      },
+      "after": {
+        "legacy": {
+          "hostSetting": "kept",
+          "hash": "not a prefix match"
+        },
+        "current": {
+          "uuid": "install-uuid",
+          "schemaVersion": "1"
+        }
+      }
+    },
+    {
+      "name": "android: empty legacy values are deleted, never carried",
+      "layout": "android",
+      "legacy": {
+        "uuid": "",
+        "nativeConfig": "",
+        "nativeCheckIncomplete": "",
+        "packageVersion": "1.0"
+      },
+      "current": {},
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": true,
+        "puts": [
+          [
+            "packageVersion",
+            "1.0"
+          ],
+          [
+            "schemaVersion",
+            "1"
+          ]
+        ],
+        "removes": [
+          "nativeCheckIncomplete",
+          "nativeConfig",
+          "packageVersion",
+          "uuid"
+        ]
+      },
+      "after": {
+        "legacy": {},
+        "current": {
+          "packageVersion": "1.0",
+          "schemaVersion": "1"
+        }
+      }
+    },
+    {
+      "name": "android: killed after the puts, the next launch only removes the legacy keys",
+      "layout": "android",
+      "legacy": {
+        "uuid": "install-uuid",
+        "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+        "bundleHashCache": "1.0|1700|abc",
+        "packageVersion": "1.0",
+        "buildTime": "28000000",
+        "currentVersion": "v2",
+        "lastVersion": "v1",
+        "firstTime": false,
+        "firstTimeOk": true,
+        "rolledBackVersion": "v0",
+        "firstLoadMarked": true,
+        "nativeCheckIncomplete": "1",
+        "nativeCheckResp": "{\"ts\":1,\"body\":\"{}\"}",
+        "hash_v1": "{\"name\":\"v1\"}",
+        "hash_v2": "{\"name\":\"v2\"}",
+        "blockUntil": 0,
+        "blockReason": "x"
+      },
+      "current": {
+        "uuid": "install-uuid",
+        "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+        "nativeCheckIncomplete": "1",
+        "bundleHashCache": "1.0|1700|abc",
+        "packageVersion": "1.0",
+        "buildTime": "28000000",
+        "schemaVersion": "1"
+      },
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": false,
+        "puts": [],
+        "removes": [
+          "blockReason",
+          "blockUntil",
+          "buildTime",
+          "bundleHashCache",
+          "currentVersion",
+          "firstLoadMarked",
+          "firstTime",
+          "firstTimeOk",
+          "hash_v1",
+          "hash_v2",
+          "lastVersion",
+          "nativeCheckIncomplete",
+          "nativeCheckResp",
+          "nativeConfig",
+          "packageVersion",
+          "rolledBackVersion",
+          "uuid"
+        ]
+      },
+      "after": {
+        "legacy": {},
+        "current": {
+          "uuid": "install-uuid",
+          "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+          "nativeCheckIncomplete": "1",
+          "bundleHashCache": "1.0|1700|abc",
+          "packageVersion": "1.0",
+          "buildTime": "28000000",
+          "schemaVersion": "1"
+        }
+      }
+    },
+    {
+      "name": "android: what an older binary wrote after a downgrade is dropped, the store keeps its uuid",
+      "layout": "android",
+      "legacy": {
+        "uuid": "downgraded-uuid",
+        "nativeConfig": "{\"appKey\":\"old\"}",
+        "packageVersion": "0.9",
+        "buildTime": "27000000",
+        "currentVersion": "v9",
+        "firstTime": true,
+        "firstTimeOk": false,
+        "hash_v9": "{}"
+      },
+      "current": {
+        "schemaVersion": "1",
+        "uuid": "install-uuid",
+        "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+        "packageVersion": "1.0",
+        "buildTime": "28000000",
+        "currentVersion": "v2"
+      },
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": false,
+        "puts": [],
+        "removes": [
+          "buildTime",
+          "currentVersion",
+          "firstTime",
+          "firstTimeOk",
+          "hash_v9",
+          "nativeConfig",
+          "packageVersion",
+          "uuid"
+        ]
+      },
+      "after": {
+        "legacy": {},
+        "current": {
+          "schemaVersion": "1",
+          "uuid": "install-uuid",
+          "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+          "packageVersion": "1.0",
+          "buildTime": "28000000",
+          "currentVersion": "v2"
+        }
+      }
+    },
+    {
+      "name": "android: a store a later SDK wrote is left alone, and so is the legacy store",
+      "layout": "android",
+      "legacy": {
+        "uuid": "install-uuid",
+        "currentVersion": "v2"
+      },
+      "current": {
+        "schemaVersion": "2",
+        "uuid": "install-uuid"
+      },
+      "plan": {
+        "schemaVersion": 2,
+        "migrated": false,
+        "puts": [],
+        "removes": []
+      },
+      "after": {
+        "legacy": {
+          "uuid": "install-uuid",
+          "currentVersion": "v2"
+        },
+        "current": {
+          "schemaVersion": "2",
+          "uuid": "install-uuid"
+        }
+      }
+    },
+    {
+      "name": "ios: the shared defaults lose only the keys an SDK wrote",
+      "layout": "ios",
+      "legacy": {
+        "REACTNATIVECN_PUSHY_UUID": "install-uuid",
+        "REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+        "REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY": true,
+        "REACTNATIVECN_PUSHY_BUNDLEHASH_KEY": "1.0|9|1700|abc",
+        "REACTNATIVECN_PUSHY_PACKAGEVERSION": "1.0",
+        "REACTNATIVECN_PUSHY_BUILDTIME": "1700000000",
+        "REACTNATIVECN_PUSHY_INFO_KEY": {
+          "currentVersion": "v2",
+          "isFirstTime": false,
+          "isFirstLoadOK": true
+        },
+        "REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY": "v0",
+        "REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY": true,
+        "REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY": true,
+        "REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY": "{\"ts\":1,\"body\":\"{}\"}",
+        "REACTNATIVECN_PUSHY_HASH_v1": "{\"name\":\"v1\"}",
+        "REACTNATIVECN_PUSHY_HASH_v2": "{\"name\":\"v2\"}",
+        "packageVersion": "host-owned",
+        "buildTime": "host-owned",
+        "AppleLanguages": [
+          "en"
+        ],
+        "REACTNATIVECN_PUSHY_SOMETHING_ELSE": "not a key any SDK wrote"
+      },
+      "current": {},
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": true,
+        "puts": [
+          [
+            "uuid",
+            "install-uuid"
+          ],
+          [
+            "nativeConfig",
+            "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}"
+          ],
+          [
+            "nativeCheckIncomplete",
+            "1"
+          ],
+          [
+            "bundleHashCache",
+            "1.0|9|1700|abc"
+          ],
+          [
+            "packageVersion",
+            "1.0"
+          ],
+          [
+            "buildTime",
+            "1700000000"
+          ],
+          [
+            "schemaVersion",
+            "1"
+          ]
+        ],
+        "removes": [
+          "REACTNATIVECN_PUSHY_BUILDTIME",
+          "REACTNATIVECN_PUSHY_BUNDLEHASH_KEY",
+          "REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY",
+          "REACTNATIVECN_PUSHY_HASH_v1",
+          "REACTNATIVECN_PUSHY_HASH_v2",
+          "REACTNATIVECN_PUSHY_INFO_KEY",
+          "REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY",
+          "REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY",
+          "REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY",
+          "REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY",
+          "REACTNATIVECN_PUSHY_PACKAGEVERSION",
+          "REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY",
+          "REACTNATIVECN_PUSHY_UUID"
+        ]
+      },
+      "after": {
+        "legacy": {
+          "packageVersion": "host-owned",
+          "buildTime": "host-owned",
+          "AppleLanguages": [
+            "en"
+          ],
+          "REACTNATIVECN_PUSHY_SOMETHING_ELSE": "not a key any SDK wrote"
+        },
+        "current": {
+          "uuid": "install-uuid",
+          "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+          "nativeCheckIncomplete": "1",
+          "bundleHashCache": "1.0|9|1700|abc",
+          "packageVersion": "1.0",
+          "buildTime": "1700000000",
+          "schemaVersion": "1"
+        }
+      }
+    },
+    {
+      "name": "ios: killed between two puts, the next launch keeps what landed and writes the rest",
+      "layout": "ios",
+      "legacy": {
+        "REACTNATIVECN_PUSHY_UUID": "install-uuid",
+        "REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+        "REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY": true,
+        "REACTNATIVECN_PUSHY_BUNDLEHASH_KEY": "1.0|9|1700|abc",
+        "REACTNATIVECN_PUSHY_PACKAGEVERSION": "1.0",
+        "REACTNATIVECN_PUSHY_BUILDTIME": "1700000000",
+        "REACTNATIVECN_PUSHY_INFO_KEY": {
+          "currentVersion": "v2",
+          "isFirstTime": false,
+          "isFirstLoadOK": true
+        },
+        "REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY": "v0",
+        "REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY": true,
+        "REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY": true,
+        "REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY": "{\"ts\":1,\"body\":\"{}\"}",
+        "REACTNATIVECN_PUSHY_HASH_v1": "{\"name\":\"v1\"}",
+        "REACTNATIVECN_PUSHY_HASH_v2": "{\"name\":\"v2\"}"
+      },
+      "current": {
+        "uuid": "install-uuid",
+        "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}"
+      },
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": true,
+        "puts": [
+          [
+            "nativeCheckIncomplete",
+            "1"
+          ],
+          [
+            "bundleHashCache",
+            "1.0|9|1700|abc"
+          ],
+          [
+            "packageVersion",
+            "1.0"
+          ],
+          [
+            "buildTime",
+            "1700000000"
+          ],
+          [
+            "schemaVersion",
+            "1"
+          ]
+        ],
+        "removes": [
+          "REACTNATIVECN_PUSHY_BUILDTIME",
+          "REACTNATIVECN_PUSHY_BUNDLEHASH_KEY",
+          "REACTNATIVECN_PUSHY_FIRSTLOADMARKED_KEY",
+          "REACTNATIVECN_PUSHY_HASH_v1",
+          "REACTNATIVECN_PUSHY_HASH_v2",
+          "REACTNATIVECN_PUSHY_INFO_KEY",
+          "REACTNATIVECN_PUSHY_ISPACKAGEUPDATEDMARKED_KEY",
+          "REACTNATIVECN_PUSHY_NATIVE_CHECK_INCOMPLETE_KEY",
+          "REACTNATIVECN_PUSHY_NATIVE_CHECK_RESP_KEY",
+          "REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY",
+          "REACTNATIVECN_PUSHY_PACKAGEVERSION",
+          "REACTNATIVECN_PUSHY_ROLLEDBACKMARKED_KEY",
+          "REACTNATIVECN_PUSHY_UUID"
+        ]
+      },
+      "after": {
+        "legacy": {},
+        "current": {
+          "uuid": "install-uuid",
+          "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+          "nativeCheckIncomplete": "1",
+          "bundleHashCache": "1.0|9|1700|abc",
+          "packageVersion": "1.0",
+          "buildTime": "1700000000",
+          "schemaVersion": "1"
+        }
+      }
+    },
+    {
+      "name": "ios: a value this SDK wrote without a schema is newer than the legacy one",
+      "layout": "ios",
+      "legacy": {
+        "REACTNATIVECN_PUSHY_UUID": "install-uuid",
+        "REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY": "{\"appKey\":\"old\"}"
+      },
+      "current": {
+        "schemaVersion": "garbage",
+        "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}"
+      },
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": true,
+        "puts": [
+          [
+            "uuid",
+            "install-uuid"
+          ],
+          [
+            "schemaVersion",
+            "1"
+          ]
+        ],
+        "removes": [
+          "REACTNATIVECN_PUSHY_NATIVE_CONFIG_KEY",
+          "REACTNATIVECN_PUSHY_UUID"
+        ]
+      },
+      "after": {
+        "legacy": {},
+        "current": {
+          "schemaVersion": "1",
+          "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+          "uuid": "install-uuid"
+        }
+      }
+    },
+    {
+      "name": "harmony: native and \"true\" booleans are dropped, the install items carried",
+      "layout": "harmony",
+      "legacy": {
+        "uuid": "install-uuid",
+        "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+        "bundleHashCache": "1.0|1700|abc",
+        "packageVersion": "1.0.0",
+        "buildTime": "1700000000000",
+        "currentVersion": "v2",
+        "firstTime": true,
+        "firstTimeOk": false,
+        "firstLoadMarked": "true",
+        "nativeCheckIncomplete": "1",
+        "nativeCheckResp": "{}",
+        "hash_v2": "{\"name\":\"v2\"}"
+      },
+      "current": {},
+      "plan": {
+        "schemaVersion": 1,
+        "migrated": true,
+        "puts": [
+          [
+            "uuid",
+            "install-uuid"
+          ],
+          [
+            "nativeConfig",
+            "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}"
+          ],
+          [
+            "nativeCheckIncomplete",
+            "1"
+          ],
+          [
+            "bundleHashCache",
+            "1.0|1700|abc"
+          ],
+          [
+            "packageVersion",
+            "1.0.0"
+          ],
+          [
+            "buildTime",
+            "1700000000000"
+          ],
+          [
+            "schemaVersion",
+            "1"
+          ]
+        ],
+        "removes": [
+          "buildTime",
+          "bundleHashCache",
+          "currentVersion",
+          "firstLoadMarked",
+          "firstTime",
+          "firstTimeOk",
+          "hash_v2",
+          "nativeCheckIncomplete",
+          "nativeCheckResp",
+          "nativeConfig",
+          "packageVersion",
+          "uuid"
+        ]
+      },
+      "after": {
+        "legacy": {},
+        "current": {
+          "uuid": "install-uuid",
+          "nativeConfig": "{\"appKey\":\"k\",\"endpoints\":[\"https://a.example/\"]}",
+          "nativeCheckIncomplete": "1",
+          "bundleHashCache": "1.0|1700|abc",
+          "packageVersion": "1.0.0",
+          "buildTime": "1700000000000",
+          "schemaVersion": "1"
+        }
+      }
+    },
+    {
+      "name": "an unknown legacy layout has no plan",
+      "layout": 9,
+      "legacy": {
+        "uuid": "install-uuid"
+      },
+      "current": {},
+      "plan": null,
+      "after": {
+        "legacy": {
+          "uuid": "install-uuid"
+        },
+        "current": {}
+      }
+    }
+  ]
+}

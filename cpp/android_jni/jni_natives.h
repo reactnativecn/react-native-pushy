@@ -38,6 +38,7 @@ jlongArray ArchivePlanFreeSpaceProbe(JNIEnv* env, jclass, jlong known_total, jlo
 jstring ResumePlanRequest(JNIEnv* env, jclass, jstring sidecar, jstring url, jlong partial_size);
 jstring ResumeClassifyResponse(JNIEnv* env, jclass, jint status, jlong resume_offset, jstring content_range, jstring content_encoding, jlong content_length, jstring sidecar, jstring url, jlong partial_size);
 jstring ResumeSidecar(JNIEnv* env, jclass, jstring url, jstring etag, jstring last_modified, jstring previous_sidecar, jlong total);
+jstring StoredItemsMigrate(JNIEnv* env, jclass, jint legacy_layout, jobjectArray legacy, jobjectArray current);
 // </generated:prototypes>
 
 }  // namespace jni_natives

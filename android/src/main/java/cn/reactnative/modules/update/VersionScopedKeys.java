@@ -14,17 +14,15 @@ import java.util.List;
  * round breadcrumb, the bundle hash cache keyed by package version — survive.
  */
 final class VersionScopedKeys {
-    static final String HASH_INFO_PREFIX = "hash_";
-
     // <generated:lifecycle> (scripts/contract.ts; bun scripts/generate-contract.ts)
-    // What a reset to the packaged bundle and a binary upgrade delete besides
-    // the state fields (scripts/contract.ts storedItems; every other item survives
-    // both: the uuid, the native config, the round breadcrumb, the bundle hash
-    // cache).
-    static final String[] RESET_KEYS = {UpdateContext.KEY_FIRST_LOAD_MARKED, SyncCoordinator.KEY_RESP_CACHE};
-    static final String[] RESET_PREFIXES = {HASH_INFO_PREFIX};
-    static final String[] UPGRADE_KEYS = {UpdateContext.KEY_FIRST_LOAD_MARKED, SyncCoordinator.KEY_RESP_CACHE};
-    static final String[] UPGRADE_PREFIXES = {HASH_INFO_PREFIX};
+    // What a reset to the packaged bundle and a binary upgrade delete from the
+    // state store besides the state fields (scripts/contract.ts storedItems;
+    // the cache store is cleared on both, every other item survives both: the
+    // uuid, the native config, the round breadcrumb, the bundle hash cache).
+    static final String[] RESET_KEYS = {StoreSchema.KEY_FIRST_LOAD_MARKER};
+    static final String[] RESET_PREFIXES = {StoreSchema.KEY_HASH_INFO};
+    static final String[] UPGRADE_KEYS = {StoreSchema.KEY_FIRST_LOAD_MARKER};
+    static final String[] UPGRADE_PREFIXES = {StoreSchema.KEY_HASH_INFO};
     // </generated:lifecycle>
 
     private VersionScopedKeys() {

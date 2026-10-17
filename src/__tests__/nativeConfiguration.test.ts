@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { evalHarmonyModule, harmonyConfigBindings } from './nativeSources';
+import {
+  evalHarmonyModule,
+  harmonyConfigBindings,
+  harmonyStoreSchema,
+} from './nativeSources';
 
 // Option validation (normalizePushyConfiguration) is the shared core's
 // NormalizeConfiguration, covered by cpp/update_flow_core/tests/
@@ -19,6 +23,7 @@ interface ConfigStore {
 
 function storeHarness() {
   const values = new Map<string, string>();
+  const cacheValues = new Map<string, string>();
   let flushes = 0;
   let shouldFail = false;
   const clearedSignals: string[] = [];
@@ -31,14 +36,27 @@ function storeHarness() {
       if (shouldFail) throw new Error('storage unavailable');
     },
   };
+  const cachePreferences = {
+    getSync: (key: string, fallback: string) =>
+      cacheValues.get(key) ?? fallback,
+    putSync: (key: string, value: string) => cacheValues.set(key, value),
+    deleteSync: (key: string) => cacheValues.delete(key),
+    flush: async () => {
+      if (shouldFail) throw new Error('storage unavailable');
+    },
+  };
   const store = evalHarmonyModule(
     'UpdateContext.ts',
-    'const store = Object.create(UpdateContext.prototype); store.preferences = preferences; store.flushBatchDepth = 0; store;',
+    `const store = Object.create(UpdateContext.prototype);
+     store.preferences = preferences;
+     store.cachePreferences = cachePreferences;
+     store.flushBatchDepth = 0;
+     store;`,
     {
+      ...harmonyStoreSchema(),
       preferences,
+      cachePreferences,
       util: { generateRandomUUID: () => 'native-installation-id' },
-      KEY_CONFIG: 'nativeConfig',
-      KEY_RESP_CACHE: 'nativeCheckResp',
       recordJsRound: (config: string) => clearedSignals.push(config),
       logger: { error() {} },
       getErrorMessage: (error: unknown) => String(error),
@@ -48,10 +66,12 @@ function storeHarness() {
   return {
     store,
     values,
+    cacheValues,
     clearedSignals,
     fail: (value: boolean) => {
       shouldFail = value;
     },
+    // The state store's flushes.
     flushes: () => flushes,
   };
 }
@@ -61,9 +81,9 @@ describe('actual native configuration store', () => {
     const h = storeHarness();
     await h.store.setNativeConfig('A');
     const oldGeneration = h.store.getResetGeneration();
-    h.values.set('nativeCheckResp', 'stale');
+    h.cacheValues.set('nativeCheckResp', 'stale');
     await h.store.setNativeConfig('B');
-    expect(h.values.has('nativeCheckResp')).toBe(false);
+    expect(h.cacheValues.has('nativeCheckResp')).toBe(false);
     await h.store.setNativeConfig('A');
     expect(h.store.getResetGeneration()).toBe(oldGeneration + 2);
     expect(

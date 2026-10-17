@@ -38,6 +38,7 @@ build() {
   xcrun clang++ -std=c++17 -fobjc-arc -fblocks $WARNING_FLAGS $SANITIZE_FLAGS \
     -I"$ROOT_DIR" -I"$destination" -I"$ROOT_DIR/cpp/patch_core" \
     "$TEST_DIR/purge_restore_test.mm" "$ROOT_DIR/cpp/patch_core/state_core.cpp" \
+    "$ROOT_DIR/cpp/patch_core/stored_items.cpp" \
     "$ROOT_DIR/cpp/patch_core/digest.cpp" "$destination/install_record.cpp" \
     "$ROOT_DIR"/cpp/update_flow_core/*.cpp \
     "$ROOT_DIR/ios/RCTPushy/RCTPushyConfiguration.mm" \
@@ -108,7 +109,8 @@ if [ "${VERIFY_REGRESSIONS:-0}" = "1" ]; then
 
   for pair in late-activation:late_commit skip-reresolve:commit_before_signal ignore-reset:reset_wins \
       trust-digestless:install_record_activation grandfather-recorded:switch_version_records \
-      skip-commit-verify:round_commit_verifies; do
+      skip-commit-verify:round_commit_verifies skip-carry:legacy_migration_upgrade \
+      remove-first:legacy_migration_write_failure; do
     variant="${pair%:*}"
     testcase="${pair#*:}"
     build "$variant"
@@ -124,6 +126,8 @@ if [ "${VERIFY_REGRESSIONS:-0}" = "1" ]; then
       trust-digestless) expected="digest-less record must not activate" ;;
       grandfather-recorded) expected="recorded current version must be verified" ;;
       skip-commit-verify) expected="a version failing verification must not be activated by the round commit" ;;
+      skip-carry) expected="migration must keep the install's uuid" ;;
+      remove-first) expected="a failed migration must keep the uuid for the next launch" ;;
     esac
     if ! grep -F "[FAIL] $testcase: $expected" "$logfile"; then
       cat "$logfile" >&2

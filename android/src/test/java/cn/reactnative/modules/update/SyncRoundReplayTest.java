@@ -340,7 +340,7 @@ public class SyncRoundReplayTest {
         JSONObject start = round.start();
         String config = start.getString("config");
         if (!config.isEmpty()) {
-            round.kv.put(SyncCoordinator.KEY_CONFIG, config);
+            round.kv.put(StoreSchema.KEY_NATIVE_CONFIG, config);
         }
         double deadline = start.getDouble("deadline");
 
@@ -407,7 +407,7 @@ public class SyncRoundReplayTest {
             assertFalse(result.isActivated());
         }
         // However the round ends, the breadcrumb does not survive it.
-        assertFalse(round.kv.containsKey(SyncCoordinator.KEY_ROUND_INCOMPLETE));
+        assertFalse(round.kv.containsKey(StoreSchema.KEY_ROUND_BREADCRUMB));
     }
 
     @Test

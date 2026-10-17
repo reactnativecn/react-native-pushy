@@ -41,20 +41,31 @@ typedef NS_ENUM(NSInteger, PushyType) {
 
 #pragma mark - RCTPushyState.mm
 
-extern PUSHY_HIDDEN NSString *const keyPushyInfo;
-extern PUSHY_HIDDEN NSString *const paramCurrentVersion;
-extern PUSHY_HIDDEN NSString *const keyUuid;
+// The persisted keys (scripts/contract.ts storeSchema).
+// <generated:store-keys> (scripts/contract.ts; bun scripts/generate-contract.ts)
+extern PUSHY_HIDDEN NSString *const keySchemaVersion;
+extern PUSHY_HIDDEN NSString *const keyPackageVersion;
+extern PUSHY_HIDDEN NSString *const keyBuildTime;
+extern PUSHY_HIDDEN NSString *const keyCurrentVersion;
+extern PUSHY_HIDDEN NSString *const keyLastVersion;
+extern PUSHY_HIDDEN NSString *const keyFirstTime;
+extern PUSHY_HIDDEN NSString *const keyFirstTimeOk;
+extern PUSHY_HIDDEN NSString *const keyRolledBackVersion;
 extern PUSHY_HIDDEN NSString *const keyHashInfo;
-extern PUSHY_HIDDEN NSString *const keyFirstLoadMarked;
-extern PUSHY_HIDDEN NSString *const keyRolledBackMarked;
-extern PUSHY_HIDDEN NSString *const keyNativeCheckCache;
+extern PUSHY_HIDDEN NSString *const keyFirstLoadMarker;
+extern PUSHY_HIDDEN NSString *const keyBinaryUpgradedMarker;
+extern PUSHY_HIDDEN NSString *const keyCheckCache;
+extern PUSHY_HIDDEN NSString *const keyRoundBreadcrumb;
+extern PUSHY_HIDDEN NSString *const keyUuid;
+extern PUSHY_HIDDEN NSString *const keyNativeConfig;
+extern PUSHY_HIDDEN NSString *const keyBundleHashCache;
+// </generated:store-keys>
 extern PUSHY_HIDDEN NSString *const ERROR_OPTIONS;
 // Consumed by the first +bundleURL of a process; re-armed by a version switch.
 extern PUSHY_HIDDEN std::atomic<bool> ignoreRollback;
 // Bumped by resetToPackagedBundle only; see RCTPushyState.mm.
 extern PUSHY_HIDDEN std::atomic<uint64_t> pushyResetGeneration;
 
-PUSHY_HIDDEN NSString *KeyPackageUpdatedMarked(void);
 // What a reset / a binary upgrade deletes besides the state fields
 // (generated from scripts/contract.ts storedItems), and the removal itself:
 // every key in `keys` and every stored key starting with one of `prefixes`.
@@ -69,7 +80,21 @@ PUSHY_HIDDEN NSString *PushyHashInfoKey(NSString *hash);
 PUSHY_HIDDEN NSDictionary *PushyHostResult(NSString *status, NSString *reason,
                                            NSString *hash = nil, BOOL activated = NO);
 PUSHY_HIDDEN NSTimeInterval PushyMonotonicNow(void);
+// The state store (every key but keyCheckCache), migrated out of the legacy
+// layout on first use; and the cache store (keyCheckCache).
 PUSHY_HIDDEN NSUserDefaults *PushyDefaults(void);
+PUSHY_HIDDEN NSUserDefaults *PushyCacheDefaults(void);
+// Values as the layout stores them: text, never empty (writing nil or ""
+// removes the key); a marker is a boolean that is only stored while set.
+PUSHY_HIDDEN NSString *PushyReadString(NSUserDefaults *defaults, NSString *key);
+PUSHY_HIDDEN void PushyWriteString(NSUserDefaults *defaults, NSString *key, NSString *value);
+PUSHY_HIDDEN BOOL PushyReadBool(NSUserDefaults *defaults, NSString *key, BOOL fallback);
+PUSHY_HIDDEN void PushyWriteBool(NSUserDefaults *defaults, NSString *key, BOOL value);
+PUSHY_HIDDEN BOOL PushyReadMarker(NSUserDefaults *defaults, NSString *key);
+PUSHY_HIDDEN void PushyWriteMarker(NSUserDefaults *defaults, NSString *key, BOOL set);
+// The one-time move from the legacy layout (standardUserDefaults) into
+// `state`; see RCTPushyState.mm. Returns what it did, for logs and tests.
+PUSHY_HIDDEN NSString *PushyMigrateStores(NSUserDefaults *state, NSUserDefaults *legacy);
 PUSHY_HIDDEN void PushyWithStateLock(void (NS_NOESCAPE ^block)(void));
 // Inside `@catch (...)`: the reason of what was caught — an NSException's
 // reason or a C++ exception's what() — or `fallback` when it has none. The

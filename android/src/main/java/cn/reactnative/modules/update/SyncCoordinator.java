@@ -34,19 +34,6 @@ final class SyncCoordinator {
     // Version-info flag read by JS (metadata.ts), stored encoded.
     private static final String INFO_CRASH_HOLD = Texts.INFO_CRASH_HOLD;
 
-    // Shared with Harmony. The response cache lives in its own
-    // SharedPreferences file (UpdateContext.getNativeCheckCache).
-    // <generated:storage-keys> (scripts/contract.ts; bun scripts/generate-contract.ts)
-    // The persisted native check config (JS syncNativeConfig or the host).
-    static final String KEY_CONFIG = "nativeConfig";
-    // Raw response cache for the JS side to reuse (§10.3), scoped to the exact
-    // logical request and native config that produced it.
-    static final String KEY_RESP_CACHE = "nativeCheckResp";
-    // Set when a round starts, cleared when it ends (§11.4). Residue on the
-    // next launch means the previous process died mid-round: that launch
-    // resumes immediately instead of waiting 5s.
-    static final String KEY_ROUND_INCOMPLETE = "nativeCheckIncomplete";
-    // </generated:storage-keys>
     // The check response (and a remote queryUrls list) is a small JSON
     // document; anything bigger is a broken or hijacked endpoint.
     private static final long MAX_QUERY_RESPONSE_BYTES = 1024 * 1024;
@@ -104,7 +91,7 @@ final class SyncCoordinator {
         if (!nativeReady || sContext != context || !context.getIsUsingBundleUrl()) {
             return BundlePreparationResult.of(BundlePreparationResult.SKIPPED, "not_initialized");
         }
-        String configJson = context.getKv(KEY_CONFIG);
+        String configJson = context.getKv(StoreSchema.KEY_NATIVE_CONFIG);
         BundlePreparationResult rejection = configRejection(configJson);
         if (rejection != null) {
             return rejection;
@@ -122,7 +109,7 @@ final class SyncCoordinator {
         }
         if (roundConfigGeneration != UpdateContext.getNativeConfigGeneration()
             || !FlowBridge.configsEquivalent(configJson, roundConfigJson)
-            || !FlowBridge.configsEquivalent(configJson, context.getKv(KEY_CONFIG))) {
+            || !FlowBridge.configsEquivalent(configJson, context.getKv(StoreSchema.KEY_NATIVE_CONFIG))) {
             return BundlePreparationResult.of(BundlePreparationResult.CANCELLED, "config_changed");
         }
         if (roundGeneration != UpdateContext.getResetGeneration()) {
@@ -148,7 +135,7 @@ final class SyncCoordinator {
     private static boolean hasJsRound(UpdateContext context) {
         String jsConfig = sJsCompletedConfig;
         return jsConfig != null
-            && FlowBridge.configsEquivalent(jsConfig, context.getKv(KEY_CONFIG));
+            && FlowBridge.configsEquivalent(jsConfig, context.getKv(StoreSchema.KEY_NATIVE_CONFIG));
     }
 
     /**
@@ -190,7 +177,7 @@ final class SyncCoordinator {
         nativeReady = true;
         // The crash-hold rescue shares the orchestrator's rollout gate: no
         // persisted config, no handler (§11.3).
-        if (context.getKv(KEY_CONFIG) != null) {
+        if (context.getKv(StoreSchema.KEY_NATIVE_CONFIG) != null) {
             CrashHold.install();
         }
         Threads.startDaemon("pushy-native-sync", Thread.MIN_PRIORITY + 1, () -> {
@@ -198,7 +185,7 @@ final class SyncCoordinator {
                 // Keep the check away from the cold-start critical path
                 // (§7 R5) — unless the previous process died mid-round,
                 // in which case every launch second counts (§11.4).
-                if (context.getKv(KEY_ROUND_INCOMPLETE) == null) {
+                if (context.getKv(StoreSchema.KEY_ROUND_BREADCRUMB) == null) {
                     Thread.sleep(5000);
                 }
                 if (hasJsRound(context)) {
@@ -221,7 +208,7 @@ final class SyncCoordinator {
     }
 
     private static boolean hasRunnableConfig(UpdateContext context) {
-        return context != null && configRejection(context.getKv(KEY_CONFIG)) == null;
+        return context != null && configRejection(context.getKv(StoreSchema.KEY_NATIVE_CONFIG)) == null;
     }
 
     static void onConfigured(UpdateContext context) {
@@ -298,7 +285,7 @@ final class SyncCoordinator {
             return;
         }
         String hashInfoJson = null;
-        String existingInfo = context.getKv("hash_" + hash);
+        String existingInfo = context.getKv(StoreSchema.KEY_HASH_INFO + hash);
         if (existingInfo != null) {
             try {
                 JSONObject info = new JSONObject(existingInfo);
@@ -488,7 +475,7 @@ final class SyncCoordinator {
         roundGeneration = resetGeneration;
         roundConfigGeneration = configGeneration;
         roundResult = BundlePreparationResult.of(BundlePreparationResult.FAILED, "check_failed");
-        String configJson = host.getKv(KEY_CONFIG);
+        String configJson = host.getKv(StoreSchema.KEY_NATIVE_CONFIG);
         roundConfigJson = configJson;
 
         JSONObject event = new JSONObject()
@@ -520,7 +507,7 @@ final class SyncCoordinator {
                     if ("markIncomplete".equals(type)) {
                         marked = true;
                         try {
-                            host.setKv(KEY_ROUND_INCOMPLETE, "1");
+                            host.setKv(StoreSchema.KEY_ROUND_BREADCRUMB, StoreSchema.BOOLEAN_TRUE);
                         } catch (IllegalStateException ignored) {
                         }
                     } else if ("finish".equals(type)) {
@@ -537,8 +524,8 @@ final class SyncCoordinator {
             // without committing need the extra write.
             if (marked) {
                 try {
-                    if (host.getKv(KEY_ROUND_INCOMPLETE) != null) {
-                        host.removeKv(KEY_ROUND_INCOMPLETE);
+                    if (host.getKv(StoreSchema.KEY_ROUND_BREADCRUMB) != null) {
+                        host.removeKv(StoreSchema.KEY_ROUND_BREADCRUMB);
                     }
                 } catch (IllegalStateException ignored) {
                 }
@@ -591,7 +578,7 @@ final class SyncCoordinator {
         env.put("packageVersion", context.getPackageVersion());
         // The JS constant's form, so JS can reuse the response cache.
         env.put("currentVersion", currentVersion == null ? JSONObject.NULL : currentVersion);
-        env.put("uuid", context.getKv("uuid"));
+        env.put("uuid", context.getKv(StoreSchema.KEY_UUID));
         // Snapshot captured on the launch path before getConstants consumes
         // the one-shot rollback marker. Reading SharedPreferences here, five
         // seconds later, would lose the guard and could forceBoot the version

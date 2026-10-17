@@ -19,8 +19,11 @@ import {
   roundStatuses,
   servicePresets,
   stateOperations,
+  legacyLayouts,
+  type Platform,
+  stateFields,
   storedItems,
-  syncStorageKeys,
+  storeSchema,
   type Lifecycle,
   type TextHost,
   vendoredSources,
@@ -399,24 +402,6 @@ region(
   archivePatchTypes.map(({ objc, value }) => `PushyType${objc} = ${value},`)
 );
 
-// Sync storage keys.
-region(
-  `${javaDir}/SyncCoordinator.java`,
-  'storage-keys',
-  syncStorageKeys.flatMap(({ name, value, doc }) => [
-    ...comment(doc, 4),
-    `static final String KEY_${snake(name)} = "${value}";`,
-  ])
-);
-region(
-  `${ets}/SyncCoordinator.ts`,
-  'storage-keys',
-  syncStorageKeys.flatMap(({ name, value, doc }) => [
-    ...comment(doc),
-    `export const KEY_${snake(name)} = '${value}';`,
-  ])
-);
-
 // Round statuses.
 region(
   `${javaDir}/BundlePreparationResult.java`,
@@ -660,62 +645,280 @@ region('src/client.ts', 'service-presets', [
   '};',
 ]);
 
-// Stored-item lifecycle: what a reset / binary upgrade deletes.
+// --- Persisted layout (contract.ts storeSchema) ----------------------------
+
+const capitalize = (name: string) => name[0].toUpperCase() + name.slice(1);
+const platformLabels: Record<Platform, string> = {
+  android: 'Android',
+  ios: 'iOS',
+  harmony: 'Harmony',
+};
+// Stored encoded in native code: the binaries carry no update wording.
+const nativeWording = /update|patch|rescue|reload|hotfix/i;
+const cppText = (value: string) =>
+  nativeWording.test(value)
+    ? `text::Reveal("${encodeNativeText(value)}")`
+    : `"${value}"`;
+const itemsOn = (platform: Platform) =>
+  storedItems.filter((item) => !item.platforms || item.platforms.includes(platform));
+const layoutOf = (platform: Platform) => {
+  const layout = legacyLayouts.find((candidate) => candidate.platform === platform);
+  if (!layout) {
+    throw new Error(`scripts/contract.ts legacyLayouts: no ${platform} layout`);
+  }
+  return layout;
+};
+// Every key the schema defines, for the legacy tables' targets.
+const schemaKeys = new Map<string, { marker: boolean }>([
+  ...stateFields.map((field) => [field.name, { marker: false }] as const),
+  ...storedItems.map((item) => [item.key, { marker: !!item.marker }] as const),
+]);
+for (const layout of legacyLayouts) {
+  for (const target of Object.keys(layout.carried)) {
+    if (!schemaKeys.has(target) || target.endsWith('_')) {
+      throw new Error(`legacyLayouts ${layout.platform}: ${target} is not a schema key`);
+    }
+  }
+}
+for (const key of [storeSchema.versionKey, ...schemaKeys.keys()]) {
+  if (nativeWording.test(key)) {
+    throw new Error(`storeSchema: key ${key} has update wording (stores are plain text)`);
+  }
+}
+const booleanDoc = [
+  'A boolean is stored as one of these; anything else (absent) reads as the',
+  "field's fallback.",
+];
+
+// The shared core: the schema and the legacy layouts.
+region('cpp/patch_core/stored_items.h', 'schema', [
+  `constexpr int kSchemaVersion = ${storeSchema.version};`,
+  `constexpr const char* kSchemaVersionKey = "${storeSchema.versionKey}";`,
+  '// The legacy layouts, by the id the hosts pass.',
+  ...legacyLayouts.map(
+    ({ platform, id }) => `constexpr int kLegacy${capitalize(platform)} = ${id};`
+  ),
+]);
+region(
+  'cpp/patch_core/stored_items.cpp',
+  'legacy-layouts',
+  legacyLayouts.flatMap((layout) => [
+    ...comment(`${platformLabels[layout.platform]}: ${layout.doc.replace(/\n/g, ' ')}`, 6),
+    `{kLegacy${capitalize(layout.platform)},`,
+    ' // Carried: {key, legacy key, marker}.',
+    ' {',
+    ...Object.entries(layout.carried).map(
+      ([to, from]) =>
+        `     {"${to}", ${cppText(from)}, ${schemaKeys.get(to)?.marker ? 'true' : 'false'}},`
+    ),
+    ' },',
+    ' // Dropped.',
+    ' {',
+    ...layout.dropped.map((key) => `     ${cppText(key)},`),
+    ' },',
+    ` {${layout.droppedPrefixes.map(cppText).join(', ')}}},`,
+  ])
+);
+
+// Android.
+const javaItems = itemsOn('android');
+region(`${javaDir}/StoreSchema.java`, 'store-schema', [
+  `static final int VERSION = ${storeSchema.version};`,
+  `static final String KEY_SCHEMA_VERSION = "${storeSchema.versionKey}";`,
+  `static final String STATE_STORE = "${storeSchema.stateStore}";`,
+  `static final String CACHE_STORE = "${storeSchema.cacheStore}";`,
+  ...booleanDoc.map((line) => `// ${line}`),
+  `static final String BOOLEAN_TRUE = "${storeSchema.booleans.true}";`,
+  `static final String BOOLEAN_FALSE = "${storeSchema.booleans.false}";`,
+  `static final int LEGACY_LAYOUT = ${layoutOf('android').id};`,
+  '// Carried by hand when the migration itself cannot run.',
+  `static final String LEGACY_KEY_UUID = "${layoutOf('android').carried.uuid}";`,
+  '// The state fields (pushy::state::State).',
+  ...stateFields.map(
+    ({ name }) => `static final String KEY_${snake(name)} = "${name}";`
+  ),
+  ...javaItems.flatMap(({ name, key, doc }) => [
+    ...comment(doc, 4),
+    `static final String KEY_${snake(name)} = "${key}";`,
+  ]),
+]);
+region(
+  `${javaDir}/StoreSchema.java`,
+  'read-state',
+  stateFields.map(({ name, type, fallback }) =>
+    type === 'boolean'
+      ? `state.${name} = readBoolean(store, KEY_${snake(name)}, ${fallback});`
+      : `state.${name} = readString(store, KEY_${snake(name)});`
+  )
+);
+region(
+  `${javaDir}/StoreSchema.java`,
+  'write-state',
+  stateFields.map(({ name, type }) =>
+    type === 'boolean'
+      ? `writeBoolean(editor, KEY_${snake(name)}, state.${name});`
+      : `writeString(editor, KEY_${snake(name)}, state.${name});`
+  )
+);
+
+// Harmony.
+const etsItems = itemsOn('harmony');
+region(`${ets}/StoreSchema.ts`, 'store-schema', [
+  `export const SCHEMA_VERSION = ${storeSchema.version};`,
+  `export const KEY_SCHEMA_VERSION = '${storeSchema.versionKey}';`,
+  `export const STATE_STORE = '${storeSchema.stateStore}';`,
+  `export const CACHE_STORE = '${storeSchema.cacheStore}';`,
+  ...booleanDoc.map((line) => `// ${line}`),
+  `export const BOOLEAN_TRUE = '${storeSchema.booleans.true}';`,
+  `export const BOOLEAN_FALSE = '${storeSchema.booleans.false}';`,
+  `export const LEGACY_LAYOUT = ${layoutOf('harmony').id};`,
+  '// Carried by hand when the migration itself cannot run.',
+  `export const LEGACY_KEY_UUID = '${layoutOf('harmony').carried.uuid}';`,
+  '// The state fields (pushy::state::State).',
+  ...stateFields.map(({ name }) => `export const KEY_${snake(name)} = '${name}';`),
+  ...etsItems.flatMap(({ name, key, doc }) => [
+    ...comment(doc),
+    `export const KEY_${snake(name)} = '${key}';`,
+  ]),
+]);
+region(
+  `${ets}/StoreSchema.ts`,
+  'read-state',
+  stateFields.map(({ name, type, fallback }) =>
+    type === 'boolean'
+      ? `${name}: readBoolean(store, KEY_${snake(name)}, ${fallback}),`
+      : `${name}: store.read(KEY_${snake(name)}),`
+  )
+);
+region(
+  `${ets}/StoreSchema.ts`,
+  'write-state',
+  stateFields.map(({ name, type }) =>
+    type === 'boolean'
+      ? `writeBoolean(store, KEY_${snake(name)}, state.${name});`
+      : `writeString(store, KEY_${snake(name)}, state.${name});`
+  )
+);
+
+// iOS: the keys are PUSHY_HIDDEN globals the other files declare extern.
+const objcItems = itemsOn('ios');
+const objcKeys: [string, string, string | undefined][] = [
+  ['SchemaVersion', storeSchema.versionKey, undefined],
+  ...stateFields.map(({ name }) => [capitalize(name), name, undefined] as [string, string, undefined]),
+  ...objcItems.map(({ name, key, doc }) => [name, key, doc] as [string, string, string]),
+];
+const iosLegacy = layoutOf('ios');
+const iosLegacyKeys = [
+  ...Object.values(iosLegacy.carried),
+  ...iosLegacy.dropped,
+  ...iosLegacy.droppedPrefixes,
+];
+const iosLegacyPrefix = iosLegacyKeys.reduce((prefix, key) => {
+  let length = 0;
+  while (length < prefix.length && prefix[length] === key[length]) {
+    length++;
+  }
+  return prefix.slice(0, length);
+});
+if (iosLegacyPrefix.length < 8) {
+  throw new Error('legacyLayouts ios: the legacy keys share no prefix');
+}
+region('ios/RCTPushy/RCTPushyState.mm', 'store-schema', [
+  `static NSString *const PushyStateStoreName = @"${storeSchema.stateStore}";`,
+  `static NSString *const PushyCacheStoreName = @"${storeSchema.cacheStore}";`,
+  ...booleanDoc.map((line) => `// ${line}`),
+  `static NSString *const PushyBooleanTrue = @"${storeSchema.booleans.true}";`,
+  `static NSString *const PushyBooleanFalse = @"${storeSchema.booleans.false}";`,
+  '// Carried by hand when the migration itself cannot run.',
+  `static NSString *const legacyKeyUuid = @"${iosLegacy.carried.uuid}";`,
+  '// Every legacy key starts with it: only those are snapshotted (the host app',
+  '// shares that store).',
+  `static NSString *const legacyKeyPrefix = @"${iosLegacyPrefix}";`,
+  ...objcKeys.flatMap(([name, key, doc]) => [
+    ...comment(doc),
+    `PUSHY_HIDDEN NSString *const key${name} = @"${key}";`,
+  ]),
+]);
+region(
+  'ios/RCTPushy/RCTPushyInternal.h',
+  'store-keys',
+  objcKeys.map(([name]) => `extern PUSHY_HIDDEN NSString *const key${name};`)
+);
+region(
+  'ios/RCTPushy/RCTPushyState.mm',
+  'read-state',
+  stateFields.map(({ name, type, fallback }) =>
+    type === 'boolean'
+      ? `state.${lowerSnake(name)} = PushyReadBool(defaults, key${capitalize(name)}, ${fallback});`
+      : `state.${lowerSnake(name)} = PushyToStdString(PushyReadString(defaults, key${capitalize(name)}));`
+  )
+);
+region(
+  'ios/RCTPushy/RCTPushyState.mm',
+  'write-state',
+  stateFields.map(({ name, type }) =>
+    type === 'boolean'
+      ? `PushyWriteBool(defaults, key${capitalize(name)}, state.${lowerSnake(name)});`
+      : `PushyWriteString(defaults, key${capitalize(name)}, PushyFromStdString(state.${lowerSnake(name)}));`
+  )
+);
+
+// Stored-item lifecycle: what a reset / binary upgrade deletes from the state
+// store (the cache store's one item is cleared on both, by each platform's
+// cache clear).
+for (const item of storedItems) {
+  if (item.cache && item.clearedOn.length !== 2) {
+    throw new Error(`storedItems ${item.name}: the cache store is cleared on both events`);
+  }
+}
 const cleared = (
   event: Lifecycle,
-  platform: 'objc' | 'java' | 'arkts',
-  prefix: boolean
+  platform: Platform,
+  prefix: boolean,
+  name: (item: (typeof storedItems)[number]) => string
 ) =>
-  storedItems
+  itemsOn(platform)
     .filter(
-      (item) =>
-        item.clearedOn.includes(event) &&
-        !!item.prefix === prefix &&
-        item.keys[platform] !== undefined
+      (item) => item.clearedOn.includes(event) && !item.cache && !!item.prefix === prefix
     )
-    .map((item) => item.keys[platform] as string);
+    .map(name);
 const lifecycleDoc = [
-  'What a reset to the packaged bundle and a binary upgrade delete besides',
-  'the state fields (scripts/contract.ts storedItems; every other item survives',
-  'both: the uuid, the native config, the round breadcrumb, the bundle hash',
-  'cache).',
+  'What a reset to the packaged bundle and a binary upgrade delete from the',
+  'state store besides the state fields (scripts/contract.ts storedItems;',
+  'the cache store is cleared on both, every other item survives both: the',
+  'uuid, the native config, the round breadcrumb, the bundle hash cache).',
 ];
 const events: [Lifecycle, string, string][] = [
   ['reset', 'Reset', 'RESET'],
   ['binaryUpgrade', 'Upgrade', 'UPGRADE'],
 ];
-region(
-  `${javaDir}/VersionScopedKeys.java`,
-  'lifecycle',
-  [
-    ...lifecycleDoc.map((line) => `// ${line}`),
-    ...events.flatMap(([event, , upper]) => [
-      `static final String[] ${upper}_KEYS = {${cleared(event, 'java', false).join(', ')}};`,
-      `static final String[] ${upper}_PREFIXES = {${cleared(event, 'java', true).join(', ')}};`,
-    ]),
-  ]
-);
-region(
-  'ios/RCTPushy/RCTPushyState.mm',
-  'lifecycle',
-  [
-    ...lifecycleDoc.map((line) => `// ${line}`),
-    ...events.flatMap(([event, camel]) => [
-      `PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOn${camel}(void) {`,
-      `    return @[${cleared(event, 'objc', false).join(', ')}];`,
-      '}',
-      `PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOn${camel}(void) {`,
-      `    return @[${cleared(event, 'objc', true).join(', ')}];`,
-      '}',
-    ]),
-  ]
-);
+const javaKey = (item: { name: string }) => `StoreSchema.KEY_${snake(item.name)}`;
+region(`${javaDir}/VersionScopedKeys.java`, 'lifecycle', [
+  ...lifecycleDoc.map((line) => `// ${line}`),
+  ...events.flatMap(([event, , upper]) => [
+    `static final String[] ${upper}_KEYS = {${cleared(event, 'android', false, javaKey).join(', ')}};`,
+    `static final String[] ${upper}_PREFIXES = {${cleared(event, 'android', true, javaKey).join(', ')}};`,
+  ]),
+]);
+const objcKey = (item: { name: string }) => `key${item.name}`;
+region('ios/RCTPushy/RCTPushyState.mm', 'lifecycle', [
+  ...lifecycleDoc.map((line) => `// ${line}`),
+  ...events.flatMap(([event, camel]) => [
+    `PUSHY_HIDDEN NSArray<NSString *> *PushyKeysClearedOn${camel}(void) {`,
+    `    return @[${cleared(event, 'ios', false, objcKey).join(', ')}];`,
+    '}',
+    `PUSHY_HIDDEN NSArray<NSString *> *PushyKeyPrefixesClearedOn${camel}(void) {`,
+    `    return @[${cleared(event, 'ios', true, objcKey).join(', ')}];`,
+    '}',
+  ]),
+]);
+const etsKey = (item: { name: string }) => `KEY_${snake(item.name)}`;
 region(`${ets}/UpdateContext.ts`, 'lifecycle', [
   ...lifecycleDoc.map((line) => `// ${line}`),
   ...events.flatMap(([event, , upper]) => [
     `const ${upper}_CLEARED: ClearedKeys = {`,
-    `  keys: [${cleared(event, 'arkts', false).join(', ')}],`,
-    `  prefixes: [${cleared(event, 'arkts', true).join(', ')}],`,
+    `  keys: [${cleared(event, 'harmony', false, etsKey).join(', ')}],`,
+    `  prefixes: [${cleared(event, 'harmony', true, etsKey).join(', ')}],`,
     '};',
   ]),
 ]);

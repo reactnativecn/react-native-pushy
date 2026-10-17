@@ -81,11 +81,13 @@ def declaration(source: str, name: str) -> tuple[int, str]:
 
 
 GLOBALS = [
-    'keyPushyInfo', 'paramPackageVersion', 'paramBuildTime',
-    'legacyParamPackageVersion', 'legacyParamBuildTime', 'paramLastVersion',
-    'paramCurrentVersion', 'paramIsFirstTime', 'paramIsFirstLoadOk', 'keyUuid',
-    'keyHashInfo', 'keyFirstLoadMarked', 'keyRolledBackMarked',
-    'keyNativeCheckCache', 'BUNDLE_FILE_NAME', 'ERROR_OPTIONS',
+    # The persisted keys and value encoding (generated from scripts/contract.ts).
+    'keySchemaVersion', 'keyPackageVersion', 'keyBuildTime', 'keyCurrentVersion',
+    'keyLastVersion', 'keyFirstTime', 'keyFirstTimeOk', 'keyRolledBackVersion',
+    'keyHashInfo', 'keyFirstLoadMarker', 'keyBinaryUpgradedMarker', 'keyCheckCache',
+    'keyRoundBreadcrumb', 'keyUuid', 'keyNativeConfig', 'keyBundleHashCache',
+    'PushyBooleanTrue', 'PushyBooleanFalse', 'legacyKeyUuid', 'legacyKeyPrefix',
+    'BUNDLE_FILE_NAME', 'ERROR_OPTIONS',
     'pushyStateLock', 'ignoreRollback', 'pushyIsUsingBundleUrl',
     'pushyResetGeneration', 'pushyNativeConfigGeneration', 'pushyLaunchVersion',
     'pushyCrashHoldActive', 'pushyPurgeRestoreActive', 'pushyPurgeRestoreWindowOpen',
@@ -94,12 +96,16 @@ GLOBALS = [
 HELPERS = [
     # The exception boundary every entry point uses (CODE_AUDIT 4.4).
     'PushyCaughtReason', 'PushyGuard',
-    'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString', 'KeyPackageUpdatedMarked',
+    'PushyWithStateLock', 'PushyToStdString', 'PushyFromStdString',
     # What reset / binary upgrade delete (generated from scripts/contract.ts).
     'PushyKeysClearedOnReset', 'PushyKeyPrefixesClearedOnReset', 'PushyKeysClearedOnUpgrade',
     'PushyKeyPrefixesClearedOnUpgrade', 'PushyRemoveKeys',
     'PushyJsonDictionary', 'PushyJsonString', 'PushyRejectCaught', 'PushyFileQueue',
-    'PushySetNullableString', 'PushyHashInfoKey', 'PushyBinaryIdentityValue',
+    'PushyHashInfoKey',
+    # The value encoding, the State mapping and the legacy-layout migration
+    # (over the shared cpp/patch_core/stored_items.cpp).
+    'PushyReadString', 'PushyWriteString', 'PushyReadBool', 'PushyWriteBool',
+    'PushyReadMarker', 'PushyWriteMarker', 'PushyDefaultsText', 'PushyMigrateStores',
     'PushyStateFromDefaults', 'PushyApplyStateToDefaults', 'PushySwitchVersionLocked',
     # Canonical config equality (contract C1): the binding over
     # flowcore::ConfigsEquivalent, tested directly.
@@ -116,14 +122,16 @@ HELPERS = [
 # against a scripted engine. Their globals and pure helpers come along; the
 # IO collaborators are the host's.
 ROUND_GLOBALS = [
-    'keyNativeConfig', 'keyNativeCheckIncomplete', 'pushyResetGeneration',
+    'keyNativeConfig', 'keyRoundBreadcrumb', 'PushyBooleanTrue', 'PushyBooleanFalse',
+    'pushyResetGeneration',
     'pushyNativeConfigGeneration', 'pushyCrashHoldActive', 'pushyPurgeRestoreActive',
     'pushyHostRoundResult', 'pushyHostRoundConfig', 'pushyHostRoundGeneration',
     'pushyHostRoundConfigGeneration', 'pushyUnactivatedHash', 'pushyUnactivatedGeneration',
     'pushyUnactivatedConfigGeneration',
 ]
 ROUND_HELPERS = ['PushyToStdString', 'PushyFromStdString', 'PushyJsonDictionary',
-                 'PushyHostResult', 'PushyWaitSeconds']
+                 'PushyHostResult', 'PushyWaitSeconds', 'PushyReadString', 'PushyReadBool',
+                 'PushyReadMarker', 'PushyWriteMarker']
 ROUND_METHODS = ['runOnce', 'perform', 'download', 'commit', 'finishRound']
 # Emitted ahead of HELPERS, which use them.
 STRUCTS: list[str] = ['PushyVerifiedActivation']
@@ -134,8 +142,10 @@ CORE_SOURCE = Path('cpp/patch_core/install_record.cpp')
 CORE_MUTATIONS = ('trust-digestless', 'grandfather-recorded')
 # Mutate the round adapter (round.inc) instead of the purge-restore methods.
 ROUND_MUTATIONS = ('drop-config-changed',)
+# Mutate the legacy-layout migration (a helper in RCTPushyState.mm).
+STORE_MUTATIONS = ('skip-carry', 'remove-first')
 MUTATIONS = ('late-activation', 'skip-reresolve', 'ignore-reset',
-             'skip-commit-verify') + CORE_MUTATIONS + ROUND_MUTATIONS
+             'skip-commit-verify') + CORE_MUTATIONS + ROUND_MUTATIONS + STORE_MUTATIONS
 
 
 def mutate(text: str, mutation: str) -> str:
@@ -157,6 +167,16 @@ def mutate(text: str, mutation: str) -> str:
         'drop-config-changed': (
             r'event\.Set\("reason", flowjson::Value::String\("config_changed"\)\);',
             '(void)configGeneration;'),
+        # Write only the schema: every carried item (the uuid among them) is
+        # lost while the legacy keys are still deleted.
+        'skip-carry': (
+            r'\[state setObject:PushyFromStdString\(put\.second\) forKey:PushyFromStdString\(put\.first\)\];',
+            'if (put.first == pushy::stored::kSchemaVersionKey) { [state setObject:@"1" forKey:keySchemaVersion]; }'),
+        # Delete the legacy keys before anything is written, so a failed
+        # write loses them.
+        'remove-first': (
+            r'(for \(const auto &put : plan\.puts\) \{)',
+            r'for (const std::string &key : plan.removes) { [legacy removeObjectForKey:PushyFromStdString(key)]; }\n        \1'),
         # Activate from the round commit without the activation gate (both
         # the out-of-lock verification and the under-lock re-check).
         'skip-commit-verify': [
@@ -203,6 +223,9 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
     restore = locate(sources, method, 'restorePurgedLaunch')
     commit = locate(sources, method, 'commitRoundWithGeneration')
     helpers = [locate(sources, function, name) for name in HELPERS]
+    if mutation in STORE_MUTATIONS:
+        helpers = [(path, line, mutate(text, mutation) if name == 'PushyMigrateStores' else text)
+                   for name, (path, line, text) in zip(HELPERS, helpers)]
     switch_version = locate(sources, method, 'switchVersion')
     core_path = (source_dir / '..' / '..' / CORE_SOURCE).resolve()
     core = core_path.read_text(encoding='utf-8')
@@ -214,7 +237,7 @@ def generate(source_dir: Path, output: Path, mutation: str | None = None) -> Non
         core = mutate(core, mutation)
     elif mutation == 'skip-reresolve':
         restore = (restore[0], restore[1], mutate(restore[2], mutation))
-    elif mutation:
+    elif mutation and mutation not in STORE_MUTATIONS:
         commit = (commit[0], commit[1], mutate(commit[2], mutation))
     sections = {
         'globals.inc': [locate(sources, declaration, name) for name in GLOBALS],

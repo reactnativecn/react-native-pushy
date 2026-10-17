@@ -221,6 +221,11 @@ interface NativePatchCoreBindings {
     previousSidecar: string,
     total: number,
   ): string;
+
+  // 落盘布局迁移(cpp/patch_core/stored_items.h,与 Android/iOS 共用):
+  // 旧/新存储的扁平键值数组 [k, v, k, v, ...],返回计划 JSON
+  // {schemaVersion, migrated, puts, removes};未知布局返回 'null'。IO 在 StoreSchema.ts。
+  migrateStoredItems(legacyLayout: number, legacy: string[], current: string[]): string;
 }
 
 export default NativeCore as unknown as NativePatchCoreBindings;

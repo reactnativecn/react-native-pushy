@@ -8,11 +8,8 @@ import logger from './Logger';
 import NativePatchCore from './NativePatchCore';
 import { UpdateContext } from './UpdateContext';
 import { EventHub } from './EventHub';
-import {
-  KEY_CONFIG,
-  recordJsRound,
-  KEY_RESP_CACHE,
-} from './SyncCoordinator';
+import { recordJsRound } from './SyncCoordinator';
+import { KEY_HASH_INFO, KEY_UUID } from './StoreSchema';
 import {
   ERROR_FILE_OPERATION_FAILED,
   ERROR_INVALID_HASH_INFO,
@@ -173,12 +170,12 @@ export class PushyTurboModule extends UITurboModule {
 
     const currentVersion = this.context.getCurrentVersion();
     const currentVersionInfo = currentVersion
-      ? this.context.getKv(`hash_${currentVersion}`)
+      ? this.context.getKv(`${KEY_HASH_INFO}${currentVersion}`)
       : '';
     const currentBundleSha256 = this.context.currentBundleSha256(currentVersion);
     const isFirstTime = this.context.consumeFirstLoadMarker();
     const rolledBackVersion = this.context.rolledBackVersion();
-    const uuid = this.context.getKv('uuid');
+    const uuid = this.context.getKv(KEY_UUID);
     const isUsingBundleUrl = this.context.getIsUsingBundleUrl();
 
     if (rolledBackVersion) {
@@ -217,7 +214,7 @@ export class PushyTurboModule extends UITurboModule {
     this.requireHash(hash, 'setLocalHashInfo');
     validateHashInfo(info);
     try {
-      await this.context.setKv(`hash_${hash}`, info);
+      await this.context.setKv(`${KEY_HASH_INFO}${hash}`, info);
     } catch (error) {
       throw toPushyError(error, ERROR_FILE_OPERATION_FAILED);
     }
@@ -227,7 +224,7 @@ export class PushyTurboModule extends UITurboModule {
   // 但不是 JSON 对象的记录才是 INVALID_HASH_INFO。
   async getLocalHashInfo(hash: string): Promise<string> {
     this.requireHash(hash, 'getLocalHashInfo');
-    const value = this.context.getKv(`hash_${hash}`);
+    const value = this.context.getKv(`${KEY_HASH_INFO}${hash}`);
     if (!value) {
       return '';
     }
@@ -238,7 +235,7 @@ export class PushyTurboModule extends UITurboModule {
   async setUuid(uuid: string): Promise<void> {
     logger.debug(TAG, ',call setUuid');
     try {
-      await this.context.setKv('uuid', uuid);
+      await this.context.setKv(KEY_UUID, uuid);
     } catch (error) {
       throw toPushyError(error, ERROR_FILE_OPERATION_FAILED);
     }
@@ -282,7 +279,7 @@ export class PushyTurboModule extends UITurboModule {
   // (NATIVE_CHECKUPDATE_DESIGN §10.3)。缺省空串,永不 reject。
   async getNativeCheckCache(): Promise<string> {
     logger.debug(TAG, ',call getNativeCheckCache');
-    return this.context.getKv(KEY_RESP_CACHE) ?? '';
+    return this.context.getNativeCheckCache();
   }
 
   async reloadUpdate(options: { hash: string }): Promise<void> {

@@ -90,3 +90,25 @@ export const harmonyConfigBindings = {
     return trimmed ? JSON.stringify({ appKey: trimmed }) : invalid;
   },
 };
+
+/**
+ * The exports of harmony/pushy/src/main/ets/StoreSchema.ts (the generated
+ * keys and the store mapping), for modules evaluated with their imports
+ * stripped.
+ */
+export const harmonyStoreSchema = (
+  logger: Record<string, (...args: unknown[]) => void> = {
+    info() {},
+    warn() {},
+    error() {},
+  }
+): Record<string, unknown> => {
+  const names = [
+    ...source('harmony/pushy/src/main/ets/StoreSchema.ts').matchAll(
+      /^export (?:const|function) (\w+)/gm
+    ),
+  ].map((match) => match[1]);
+  return evalHarmonyModule('StoreSchema.ts', `({ ${names.join(', ')} })`, {
+    logger,
+  }) as Record<string, unknown>;
+};

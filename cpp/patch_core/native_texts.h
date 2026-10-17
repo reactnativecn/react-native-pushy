@@ -63,10 +63,6 @@ inline const std::string& PackageDeltaSuffix() {
   static const std::string value = text::Reveal("741ee4d0e09b69512137");
   return value;
 }
-inline const std::string& PackageUpdatedMarkedKey() {
-  static const std::string value = text::Reveal("0832d5f29aa549710b0939daf88ca058790f3dded7e888b451640d2ec3f69099bb43711523cafa8ea7bb4372132a");
-  return value;
-}
 inline const std::string& LogTag() {
   static const std::string value = text::Reveal("2812f5d2bac6664436360afc9ba680694b3301");
   return value;
