@@ -19,14 +19,8 @@ class AppDelegate: ExpoAppDelegate {
 
     reactNativeDelegate = delegate
     reactNativeFactory = factory
-
-#if os(iOS) || os(tvOS)
-    window = UIWindow(frame: UIScreen.main.bounds)
-    factory.startReactNative(
-      withModuleName: "main",
-      in: window,
-      launchOptions: launchOptions)
-#endif
+    // UIScene life cycle (required from the iOS 27 SDK on): the window
+    // belongs to the scene, so React Native starts in SceneDelegate.
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
@@ -48,6 +42,53 @@ class AppDelegate: ExpoAppDelegate {
   ) -> Bool {
     let result = RCTLinkingManager.application(application, continue: userActivity, restorationHandler: restorationHandler)
     return super.application(application, continue: userActivity, restorationHandler: restorationHandler) || result
+  }
+}
+
+// The scene owns the window: React Native starts here once it connects. A URL
+// or universal link that launched the app arrives with the scene instead of
+// in didFinishLaunching's launch options, so it is handed to React Native as
+// a launch option (Linking.getInitialURL); later ones are forwarded to
+// RCTLinkingManager (Linking 'url' events).
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+  var window: UIWindow?
+
+  func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    guard let windowScene = scene as? UIWindowScene,
+      let app = UIApplication.shared.delegate as? AppDelegate,
+      let factory = app.reactNativeFactory
+    else {
+      return
+    }
+    var launchOptions: [UIApplication.LaunchOptionsKey: Any] = [:]
+    if let url = connectionOptions.urlContexts.first?.url {
+      launchOptions[.url] = url
+    }
+    if let activity = connectionOptions.userActivities.first {
+      launchOptions[.userActivityDictionary] = [
+        "UIApplicationLaunchOptionsUserActivityKey": activity,
+        UIApplication.LaunchOptionsKey.userActivityType.rawValue: activity.activityType,
+      ] as [String: Any]
+    }
+    let window = UIWindow(windowScene: windowScene)
+    self.window = window
+    app.window = window
+    factory.startReactNative(withModuleName: "main", in: window, launchOptions: launchOptions)
+  }
+
+  func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+    for context in URLContexts {
+      _ = RCTLinkingManager.application(UIApplication.shared, open: context.url, options: [:])
+    }
+  }
+
+  func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+    _ = RCTLinkingManager.application(
+      UIApplication.shared, continue: userActivity, restorationHandler: { _ in })
   }
 }
 
