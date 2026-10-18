@@ -64,7 +64,7 @@
 					<key>UISceneConfigurationName</key>
 					<string>Default</string>
 					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
+					<string>EXExpoAppSceneDelegate</string>
 				</dict>
 			</array>
 		</dict>
