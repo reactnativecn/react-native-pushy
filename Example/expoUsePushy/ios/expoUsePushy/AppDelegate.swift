@@ -2,8 +2,13 @@ internal import Expo
 import React
 import ReactAppDependencyProvider
 
+// UIScene life cycle (required from the iOS 27 SDK on): Expo's
+// ExpoAppSceneDelegate (Info.plist UISceneDelegateClassName) creates the window
+// for the connecting scene, starts the factory below in it, and forwards scene
+// URL, user-activity, life-cycle and quick-action events to this delegate and
+// its subscribers. ExpoReactNativeFactoryProvider is how it finds the factory.
 @main
-class AppDelegate: ExpoAppDelegate {
+class AppDelegate: ExpoAppDelegate, ExpoReactNativeFactoryProvider {
   var window: UIWindow?
 
   var reactNativeDelegate: ExpoReactNativeFactoryDelegate?
@@ -19,14 +24,6 @@ class AppDelegate: ExpoAppDelegate {
 
     reactNativeDelegate = delegate
     reactNativeFactory = factory
-
-#if os(iOS) || os(tvOS)
-    window = UIWindow(frame: UIScreen.main.bounds)
-    factory.startReactNative(
-      withModuleName: "main",
-      in: window,
-      launchOptions: launchOptions)
-#endif
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
