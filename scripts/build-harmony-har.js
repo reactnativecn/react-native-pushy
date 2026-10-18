@@ -157,7 +157,7 @@ function buildHar() {
 // The HAR carries its own version in oh-package.json5. Consumers'
 // oh-package-lock.json5 and diagnostics can only tell installs apart when it
 // equals the npm version, so rewrite it from package.json before assembleHar
-// (scripts/check-release-version.js keeps the committed value honest).
+// (scripts/stamp-release-version.js writes both from the release tag).
 function syncOhPackageVersion() {
   const packageJsonPath = path.join(projectRoot, 'package.json');
   const ohPackagePath = path.join(harmonyModuleDir, 'oh-package.json5');
@@ -166,7 +166,7 @@ function syncOhPackageVersion() {
     fail('package.json has no version to write into oh-package.json5');
   }
   const content = fs.readFileSync(ohPackagePath, 'utf8');
-  // JSON5 allows the key bare or quoted (check-release-version.js matches
+  // JSON5 allows the key bare or quoted (stamp-release-version.js matches
   // the same shapes).
   const versionLine =
     /^(\s*(?:"version"|'version'|version)\s*:\s*)(['"])([^'"]*)\2(\s*,?)/m;

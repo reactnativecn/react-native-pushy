@@ -66,9 +66,9 @@ so a debug rebuild does not look like a new binary. Add the generated file to
 
 ## Versioning
 
-`oh-package.json5` `version` mirrors the npm package version;
-`scripts/build-harmony-har.js` rewrites it before `assembleHar` and
-`scripts/check-release-version.js` asserts the committed value matches.
+`oh-package.json5` `version` mirrors the npm package version: the publish
+workflow writes the release tag's version into both (`scripts/stamp-release-version.js`),
+and `scripts/build-harmony-har.js` syncs it from `package.json` before `assembleHar`.
 
 This file is packaged with the npm module (`harmony/pushy/src/`) so it is
 available next to the sources in `node_modules/react-native-update`.

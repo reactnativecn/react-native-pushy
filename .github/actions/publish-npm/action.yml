@@ -70,6 +70,13 @@ runs:
       shell: bash
       run: node scripts/verify-android-so.js
 
+    # The release tag is the version: no version-bump commit precedes a
+    # release, so write it into package.json and oh-package.json5 before the
+    # HAR build and npm publish read them.
+    - name: Stamp the release version
+      shell: bash
+      run: node scripts/stamp-release-version.js
+
     - name: Build Harmony HAR
       if: inputs.harmony-har == 'build'
       shell: bash
@@ -97,10 +104,6 @@ runs:
     - name: Verify Harmony HAR artifact
       shell: bash
       run: test -f harmony/pushy.har
-
-    - name: Verify release tag matches package version
-      shell: bash
-      run: node scripts/check-release-version.js
 
     - name: Verify publish file list
       shell: bash
