@@ -9,9 +9,13 @@ on:
       - master
 
 # Cancel a currently running workflow from the same PR/branch/tag
-# when a new workflow is triggered
+# when a new workflow is triggered. A release commit (`chore: release ...`)
+# gets a group of its own on push so it never cancels its parent's
+# still-running checks: when it only bumps the version
+# (.github/actions/version-only), its native jobs skip and publish.yml relies
+# on the parent's native-required.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: "${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore: release ') && github.sha) || github.ref }}"
   cancel-in-progress: true
 
 jobs:

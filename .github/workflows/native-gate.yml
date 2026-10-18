@@ -9,6 +9,11 @@ name: native-gate
 # workflow_dispatch-only (no hosted HarmonyOS runner) and is therefore not
 # part of the gate; harmony-build (HAR compile in the pinned container) and
 # expo-build (the Expo example on both platforms) are.
+#
+# A version-only release commit pushed to master skips the native jobs of
+# those workflows (.github/actions/version-only), whose runs then succeed on
+# the detect job alone; it is marked "native-inherited", and publish.yml
+# requires the parent's native-required on top of this one.
 on:
   workflow_run:
     workflows: [lint, test, e2e-android, e2e-ios, harmony-build, expo-build]
