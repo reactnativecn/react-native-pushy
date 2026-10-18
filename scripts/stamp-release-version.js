@@ -13,7 +13,7 @@ const path = require('path');
 const tag = process.env.RELEASE_VERSION || '';
 const version = tag.replace(/^v/, '');
 // semver: X.Y.Z with an optional prerelease (10.62.0-beta.1).
-if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.test(version)) {
   console.error(
     `stamp-release-version: release tag '${tag}' is not vX.Y.Z or vX.Y.Z-prerelease`
   );
