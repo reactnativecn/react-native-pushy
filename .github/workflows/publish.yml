@@ -20,6 +20,12 @@ jobs:
       harmony_changed: ${{ steps.check.outputs.changed }}
       prev_tag: ${{ steps.check.outputs.prev_tag }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # Only tags, commits and trees are read (git tag --merged, git diff
+          # --name-only, git rev-parse); skip the blobs of the whole history.
+          filter: blob:none
       # Both publish jobs need this job, so a release can only ship a commit
       # whose lint/test/native E2E gate (native-gate.yml posts it as the
       # "native-required" commit status) is green. Pending or not yet posted
@@ -31,6 +37,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ github.sha }}
         run: |
+          # A version-only release commit skips its native jobs on push
+          # (.github/actions/version-only posts "native-inherited" for it,
+          # before any of its workflows completes), so its own
+          # native-required only covers lint and test; the native E2E it
+          # ships ran on its parent, whose native-required must be green too.
+          status() {
+            gh api "repos/$GITHUB_REPOSITORY/commits/$1/status" \
+              --jq "[.statuses[] | select(.context == \"$2\")][0].state // \"missing\""
+          }
           # The gate turns green only after the slowest native E2E: e2e-ios
           # is a build job (timeout 45 min) followed by its test legs
           # (timeout 60 min), plus macOS queueing. A green release commit
@@ -38,24 +53,30 @@ jobs:
           # push; wait out both budgets instead.
           # Checks at minute 0 through 120: the last poll lands on the
           # boundary itself, with no trailing sleep before giving up.
+          required="$SHA"
           for attempt in $(seq 0 120); do
-            state="$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/status" \
-              --jq '[.statuses[] | select(.context == "native-required")][0].state // "missing"')"
-            echo "native-required for $SHA: $state"
-            case "$state" in
-              success) exit 0 ;;
-              pending|missing) if [ "$attempt" -lt 120 ]; then sleep 60; fi ;;
-              *) echo "::error::native-required is $state for $SHA; fix CI before publishing"; exit 1 ;;
-            esac
+            green=true
+            for sha in $required; do
+              state="$(status "$sha" native-required)"
+              echo "native-required for $sha: $state"
+              case "$state" in
+                success) ;;
+                pending|missing) green=false ;;
+                *) echo "::error::native-required is $state for $sha; fix CI before publishing"; exit 1 ;;
+              esac
+            done
+            if [ "$green" = true ]; then
+              if [ "$required" = "$SHA" ] && [ "$(status "$SHA" native-inherited)" = success ]; then
+                required="$SHA $(git rev-parse "$SHA^1")"
+                echo "$SHA only bumps the version; also requiring its parent's native-required."
+                continue
+              fi
+              exit 0
+            fi
+            if [ "$attempt" -lt 120 ]; then sleep 60; fi
           done
-          echo "::error::native-required for $SHA did not turn green within 120 minutes"
+          echo "::error::native-required for $required did not turn green within 120 minutes"
           exit 1
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          # Only tags, commits and trees are read (git tag --merged, git diff
-          # --name-only); skip the blobs of the whole history.
-          filter: blob:none
       - name: Check Harmony changes
         id: check
         shell: bash

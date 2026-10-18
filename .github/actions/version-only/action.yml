@@ -1,0 +1,39 @@
+name: Detect a version-only push
+description: >-
+  Outputs native=false for a push whose single new commit only bumps the
+  package.json / oh-package.json5 version and edits .github/releases/**
+  (scripts/version-only-commit.js), so the native jobs can skip a release
+  commit that builds exactly what its already-tested parent built. The
+  decision is recorded as the "native-inherited" commit status, which makes
+  publish.yml require the parent's native-required as well. Everything else,
+  pull requests included, gets native=true. Needs a checkout with
+  fetch-depth >= 2 and `statuses: write`.
+outputs:
+  native:
+    description: "'false' to skip the native jobs, otherwise 'true'."
+    value: ${{ steps.check.outputs.native }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EVENT_NAME: ${{ github.event_name }}
+        BEFORE: ${{ github.event.before }}
+      run: |
+        native=true
+        parent="$(git rev-parse --verify --quiet HEAD^1 || true)"
+        # Only when the push added exactly this one commit: a push that
+        # brought several gets no runs for the earlier ones, so the parent
+        # would have no native-required to rely on.
+        if [ "$EVENT_NAME" = push ] && [ -n "$parent" ] && [ "$parent" = "$BEFORE" ] \
+            && [ "$(node scripts/version-only-commit.js HEAD)" = true ]; then
+          native=false
+          echo "::notice::Version-only commit: native jobs are skipped; publishing relies on the native-required of $parent."
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$(git rev-parse HEAD)" \
+            -f state=success -f context=native-inherited \
+            -f description="native E2E inherited from ${parent:0:12}" \
+            -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$parent" >/dev/null
+        fi
+        echo "native=$native" >> "$GITHUB_OUTPUT"

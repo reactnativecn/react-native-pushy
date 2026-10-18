@@ -29,12 +29,36 @@ on:
       - master
     paths: *harmony-paths
 
+# A release commit (`chore: release ...`) gets a group of its own on push so
+# it never cancels its parent's still-running checks: when it only bumps the
+# version (.github/actions/version-only), its native jobs skip and
+# publish.yml relies on the parent's native-required.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: "${{ github.workflow }}-${{ github.event.pull_request.number || (github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore: release ') && github.sha) || github.ref }}"
   cancel-in-progress: true
 
 jobs:
+  # A version-only release commit builds what its parent already tested
+  # (.github/actions/version-only), so the jobs below skip it.
+  changes:
+    name: Detect a version-only push
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write  # native-inherited
+    outputs:
+      native: ${{ steps.version-only.outputs.native }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - id: version-only
+        uses: ./.github/actions/version-only
+
   harmony-build:
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
     runs-on: ubuntu-latest
     # Keep the digest in sync with publish.yml; bump both deliberately.
     container: ghcr.io/sanchuanhehe/harmony-next-pipeline-docker/harmonyos-ci-image:latest@sha256:2836142b7b6ae8837ad0e36cacc650f00e8c88f55b4e9f34be66cc98a731c5da
