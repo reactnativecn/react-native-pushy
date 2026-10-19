@@ -1,0 +1,16 @@
+{
+  // Emits the published type declarations (lib/typescript), which
+  // package.json `types` points at: apps then type-check against .d.ts files
+  // their skipLibCheck covers, instead of compiling this package's sources
+  // under their own tsconfig and React Native version.
+  "extends": "./tsconfig.json",
+  "include": ["src"],
+  "exclude": ["src/__tests__"],
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "rootDir": "src",
+    "outDir": "lib/typescript"
+  }
+}

@@ -3,10 +3,11 @@
   "version": "10.62.0",
   "description": "Hot update (OTA) for React Native with Hermes-optimized diff patches, crash rollback and staged rollout. A CodePush alternative for iOS, Android and HarmonyOS.",
   "main": "src/index",
-  "types": "src/index.ts",
+  "types": "lib/typescript/index.d.ts",
   "files": [
     "src",
     "!src/__tests__",
+    "lib/typescript",
     "android/src",
     "!android/src/test",
     "android/lib",
@@ -45,8 +46,9 @@
     "LICENSE"
   ],
   "scripts": {
-    "prepack": "bun submodule && bun lint",
+    "prepack": "bun submodule && bun lint && bun build:types",
     "lint": "biome check src && tsc --noEmit && node scripts/check-harmony-types.js && node scripts/check-native-spec-parity.js && bun scripts/generate-contract.ts --check && node scripts/check-readme-options.js",
+    "build:types": "rm -rf lib/typescript && tsc -p tsconfig.build.json",
     "contract": "bun scripts/generate-contract.ts",
     "lint:harmony": "node scripts/check-harmony-types.js",
     "submodule": "git submodule update --init --recursive",
