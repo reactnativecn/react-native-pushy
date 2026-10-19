@@ -57,7 +57,9 @@ const required = [
   'src/index.ts',
   'src/NativePushy.ts',
   // The declarations apps type-check against (bun build:types emits them).
-  types,
+  // --compile runs in test.yml's C++ job, which has no JS toolchain to
+  // build them; the lint workflow and the publish action check them.
+  ...(compile ? [] : [types]),
   'android/build.gradle',
   'android/src/main/java/cn/reactnative/modules/update/UpdateContext.java',
   'ios/RCTPushy/RCTPushy.mm',
