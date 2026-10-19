@@ -3,43 +3,24 @@
 
 #import <React/RCTBundleURLProvider.h>
 #import <React/RCTLinkingManager.h>
+#import <React_RCTAppDelegate/RCTDefaultReactNativeFactoryDelegate.h>
+#import <React_RCTAppDelegate/RCTReactNativeFactory.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 
+// UIScene life cycle (required from the iOS 27 SDK on, RN 0.88 template):
+// the window belongs to the scene, so React Native starts in SceneDelegate.
 @implementation AppDelegate
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
-  self.moduleName = @"AwesomeProject";
-  self.dependencyProvider = [RCTAppDependencyProvider new];
-  // You can add your custom initial props in the dictionary below.
-  // They will be passed down to the ViewController used by React Native.
-  self.initialProps = @{};
-  // UIScene life cycle (required from the iOS 27 SDK on): the window belongs
-  // to the scene, so React Native starts in SceneDelegate, not here.
-  self.automaticallyLoadReactNativeWindow = NO;
-
-  return [super application:application didFinishLaunchingWithOptions:launchOptions];
-}
-
-- (NSURL *)bundleURL
-{
-  #if DEBUG
-    // 原先DEBUG这里的写法不作修改(所以DEBUG模式下不可热更新)
-    return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index"];
-  #else
-    return [RCTPushy bundleURL];  // <--  把这里非DEBUG的情况替换为热更新bundle
-  #endif
+  return YES;
 }
 
 @end
 
-// The scene owns the window: React Native starts here once it connects. A URL
-// or universal link that launched the app arrives with the scene instead of
-// in didFinishLaunching's launch options, so it is handed to React Native
-// as a launch option (Linking.getInitialURL); later ones are forwarded to
-// RCTLinkingManager (Linking 'url' events).
-@interface SceneDelegate : UIResponder <UIWindowSceneDelegate>
+@interface SceneDelegate : RCTDefaultReactNativeFactoryDelegate <UIWindowSceneDelegate>
 @property (nonatomic, strong) UIWindow *window;
+@property (nonatomic, strong) RCTReactNativeFactory *reactNativeFactory;
 @end
 
 @implementation SceneDelegate
@@ -51,39 +32,36 @@
   if (![scene isKindOfClass:[UIWindowScene class]]) {
     return;
   }
-  AppDelegate *app = (AppDelegate *)UIApplication.sharedApplication.delegate;
-  NSMutableDictionary *launchOptions = [NSMutableDictionary dictionary];
-  NSURL *url = connectionOptions.URLContexts.anyObject.URL;
-  if (url != nil) {
-    launchOptions[UIApplicationLaunchOptionsURLKey] = url;
-  }
-  NSUserActivity *activity = connectionOptions.userActivities.anyObject;
-  if (activity != nil) {
-    launchOptions[UIApplicationLaunchOptionsUserActivityDictionaryKey] = @{
-      @"UIApplicationLaunchOptionsUserActivityKey" : activity,
-      UIApplicationLaunchOptionsUserActivityTypeKey : activity.activityType,
-    };
-  }
+  self.dependencyProvider = [RCTAppDependencyProvider new];
+  self.reactNativeFactory = [[RCTReactNativeFactory alloc] initWithDelegate:self];
   self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
-  app.window = self.window;
-  [app.reactNativeFactory startReactNativeWithModuleName:app.moduleName
-                                                inWindow:self.window
-                                       initialProperties:app.initialProps
-                                           launchOptions:launchOptions];
+  // A URL or universal link that launched the app comes with the scene; RN
+  // 0.88 hands it to Linking.getInitialURL (which the provider's test channel
+  // reads).
+  [self.reactNativeFactory startReactNativeWithModuleName:@"AwesomeProject"
+                                                 inWindow:self.window
+                                        initialProperties:@{}
+                                        connectionOptions:connectionOptions];
 }
 
 - (void)scene:(UIScene *)scene openURLContexts:(NSSet<UIOpenURLContext *> *)URLContexts
 {
-  for (UIOpenURLContext *context in URLContexts) {
-    [RCTLinkingManager application:UIApplication.sharedApplication openURL:context.URL options:@{}];
-  }
+  [RCTLinkingManager scene:scene openURLContexts:URLContexts];
 }
 
 - (void)scene:(UIScene *)scene continueUserActivity:(NSUserActivity *)userActivity
 {
-  [RCTLinkingManager application:UIApplication.sharedApplication
-            continueUserActivity:userActivity
-              restorationHandler:^(NSArray<id<UIUserActivityRestoring>> *_Nullable objects) {}];
+  [RCTLinkingManager scene:scene continueUserActivity:userActivity];
+}
+
+- (NSURL *)bundleURL
+{
+  #if DEBUG
+    // 原先DEBUG这里的写法不作修改(所以DEBUG模式下不可热更新)
+    return [[RCTBundleURLProvider sharedSettings] jsBundleURLForBundleRoot:@"index"];
+  #else
+    return [RCTPushy bundleURL];  // <--  把这里非DEBUG的情况替换为热更新bundle
+  #endif
 }
 
 @end
