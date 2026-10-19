@@ -42,6 +42,9 @@ local.properties
 node_modules/
 npm-debug.log
 
+# Type declarations emitted by `bun build:types` (published, not committed)
+lib/
+
 Example/**/.update
 Example/**/.pushy
 Example/**/.e2e-artifacts

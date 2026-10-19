@@ -105,6 +105,12 @@ runs:
       shell: bash
       run: test -f harmony/pushy.har
 
+    # npm publish rebuilds them in prepack; build them here too so the
+    # file-list check below sees lib/typescript.
+    - name: Build type declarations
+      shell: bash
+      run: bun build:types
+
     - name: Verify publish file list
       shell: bash
       run: node scripts/check-packlist.js --release

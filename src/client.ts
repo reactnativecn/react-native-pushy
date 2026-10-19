@@ -252,8 +252,6 @@ export class Pushy {
   throwIfEnabled = (e: Error) => this.reporter.throwIfEnabled(e);
   onError: Reporter['onError'] = (listener) => this.reporter.onError(listener);
   wasEmitted = (e: unknown): boolean => this.reporter.wasEmitted(e);
-  private emitError: Reporter['emitError'] = (...args) =>
-    this.reporter.emitError(...args);
   notifyAfterCheckUpdate: Reporter['notifyAfterCheckUpdate'] = (state) =>
     this.reporter.notifyAfterCheckUpdate(state);
 

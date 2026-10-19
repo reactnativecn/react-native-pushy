@@ -199,7 +199,7 @@ describe('UpdateProvider rendering', () => {
     // Real client contract under the default throwError:false — the error is
     // emitted to onError listeners and checkUpdate resolves undefined.
     client.checkUpdate.mockImplementation(async () => {
-      client.emitError(checkError, 'errorChecking');
+      (client as any).reporter.emitError(checkError, 'errorChecking');
       return undefined;
     });
 
@@ -244,7 +244,7 @@ describe('UpdateProvider rendering', () => {
     });
     const checkError = new Error('offline');
     client.checkUpdate.mockImplementation(async () => {
-      client.emitError(checkError, 'errorChecking');
+      (client as any).reporter.emitError(checkError, 'errorChecking');
       return undefined;
     });
 
@@ -265,7 +265,7 @@ describe('UpdateProvider rendering', () => {
       dismissErrorAfter: 20,
     });
     client.checkUpdate.mockImplementation(async () => {
-      client.emitError(new Error('offline'), 'errorChecking');
+      (client as any).reporter.emitError(new Error('offline'), 'errorChecking');
       return undefined;
     });
 

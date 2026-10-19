@@ -39,5 +39,10 @@ jobs:
       - name: Run lint
         run: bun lint
 
+      # check-packlist.js requires the emitted declarations that
+      # package.json `types` points at.
+      - name: Build type declarations
+        run: bun build:types
+
       - name: Verify publish file list
         run: node scripts/check-packlist.js

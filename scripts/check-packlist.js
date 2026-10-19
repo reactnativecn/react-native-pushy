@@ -4,7 +4,7 @@
 // must and must not be there. Run in lint CI and right before `npm publish`
 // (with --release, which additionally requires the Harmony HAR).
 const { execFileSync } = require('child_process');
-const { files: filesField } = require('../package.json');
+const { files: filesField, types } = require('../package.json');
 
 const release = process.argv.includes('--release');
 // Also compile the packed native sources (needs the submodules and a C
@@ -56,6 +56,10 @@ const required = [
   'package.json',
   'src/index.ts',
   'src/NativePushy.ts',
+  // The declarations apps type-check against (bun build:types emits them).
+  // --compile runs in test.yml's C++ job, which has no JS toolchain to
+  // build them; the lint workflow and the publish action check them.
+  ...(compile ? [] : [types]),
   'android/build.gradle',
   'android/src/main/java/cn/reactnative/modules/update/UpdateContext.java',
   'ios/RCTPushy/RCTPushy.mm',
