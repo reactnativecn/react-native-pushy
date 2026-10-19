@@ -177,9 +177,17 @@ export class Downloader {
     };
     // @ts-expect-error harmony not in existing platforms
     const isHarmony = Platform.OS === 'harmony';
-    const progressSubscription = (
-      isHarmony ? DeviceEventEmitter : pushyNativeEventEmitter
-    ).addListener('RCTPushyDownloadProgress', onNativeProgress);
+    // Two separate calls: on RN 0.88 the two emitters' addListener signatures
+    // no longer unify, so calling it on the union type does not compile.
+    const progressSubscription = isHarmony
+      ? DeviceEventEmitter.addListener(
+          'RCTPushyDownloadProgress',
+          onNativeProgress
+        )
+      : pushyNativeEventEmitter.addListener(
+          'RCTPushyDownloadProgress',
+          onNativeProgress
+        );
     const maxRetries = Math.max(
       0,
       Math.floor(this.host.options.maxRetries ?? 3)

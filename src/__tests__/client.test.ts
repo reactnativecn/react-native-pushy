@@ -174,7 +174,7 @@ describe('Pushy server config', () => {
       async () => {}
     );
 
-    (client as any).emitError(new Error('offline'), 'errorChecking');
+    (client as any).reporter.emitError(new Error('offline'), 'errorChecking');
     client.reportInvalidUpdateOnce('noArtifact', 'h2');
 
     expect(report).toHaveBeenCalledWith(
